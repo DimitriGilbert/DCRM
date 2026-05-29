@@ -17,9 +17,13 @@
     "db:start": "docker compose up -d",
     "db:watch": "docker compose up",
     "db:stop": "docker compose stop",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@DCRM/domain": "workspace:*",
     "@DCRM/env": "workspace:*",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
@@ -30,6 +34,7 @@
     "@DCRM/config": "workspace:*",
     "@types/pg": "^8.16.0",
     "drizzle-kit": "^0.31.8",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^3.2.1"
   }
 }

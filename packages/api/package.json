@@ -9,7 +9,10 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "build": "tsc --build",
+    "check-types": "tsc --noEmit"
+  },
   "dependencies": {
     "@DCRM/auth": "workspace:*",
     "@DCRM/db": "workspace:*",

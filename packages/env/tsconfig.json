@@ -1,3 +1,4 @@
 {
-  "extends": "@DCRM/config/tsconfig.base.json"
+  "extends": "@DCRM/config/tsconfig.base.json",
+  "exclude": ["__tests__", "node_modules"]
 }

@@ -1,9 +1,10 @@
 import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
 
 export const env = createEnv({
   clientPrefix: "VITE_",
   client: {},
-  runtimeEnv: (import.meta as any).env,
+  // Vite provides import.meta.env at runtime. Cast through unknown to avoid
+  // depending on vite/client types in this shared package.
+  runtimeEnv: (import.meta as unknown as { env: Record<string, string | undefined> }).env,
   emptyStringAsUndefined: true,
 });

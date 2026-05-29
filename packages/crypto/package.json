@@ -1,12 +1,11 @@
 {
-  "name": "@DCRM/auth",
+  "name": "@DCRM/crypto",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
   "exports": {
     ".": {
       "default": "./src/index.ts"
-    },
-    "./*": {
-      "default": "./src/*.ts"
     }
   },
   "scripts": {
@@ -14,15 +13,7 @@
     "test:watch": "vitest",
     "check-types": "tsc --noEmit"
   },
-  "dependencies": {
-    "@DCRM/db": "workspace:*",
-    "@DCRM/env": "workspace:*",
-    "@better-auth/expo": "catalog:",
-    "better-auth": "catalog:",
-    "dotenv": "catalog:",
-    "drizzle-orm": "^0.45.1",
-    "zod": "catalog:"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@DCRM/config": "workspace:*",
     "@types/node": "^22.13.14",

@@ -6,6 +6,19 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 
+export {
+  generateApiKey,
+  hashApiKey,
+  verifyApiKey,
+  extractKeyPrefix,
+  isApiKeyFormat,
+  API_KEY_PREFIX,
+} from "./api-key";
+export type { GeneratedApiKey } from "./api-key";
+
+export { resolveAuth } from "./resolve-auth";
+export type { AuthResult, UserRecord } from "./resolve-auth";
+
 export function createAuth() {
   const db = createDb();
 

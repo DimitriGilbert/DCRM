@@ -1,13 +1,9 @@
-import { auth } from "@DCRM/auth";
+import { auth, resolveAuth } from "@DCRM/auth";
 
-export async function createContext({ req }: { req: Request }) {
-  const session = await auth.api.getSession({
-    headers: req.headers,
-  });
-  return {
-    auth: null,
-    session,
-  };
+import type { AuthResult } from "@DCRM/auth";
+
+export type Context = AuthResult;
+
+export async function createContext({ req }: { req: Request }): Promise<Context> {
+  return resolveAuth(req.headers, auth.api);
 }
-
-export type Context = Awaited<ReturnType<typeof createContext>>;

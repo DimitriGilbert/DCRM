@@ -1,0 +1,25 @@
+{
+  "name": "@DCRM/events",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "^3.2.1"
+  },
+  "dependencies": {
+    "bullmq": "^5.77.6"
+  }
+}

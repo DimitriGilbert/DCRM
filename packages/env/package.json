@@ -4,9 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./create-server-env": "./src/create-server-env.ts",
     "./server": "./src/server.ts",
     "./web": "./src/web.ts",
     "./native": "./src/native.ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "check-types": "tsc --noEmit",
+    "test": "rm -rf .cache/dcrm-env-test && tsc --project tsconfig.test.json && node --test \".cache/dcrm-env-test/**/*.test.js\" && rm -rf .cache/dcrm-env-test"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.1",

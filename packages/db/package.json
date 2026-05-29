@@ -10,6 +10,9 @@
     }
   },
   "scripts": {
+    "build": "tsc --build",
+    "check-types": "tsc --noEmit",
+    "test": "rm -rf dist-test && tsc --project tsconfig.test.json && node --test \"dist-test/**/*.test.js\"",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
@@ -20,6 +23,7 @@
     "db:down": "docker compose down"
   },
   "dependencies": {
+    "@DCRM/domain": "workspace:*",
     "@DCRM/env": "workspace:*",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",

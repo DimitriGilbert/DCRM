@@ -1,0 +1,39 @@
+{
+  "name": "DCRM",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:native": "turbo -F native dev",
+    "dev:web": "turbo -F web dev",
+    "dev:desktop": "turbo -F desktop dev:hmr",
+    "build:desktop": "turbo -F desktop build:stable",
+    "build:desktop:canary": "turbo -F desktop build:canary",
+    "db:push": "turbo -F @DCRM/db db:push",
+    "db:studio": "turbo -F @DCRM/db db:studio",
+    "db:generate": "turbo -F @DCRM/db db:generate",
+    "db:migrate": "turbo -F @DCRM/db db:migrate",
+    "db:start": "turbo -F @DCRM/db db:start",
+    "db:watch": "turbo -F @DCRM/db db:watch",
+    "db:stop": "turbo -F @DCRM/db db:stop",
+    "db:down": "turbo -F @DCRM/db db:down"
+  },
+  "dependencies": {
+    "@DCRM/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "@types/node": "^22.13.14",
+    "turbo": "^2.8.12",
+    "typescript": "catalog:"
+  },
+  "packageManager": "pnpm@10.33.4"
+}

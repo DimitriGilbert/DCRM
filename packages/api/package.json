@@ -1,0 +1,26 @@
+{
+  "name": "@DCRM/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@DCRM/auth": "workspace:*",
+    "@DCRM/db": "workspace:*",
+    "@DCRM/env": "workspace:*",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

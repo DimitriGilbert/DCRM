@@ -1,0 +1,3 @@
+{
+  "extends": "@DCRM/config/tsconfig.base.json"
+}

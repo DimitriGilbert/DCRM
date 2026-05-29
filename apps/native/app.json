@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "scheme": "DCRM",
+    "userInterfaceStyle": "automatic",
+    "orientation": "default",
+    "web": {
+      "bundler": "metro"
+    },
+    "name": "DCRM",
+    "slug": "DCRM",
+    "plugins": ["expo-font"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

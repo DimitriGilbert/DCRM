@@ -60,6 +60,56 @@ describe("leads tRPC API", () => {
     );
   });
 
+  it("applies accepted pipeline date filters instead of silently ignoring them", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    await caller.leads.create({ name: "Ada Lovelace", stage: "qualified" });
+
+    const pipeline = await caller.leads.pipeline({ createdTo: new Date("2000-01-01T00:00:00.000Z") });
+    const createdFromPipeline = await caller.leads.pipeline({ createdFrom: new Date("2999-01-01T00:00:00.000Z") });
+
+    assert.deepEqual(
+      pipeline.map((column) => column.leads),
+      [[], [], [], [], [], []],
+    );
+    assert.deepEqual(
+      createdFromPipeline.map((column) => column.leads),
+      [[], [], [], [], [], []],
+    );
+  });
+
+  it("applies accepted pipeline tag filters", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, createTestEventService()));
+    const taggedLead = await caller.leads.create({ name: "Ada Lovelace", stage: "qualified" });
+    await caller.leads.create({ name: "Charles Babbage", stage: "qualified" });
+    const tag = await caller.tags.create({ name: "priority" });
+    await crmRepository.entityTags.attach({ userId: "user_1", tagId: tag.id, entityType: "lead", entityId: taggedLead.id, now: new Date() });
+
+    const pipeline = await caller.leads.pipeline({ tagIds: [tag.id] });
+
+    assert.deepEqual(
+      pipeline.map((column) => column.leads.map((lead) => lead.name)),
+      [[], [], ["Ada Lovelace"], [], [], []],
+    );
+  });
+
+  it("normalizes lead estimated value currency based on amount presence", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+
+    const withoutAmount = await caller.leads.create({ name: "No budget", estimatedValueCurrency: "USD" });
+    const withAmount = await caller.leads.create({ name: "Budgeted", estimatedValueAmount: "1200.00", estimatedValueCurrency: "USD" });
+    const changedCurrency = await caller.leads.update({ id: withAmount.id, estimatedValueCurrency: "EUR" });
+    const clearedAmount = await caller.leads.update({ id: withAmount.id, estimatedValueAmount: null });
+    const currencyWithoutAmount = await caller.leads.update({ id: withoutAmount.id, estimatedValueCurrency: "GBP" });
+
+    assert.equal(withoutAmount.estimatedValueCurrency, null);
+    assert.equal(changedCurrency.estimatedValueAmount, "1200.00");
+    assert.equal(changedCurrency.estimatedValueCurrency, "EUR");
+    assert.equal(clearedAmount.estimatedValueAmount, null);
+    assert.equal(clearedAmount.estimatedValueCurrency, null);
+    assert.equal(currencyWithoutAmount.estimatedValueCurrency, null);
+  });
+
   it("updates lead fields, emits update and stage change events, and soft-deletes leads", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();
@@ -107,7 +157,7 @@ describe("leads tRPC API", () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();
     const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
-    const lead = await caller.leads.create({ name: "Ada Lovelace", email: "ada@example.com", company: "Analytical Engines", stage: "proposal" });
+    const lead = await caller.leads.create({ name: "Ada Lovelace", email: "ada@example.com", company: "Analytical Engines", stage: "won" });
 
     const result = await caller.leads.convert({ id: lead.id });
 
@@ -122,15 +172,22 @@ describe("leads tRPC API", () => {
     );
     assert.deepEqual(
       (await eventService.listForUser("user_1")).map((event) => event.type),
-      ["lead.created", "lead.stage_changed", "lead.converted", "client.created"],
+      ["lead.created", "lead.converted", "client.created"],
     );
+  });
+
+  it("rejects converting leads before they reach the won stage", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const lead = await caller.leads.create({ name: "Ada Lovelace", stage: "proposal" });
+
+    await assert.rejects(caller.leads.convert({ id: lead.id }), /Only won leads can be converted/u);
   });
 
   it("rejects converting the same lead twice without creating another client", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();
     const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
-    const lead = await caller.leads.create({ name: "Ada Lovelace", stage: "proposal" });
+    const lead = await caller.leads.create({ name: "Ada Lovelace", stage: "won" });
 
     await caller.leads.convert({ id: lead.id });
     await assert.rejects(caller.leads.convert({ id: lead.id }), /Lead has already been converted/u);
@@ -138,7 +195,7 @@ describe("leads tRPC API", () => {
     assert.equal((await caller.clients.list({})).length, 1);
     assert.deepEqual(
       (await eventService.listForUser("user_1")).map((event) => event.type),
-      ["lead.created", "lead.stage_changed", "lead.converted", "client.created"],
+      ["lead.created", "lead.converted", "client.created"],
     );
   });
 
@@ -153,7 +210,7 @@ describe("leads tRPC API", () => {
     await assert.rejects(caller.leads.updateStage({ id: deletedLead.id, stage: "qualified" }), /Lead not found/u);
     await assert.rejects(caller.leads.convert({ id: deletedLead.id }), /Lead not found/u);
 
-    const convertedLead = await caller.leads.create({ name: "Converted lead", stage: "proposal" });
+    const convertedLead = await caller.leads.create({ name: "Converted lead", stage: "won" });
     await caller.leads.convert({ id: convertedLead.id });
 
     await assert.rejects(caller.leads.update({ id: convertedLead.id, stage: "lost" }), /Converted leads must remain in the won stage/u);

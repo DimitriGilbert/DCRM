@@ -23,6 +23,13 @@ export function validateCustomFieldValues(
 ): JsonObject {
   const source = values ?? {};
   const normalized: JsonObject = {};
+  const definitionKeys = new Set(definitions.map((definition) => definition.key));
+
+  for (const key of Object.keys(source)) {
+    if (!definitionKeys.has(key)) {
+      throw new Error(`Unknown custom field: ${key}`);
+    }
+  }
 
   for (const definition of definitions) {
     const value = source[definition.key];

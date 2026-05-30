@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "declaration": false,
+    "declarationMap": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "outDir": "dist-test",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": [
+    "src/features/client-lead/constants.ts",
+    "src/features/client-lead/forms-normalization.ts",
+    "src/features/client-lead/forms.test.ts"
+  ],
+  "exclude": []
+}

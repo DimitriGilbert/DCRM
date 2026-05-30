@@ -10,6 +10,8 @@ import type { leadFieldsSchema, leadUpdateFieldsSchema } from "./schemas.js";
 type CreateLeadInput = z.infer<typeof leadFieldsSchema>;
 type UpdateLeadInput = z.infer<typeof leadUpdateFieldsSchema>;
 
+type LeadValueFields = Pick<CreateLeadInput, "estimatedValueAmount" | "estimatedValueCurrency">;
+
 export function normalizeCreateLeadFields(input: CreateLeadInput) {
   const definitions: readonly CustomFieldDefinition[] = input.customFieldSchema ?? [];
   return {
@@ -22,7 +24,7 @@ export function normalizeCreateLeadFields(input: CreateLeadInput) {
     source: input.source,
     stage: input.stage,
     estimatedValueAmount: input.estimatedValueAmount,
-    estimatedValueCurrency: input.estimatedValueCurrency,
+    estimatedValueCurrency: normalizeEstimatedValueCurrency(input),
     socialLinks: input.socialLinks,
     address: input.address,
     metadata: input.metadata,
@@ -30,8 +32,9 @@ export function normalizeCreateLeadFields(input: CreateLeadInput) {
   };
 }
 
-export function normalizeUpdateLeadFields(input: UpdateLeadInput) {
+export function normalizeUpdateLeadFields(input: UpdateLeadInput, existingLead: Pick<LeadRecord, "estimatedValueAmount">) {
   const definitions: readonly CustomFieldDefinition[] = input.customFieldSchema ?? [];
+  const effectiveEstimatedValueAmount = input.estimatedValueAmount === undefined ? existingLead.estimatedValueAmount : input.estimatedValueAmount;
   return {
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.email !== undefined ? { email: input.email } : {}),
@@ -42,7 +45,7 @@ export function normalizeUpdateLeadFields(input: UpdateLeadInput) {
     ...(input.source !== undefined ? { source: input.source } : {}),
     ...(input.stage !== undefined ? { stage: input.stage } : {}),
     ...(input.estimatedValueAmount !== undefined ? { estimatedValueAmount: input.estimatedValueAmount } : {}),
-    ...(input.estimatedValueCurrency !== undefined ? { estimatedValueCurrency: input.estimatedValueCurrency } : {}),
+    ...(input.estimatedValueCurrency !== undefined || input.estimatedValueAmount === null ? { estimatedValueCurrency: normalizeEstimatedValueCurrency(input.estimatedValueCurrency, effectiveEstimatedValueAmount) } : {}),
     ...(input.socialLinks !== undefined ? { socialLinks: input.socialLinks } : {}),
     ...(input.address !== undefined ? { address: input.address } : {}),
     ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
@@ -72,4 +75,15 @@ function parseCustomFields(definitions: readonly CustomFieldDefinition[], values
   } catch (error) {
     throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Invalid custom fields." });
   }
+}
+
+function normalizeEstimatedValueCurrency(input: LeadValueFields): string | null | undefined;
+function normalizeEstimatedValueCurrency(estimatedValueCurrency: string | null | undefined, estimatedValueAmount: string | null | undefined): string | null | undefined;
+function normalizeEstimatedValueCurrency(inputOrCurrency: LeadValueFields | string | null | undefined, amount?: string | null | undefined): string | null | undefined {
+  const estimatedValueAmount = typeof inputOrCurrency === "object" && inputOrCurrency !== null ? inputOrCurrency.estimatedValueAmount : amount;
+  const estimatedValueCurrency = typeof inputOrCurrency === "object" && inputOrCurrency !== null ? inputOrCurrency.estimatedValueCurrency : inputOrCurrency;
+  if (estimatedValueAmount == null) {
+    return null;
+  }
+  return estimatedValueCurrency;
 }

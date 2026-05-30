@@ -18,9 +18,9 @@ export type GlobalSearchFormValues = Record<string, unknown> & z.infer<typeof gl
 
 export type GlobalSearchFilters = {
   readonly search?: string;
-  readonly entityTypes?: readonly Exclude<(typeof SEARCH_ENTITY_TYPES)[number], "all">[];
+  readonly entityTypes?: Exclude<(typeof SEARCH_ENTITY_TYPES)[number], "all">[];
   readonly status?: Exclude<(typeof SEARCH_STATUSES)[number], "all">;
-  readonly tagIds?: readonly string[];
+  readonly tagIds?: string[];
   readonly dateFrom?: Date;
   readonly dateTo?: Date;
 };
@@ -60,8 +60,14 @@ function formValuesToFilters(values: GlobalSearchFormValues): GlobalSearchFilter
     status: values.status === "all" ? undefined : values.status,
     tagIds: tagIds.length > 0 ? tagIds : undefined,
     dateFrom: values.dateFrom ? new Date(values.dateFrom) : undefined,
-    dateTo: values.dateTo ? new Date(values.dateTo) : undefined,
+    dateTo: values.dateTo ? endOfDay(values.dateTo) : undefined,
   };
+}
+
+function endOfDay(value: string): Date {
+  const date = new Date(value);
+  date.setHours(23, 59, 59, 999);
+  return date;
 }
 
 function formatLabel(value: string): string {

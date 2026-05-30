@@ -29,20 +29,20 @@ export const outgoingWebhookFormSchema = z.object({
 export type OutgoingWebhookFormValues = Record<string, unknown> & z.infer<typeof outgoingWebhookFormSchema>;
 
 export type OutgoingWebhookSubmitValues = {
-  readonly name: string;
-  readonly eventType: string;
-  readonly enabled: boolean;
-  readonly url: string;
-  readonly auth:
-    | { readonly type: "none" }
-    | { readonly type: "bearer"; readonly token: string }
-    | { readonly type: "basic"; readonly username: string; readonly password: string }
-    | { readonly type: "hmac"; readonly secret: string; readonly headerName: string }
-    | { readonly type: "custom_headers"; readonly headers: readonly { readonly name: string; readonly value: string }[] };
-  readonly headers: Record<string, string>;
-  readonly retryPolicy: {
-    readonly maxAttempts: number;
-    readonly backoff: { readonly type: "fixed" | "exponential"; readonly delayMs: number };
+  name: string;
+  eventType: string;
+  enabled: boolean;
+  url: string;
+  auth:
+    | { type: "none" }
+    | { type: "bearer"; token: string }
+    | { type: "basic"; username: string; password: string }
+    | { type: "hmac"; secret: string; headerName: string }
+    | { type: "custom_headers"; headers: { name: string; value: string }[] };
+  headers: Record<string, string>;
+  retryPolicy: {
+    maxAttempts: number;
+    backoff: { type: "fixed" | "exponential"; delayMs: number };
   };
 };
 
@@ -150,7 +150,7 @@ function toAuthSubmitValues(values: OutgoingWebhookFormValues): OutgoingWebhookS
     case "hmac":
       return { type: "hmac", secret: requireSecretField(values.hmacSecret, "HMAC secret"), headerName: values.hmacHeaderName };
     case "custom_headers":
-      return { type: "custom_headers", headers: values.customHeaders };
+      return { type: "custom_headers", headers: values.customHeaders.map((header) => ({ name: header.name, value: header.value })) };
   }
 }
 

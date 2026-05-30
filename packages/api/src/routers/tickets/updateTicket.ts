@@ -13,7 +13,8 @@ export const updateTicket = protectedProcedure.input(ticketUpdateFieldsSchema).m
       throw notFound("Project not found.");
     }
   }
-  const ticket = await ctx.crmRepository.tickets.update({ userId: ctx.auth.user.id, id: input.id, fields: normalizeUpdateTicketFields(input), now: new Date() });
+  const now = new Date();
+  const ticket = await ctx.crmRepository.tickets.update({ userId: ctx.auth.user.id, id: input.id, fields: normalizeUpdateTicketFields(input, before, now), now });
   if (!ticket) {
     throw notFound("Ticket not found.");
   }

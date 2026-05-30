@@ -33,7 +33,7 @@ export type AttachmentListRecord = {
   readonly contentType: string | null;
   readonly byteSize: number;
   readonly storageBackend: "local" | "s3_compatible";
-  readonly createdAt: Date;
+  readonly createdAt: string | Date;
 };
 
 export function AttachmentUploadForm({ targetType, targetId, maxBytes, submitting, onSubmit }: { readonly targetType: AttachmentTargetType; readonly targetId: string; readonly maxBytes: number; readonly submitting: boolean; readonly onSubmit: (input: AttachmentCreateInput) => Promise<void> }) {

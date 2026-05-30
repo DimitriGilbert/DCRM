@@ -118,6 +118,7 @@ describe("clients tRPC API", () => {
     });
 
     assert.deepEqual(client.customFields, { hourlyRate: 125 });
+    await assert.rejects(caller.clients.create({ name: "Grace Hopper", customFields: { stale: "value" } }), /Unknown custom field: stale/u);
     await assert.rejects(
       caller.clients.update({ id: client.id, customFieldSchema: [{ key: "portal", label: "Portal", type: "url", required: true }], customFields: { portal: "not-a-url" } }),
       /Invalid URL/u,

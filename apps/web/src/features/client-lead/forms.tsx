@@ -8,6 +8,8 @@ import { z } from "zod";
 import type { ClientRecord, LeadRecord } from "./types";
 import { WEB_LEAD_STAGES } from "./constants";
 import type { WebLeadStage } from "./constants";
+import { clientFormValuesToInput, leadFormValuesToInput, objectText } from "./forms-normalization";
+import type { ClientMutationInput, LeadMutationInput } from "./forms-normalization";
 
 export const optionalEmailFormSchema = z.string().trim().refine((value) => value.length === 0 || z.email().safeParse(value).success, "Enter a valid email or leave it blank.");
 export const optionalUrlFormSchema = z.string().trim().refine((value) => value.length === 0 || z.url().safeParse(value).success, "Enter a valid URL or leave it blank.");
@@ -60,23 +62,7 @@ export type LeadFilterValues = Record<string, unknown> & z.infer<typeof leadFilt
 export type ConversionFormValues = Record<string, unknown> & z.infer<typeof conversionFormSchema>;
 export type TagFormValues = Record<string, unknown> & z.infer<typeof tagFormSchema>;
 
-export interface ClientMutationInput {
-  readonly name: string;
-  readonly email?: string | null;
-  readonly phone?: string | null;
-  readonly company?: string | null;
-  readonly website?: string | null;
-  readonly notes?: string | null;
-  readonly socialLinks?: Record<string, unknown>;
-  readonly address?: Record<string, unknown>;
-}
-
-export interface LeadMutationInput extends ClientMutationInput {
-  readonly source?: string | null;
-  readonly stage?: WebLeadStage;
-  readonly estimatedValueAmount?: string | null;
-  readonly estimatedValueCurrency?: string | null;
-}
+export type { ClientMutationInput, LeadMutationInput } from "./forms-normalization";
 
 const clientFields = [
   { name: "name", type: "text", label: "Name", required: true, section: { title: "Identity", description: "Core client profile fields." } },
@@ -243,60 +229,8 @@ function leadToFormValues(lead?: LeadRecord): LeadFormValues {
     source: lead?.source ?? "",
     stage: lead?.stage ?? "new",
     estimatedValueAmount: lead?.estimatedValueAmount ?? "",
-    estimatedValueCurrency: lead?.estimatedValueCurrency ?? "USD",
+    estimatedValueCurrency: lead?.estimatedValueAmount ? (lead.estimatedValueCurrency ?? "USD") : (lead?.estimatedValueCurrency ?? ""),
   };
-}
-
-function clientFormValuesToInput(value: ClientFormValues): ClientMutationInput {
-  return {
-    name: value.name.trim(),
-    email: emptyToNull(value.email),
-    phone: emptyToNull(value.phone),
-    company: emptyToNull(value.company),
-    website: emptyToNull(value.website),
-    notes: emptyToNull(value.notes),
-    socialLinks: linesObject(value.socialLinksText),
-    address: textObject(value.addressText),
-  };
-}
-
-function leadFormValuesToInput(value: LeadFormValues): LeadMutationInput {
-  return {
-    ...clientFormValuesToInput(value),
-    source: emptyToNull(value.source),
-    stage: value.stage,
-    estimatedValueAmount: emptyToNull(value.estimatedValueAmount),
-    estimatedValueCurrency: emptyToNull(value.estimatedValueCurrency)?.toUpperCase() ?? null,
-  };
-}
-
-function emptyToNull(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function linesObject(value: string): Record<string, unknown> {
-  const links = value.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
-  return links.length > 0 ? { links } : {};
-}
-
-function textObject(value: string): Record<string, unknown> {
-  const text = value.trim();
-  return text.length > 0 ? { text } : {};
-}
-
-function objectText(value: Record<string, unknown> | undefined, preferredKey: "links" | "text"): string {
-  if (!value) {
-    return "";
-  }
-  const preferred = value[preferredKey];
-  if (Array.isArray(preferred)) {
-    return preferred.filter((item): item is string => typeof item === "string").join("\n");
-  }
-  if (typeof preferred === "string") {
-    return preferred;
-  }
-  return Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : "";
 }
 
 export function formatStageLabel(stage: WebLeadStage): string {

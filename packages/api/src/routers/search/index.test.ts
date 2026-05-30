@@ -66,6 +66,16 @@ describe("global search tRPC API", () => {
     assert.deepEqual(result.map((item) => item.entityType), ["project"]);
     assert.deepEqual(result.map((item) => item.entityId), [activeProject.id]);
   });
+
+  it("treats date-only dateTo filters as inclusive through the selected day", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const input = JSON.parse(JSON.stringify({ entityTypes: ["client"], dateTo: new Date().toISOString().slice(0, 10) })) as Parameters<typeof caller.search.global>[0];
+
+    const result = await caller.search.global(input);
+
+    assert.deepEqual(result.map((item) => item.entityId), [client.id]);
+  });
 });
 
 function createTestContext(userId: string, crmRepository: CrmRepository, eventService: EventService): Context {

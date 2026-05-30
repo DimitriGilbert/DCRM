@@ -10,7 +10,7 @@ export const updateLead = protectedProcedure.input(leadUpdateFieldsSchema).mutat
   if (before.convertedAt && input.stage !== undefined && input.stage !== "won") {
     throw conflict("Converted leads must remain in the won stage.");
   }
-  const fields = normalizeUpdateLeadFields(input);
+  const fields = normalizeUpdateLeadFields(input, before);
   const lead = await ctx.crmRepository.leads.update({ userId: ctx.auth.user.id, id: input.id, fields, now: new Date() });
   if (!lead) {
     throw notFound("Lead not found.");

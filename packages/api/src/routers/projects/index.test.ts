@@ -96,6 +96,17 @@ describe("projects tRPC API", () => {
     );
   });
 
+  it("rejects stale project custom fields and numeric values beyond database precision", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+
+    await assert.rejects(caller.projects.update({ id: project.id, customFieldSchema: [{ key: "portal", label: "Portal", type: "url" }], customFields: { portal: "https://example.com", stale: "value" } }), /Unknown custom field: stale/u);
+    await assert.rejects(caller.projects.update({ id: project.id, budgetAmount: "12345678901.00" }), /budgetAmount/u);
+    await assert.rejects(caller.projects.update({ id: project.id, estimatedHours: "123456789.00" }), /estimatedHours/u);
+    await assert.rejects(caller.projects.update({ id: project.id, actualHours: "123456789.00" }), /actualHours/u);
+  });
+
   it("gets and soft-deletes project visibility through user-scoped procedures", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();

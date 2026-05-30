@@ -8,7 +8,7 @@ export const createTicket = protectedProcedure.input(ticketFieldsSchema).mutatio
     throw notFound("Project not found.");
   }
   const now = new Date();
-  const ticket = await ctx.crmRepository.tickets.create({ id: crypto.randomUUID(), userId: ctx.auth.user.id, fields: normalizeCreateTicketFields(input), now });
+  const ticket = await ctx.crmRepository.tickets.create({ id: crypto.randomUUID(), userId: ctx.auth.user.id, fields: normalizeCreateTicketFields(input, now), now });
   await ctx.eventService.emitApi({
     type: "ticket.created",
     userId: ctx.auth.user.id,

@@ -101,6 +101,27 @@ describe("tickets and exchanges tRPC API", () => {
     );
   });
 
+  it("normalizes ticket status and closedAt consistency on create and update", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const suppliedClosedAt = new Date("2026-06-15T12:00:00.000Z");
+
+    const openTicket = await caller.tickets.create({ projectId: project.id, title: "Open ticket", status: "open", closedAt: suppliedClosedAt });
+    const closedTicket = await caller.tickets.create({ projectId: project.id, title: "Closed ticket", status: "closed" });
+    const reopenedTicket = await caller.tickets.update({ id: closedTicket.id, status: "open", closedAt: suppliedClosedAt });
+    const reclosedTicket = await caller.tickets.update({ id: reopenedTicket.id, status: "closed", closedAt: null });
+
+    assert.equal(openTicket.status, "open");
+    assert.equal(openTicket.closedAt, null);
+    assert.equal(closedTicket.status, "closed");
+    assert.ok(closedTicket.closedAt instanceof Date);
+    assert.equal(reopenedTicket.status, "open");
+    assert.equal(reopenedTicket.closedAt, null);
+    assert.equal(reclosedTicket.status, "closed");
+    assert.ok(reclosedTicket.closedAt instanceof Date);
+  });
+
   it("rejects ticket parent project IDs that are missing, deleted, or owned by another user", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();

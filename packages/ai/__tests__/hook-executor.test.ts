@@ -56,6 +56,7 @@ function makeProviderManager(): ProviderManager {
 function makeInsightStore(): AIInsightStore {
   return {
     insert: vi.fn(),
+    update: vi.fn(),
   };
 }
 
@@ -221,9 +222,12 @@ describe("executeAIHook — direct_write mode", () => {
     // Result reflects direct write
     expect(result.applied).toBe(true);
 
-    // Insight stored as applied
+    // Insight stored initially as not applied, then updated to applied
     const stored = (insightStore.insert as ReturnType<typeof vi.fn>).mock.calls[0][0] as AIInsightRecord;
-    expect(stored.applied).toBe(true);
+    expect(stored.applied).toBe(false);
+    expect(insightStore.update).toHaveBeenCalledOnce();
+    expect((insightStore.update as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(stored.id);
+    expect((insightStore.update as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual({ applied: true });
   });
 
   it("respects emitDownstreamEvents when set to true", async () => {

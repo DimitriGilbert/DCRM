@@ -73,6 +73,7 @@ export class S3StorageBackend implements StorageBackend {
   readonly name = "s3";
   private readonly limits: StorageLimits;
   private readonly client: S3ClientLike;
+  private readonly userLocks = new Map<string, Promise<void>>();
 
   constructor(options: S3StorageOptions) {
     this.limits = { maxFileSize: options.maxSize, userQuota: options.userQuota };
@@ -82,6 +83,21 @@ export class S3StorageBackend implements StorageBackend {
     } else {
       this.client = createLazyS3Client(options);
     }
+  }
+
+  private async acquireLock(userId: string): Promise<() => void> {
+    while (this.userLocks.has(userId)) {
+      await this.userLocks.get(userId);
+    }
+    let release!: () => void;
+    const lock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.userLocks.set(userId, lock);
+    return () => {
+      this.userLocks.delete(userId);
+      release();
+    };
   }
 
   getLimits(): StorageLimits {
@@ -96,30 +112,35 @@ export class S3StorageBackend implements StorageBackend {
       );
     }
 
-    if (this.limits.userQuota !== null) {
-      const currentUsage = await this.calculateUsage(userId);
-      if (currentUsage + data.byteLength > this.limits.userQuota) {
+    const release = await this.acquireLock(userId);
+    try {
+      if (this.limits.userQuota !== null) {
+        const currentUsage = await this.calculateUsage(userId);
+        if (currentUsage + data.byteLength > this.limits.userQuota) {
+          throw new StorageError(
+            `Upload would exceed user quota of ${this.limits.userQuota} bytes`,
+            "QUOTA_EXCEEDED",
+          );
+        }
+      }
+
+      const s3Key = this.s3Key(userId, key);
+
+      try {
+        await this.client.send({
+          __cmd: "PutObject",
+          key: s3Key,
+          body: data,
+          contentType: mimeType,
+        } satisfies InternalPut);
+      } catch (err) {
         throw new StorageError(
-          `Upload would exceed user quota of ${this.limits.userQuota} bytes`,
-          "QUOTA_EXCEEDED",
+          `S3 put failed: ${err instanceof Error ? err.message : "unknown error"}`,
+          "PUT_FAILED",
         );
       }
-    }
-
-    const s3Key = this.s3Key(userId, key);
-
-    try {
-      await this.client.send({
-        __cmd: "PutObject",
-        key: s3Key,
-        body: data,
-        contentType: mimeType,
-      } satisfies InternalPut);
-    } catch (err) {
-      throw new StorageError(
-        `S3 put failed: ${err instanceof Error ? err.message : "unknown error"}`,
-        "PUT_FAILED",
-      );
+    } finally {
+      release();
     }
 
     return { path: key, size: data.byteLength, mimeType };

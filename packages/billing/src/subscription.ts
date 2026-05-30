@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { db } from "@DCRM/db";
 import { subscriptions } from "@DCRM/db/schema/automation";
@@ -45,6 +45,7 @@ export function createSubscriptionService(): SubscriptionService {
         .select()
         .from(subscriptions)
         .where(eq(subscriptions.userId, userId))
+        .orderBy(desc(subscriptions.createdAt))
         .limit(1);
 
       const sub = rows[0];

@@ -1,5 +1,6 @@
 import type { CryptoService } from "@DCRM/crypto";
 import type { DcrmEvent, HookRecord } from "@DCRM/events";
+import { OUTGOING_WEBHOOK_AUTH_MODE_VALUES } from "@DCRM/domain";
 
 import {
   type OutgoingWebhookHookConfig,
@@ -72,6 +73,19 @@ function parseConfig(raw: Record<string, unknown>): OutgoingWebhookHookConfig {
   const auth = raw["auth"] ?? { mode: "none" };
   if (typeof auth !== "object" || auth === null) {
     throw new Error(`Invalid webhook config: "auth" must be an object`);
+  }
+
+  const authMode = (auth as Record<string, unknown>)["mode"];
+  if (
+    typeof authMode === "string" &&
+    authMode !== "none" &&
+    !OUTGOING_WEBHOOK_AUTH_MODE_VALUES.includes(
+      authMode as (typeof OUTGOING_WEBHOOK_AUTH_MODE_VALUES)[number],
+    )
+  ) {
+    throw new Error(
+      `Invalid webhook config: unrecognized auth mode "${authMode}"`,
+    );
   }
 
   const method = raw["method"] as OutgoingWebhookHookConfig["method"];

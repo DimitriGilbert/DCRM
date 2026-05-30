@@ -123,6 +123,7 @@ export class LocalStorageBackend implements StorageBackend {
   private readonly limits: StorageLimits;
   private readonly baseDir: string;
   private readonly fsOps: FsOps;
+  private readonly userLocks = new Map<string, Promise<void>>();
 
   constructor(options: LocalStorageOptions) {
     this.limits = { maxFileSize: options.maxSize, userQuota: options.userQuota };
@@ -133,6 +134,21 @@ export class LocalStorageBackend implements StorageBackend {
     } else {
       this.fsOps = createRealFsOps();
     }
+  }
+
+  private async acquireLock(userId: string): Promise<() => void> {
+    while (this.userLocks.has(userId)) {
+      await this.userLocks.get(userId);
+    }
+    let release!: () => void;
+    const lock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.userLocks.set(userId, lock);
+    return () => {
+      this.userLocks.delete(userId);
+      release();
+    };
   }
 
   getLimits(): StorageLimits {
@@ -150,26 +166,31 @@ export class LocalStorageBackend implements StorageBackend {
       );
     }
 
-    if (this.limits.userQuota !== null) {
-      const currentUsage = await this.calculateUsage(userId);
-      if (currentUsage + data.byteLength > this.limits.userQuota) {
+    const release = await this.acquireLock(userId);
+    try {
+      if (this.limits.userQuota !== null) {
+        const currentUsage = await this.calculateUsage(userId);
+        if (currentUsage + data.byteLength > this.limits.userQuota) {
+          throw new StorageError(
+            `Upload would exceed user quota of ${this.limits.userQuota} bytes`,
+            "QUOTA_EXCEEDED",
+          );
+        }
+      }
+
+      const fullPath = this.resolvePath(userId, key);
+
+      try {
+        await this.fsOps.put(fullPath, data);
+      } catch (err) {
+        if (err instanceof StorageError) throw err;
         throw new StorageError(
-          `Upload would exceed user quota of ${this.limits.userQuota} bytes`,
-          "QUOTA_EXCEEDED",
+          `Failed to store file: ${err instanceof Error ? err.message : "unknown error"}`,
+          "PUT_FAILED",
         );
       }
-    }
-
-    const fullPath = this.resolvePath(userId, key);
-
-    try {
-      await this.fsOps.put(fullPath, data);
-    } catch (err) {
-      if (err instanceof StorageError) throw err;
-      throw new StorageError(
-        `Failed to store file: ${err instanceof Error ? err.message : "unknown error"}`,
-        "PUT_FAILED",
-      );
+    } finally {
+      release();
     }
 
     return { path: key, size: data.byteLength, mimeType };

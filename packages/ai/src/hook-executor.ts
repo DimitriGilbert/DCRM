@@ -85,6 +85,7 @@ export type AIHookExecutionResult = {
  */
 export type AIInsightStore = {
   readonly insert: (record: AIInsightRecord) => Promise<void>;
+  readonly update: (id: string, updates: Partial<AIInsightRecord>) => Promise<void>;
 };
 
 /**
@@ -170,6 +171,15 @@ function buildUserPrompt(
 }
 
 /**
+ * Extracts the entity kind from a composite event name.
+ * e.g. "client.created" → "client", "deal" → "deal"
+ */
+function extractEntityType(eventType: string): string {
+  const dotIndex = eventType.indexOf(".");
+  return dotIndex > 0 ? eventType.slice(0, dotIndex) : eventType;
+}
+
+/**
  * Execute an AI hook: generate structured output, validate, map fields, and persist.
  *
  * Flow:
@@ -199,7 +209,7 @@ export async function executeAIHook(
   // 2. Build prompt
   const userPrompt = buildUserPrompt(
     resolved.userPromptTemplate,
-    input.eventType,
+    input.entityType ?? extractEntityType(input.eventType),
     input.eventPayload,
   );
   const fullPrompt = resolved.systemPrompt + "\n\n" + userPrompt;
@@ -262,7 +272,12 @@ export async function executeAIHook(
 
     const text = textResult as string;
     try {
-      structuredOutput = JSON.parse(text) as Record<string, unknown>;
+      const parsed = JSON.parse(text);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        structuredOutput = { raw_text: text };
+      } else {
+        structuredOutput = parsed as Record<string, unknown>;
+      }
     } catch {
       structuredOutput = { raw_text: text };
     }
@@ -340,8 +355,9 @@ export async function executeAIHook(
         },
       );
       applied = true;
-    } catch {
-      // Entity update failed; insight remains stored with applied: false
+      await deps.insightStore.update(insightRecord.id, { applied: true });
+    } catch (error) {
+      console.error("[AI hook-executor] Entity update failed:", error);
     }
   }
 

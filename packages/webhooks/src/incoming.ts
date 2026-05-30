@@ -150,7 +150,7 @@ export async function handleIncomingWebhook(
   if (!webhook.enabled) {
     return {
       accepted: false,
-      statusCode: 404,
+      statusCode: 410,
       body: { error: "Webhook not found" },
     };
   }

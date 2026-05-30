@@ -65,10 +65,15 @@ export function createStripeService(): StripeService {
       if (customers.data.length > 0) {
         customerId = customers.data[0]!.id;
       } else {
-        const customer = await stripe.customers.create({
-          email,
-          metadata: { userId },
-        });
+        const customer = await stripe.customers.create(
+          {
+            email,
+            metadata: { userId },
+          },
+          {
+            idempotencyKey: `customer-create-${userId}`,
+          },
+        );
         customerId = customer.id;
       }
 
@@ -125,8 +130,12 @@ export function createStripeService(): StripeService {
       const stripe = getStripeClient();
       try {
         return await stripe.subscriptions.retrieve(subscriptionId);
-      } catch {
-        return null;
+      } catch (err) {
+        if (err instanceof Stripe.errors.StripeInvalidRequestError) {
+          return null;
+        }
+        console.error("Failed to retrieve Stripe subscription", err);
+        throw err;
       }
     },
   };

@@ -1,7 +1,8 @@
 import { db } from "@DCRM/db";
 import { subscriptions } from "@DCRM/db/schema/automation";
 import { env } from "@DCRM/env/server";
-import { eq } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { protectedProcedure, publicProcedure, router } from "../../index";
@@ -15,7 +16,10 @@ export const createCheckout = protectedProcedure
   .input(checkoutInputSchema)
   .mutation(async ({ ctx, input }) => {
     if (!env.BILLING_ENABLED) {
-      throw new Error("Billing is not enabled in this environment");
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Billing is not enabled in this environment",
+      });
     }
 
     const { createStripeService } = await import("@DCRM/billing");
@@ -32,7 +36,10 @@ export const createCheckout = protectedProcedure
 export const getSubscriptionStatus = protectedProcedure.query(
   async ({ ctx }) => {
     if (!env.BILLING_ENABLED) {
-      throw new Error("Billing is not enabled in this environment");
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Billing is not enabled in this environment",
+      });
     }
 
     const { createSubscriptionService } = await import("@DCRM/billing");
@@ -50,19 +57,25 @@ export const createPortalSession = protectedProcedure
   )
   .mutation(async ({ ctx, input }) => {
     if (!env.BILLING_ENABLED) {
-      throw new Error("Billing is not enabled in this environment");
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Billing is not enabled in this environment",
+      });
     }
 
-    // Get the user's Stripe customer ID
     const rows = await db
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.userId, ctx.user.id))
+      .orderBy(desc(subscriptions.createdAt))
       .limit(1);
 
     const sub = rows[0];
     if (!sub?.stripeCustomerId) {
-      throw new Error("No Stripe customer found for this user");
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "No Stripe customer found for this user",
+      });
     }
 
     const { createStripeService } = await import("@DCRM/billing");

@@ -10,88 +10,91 @@ import { convertLeadSchema } from "./schemas";
 export const convertLead = protectedProcedure
   .input(convertLeadSchema)
   .mutation(async ({ ctx, input }) => {
-    const [lead] = await db
-      .select()
-      .from(leads)
-      .where(
-        and(
-          eq(leads.id, input.id),
-          eq(leads.userId, ctx.user.id),
-          isNull(leads.deletedAt),
-        ),
-      )
-      .limit(1);
+    return db.transaction(async (tx) => {
+      const [lead] = await tx
+        .select()
+        .from(leads)
+        .where(
+          and(
+            eq(leads.id, input.id),
+            eq(leads.userId, ctx.user.id),
+            isNull(leads.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for("update");
 
-    if (!lead) {
-      return null;
-    }
+      if (!lead) {
+        return null;
+      }
 
-    if (lead.stage !== "won") {
-      return null;
-    }
+      if (lead.stage !== "won") {
+        return null;
+      }
 
-    if (lead.convertedClientId) {
-      return null;
-    }
+      if (lead.convertedClientId) {
+        return null;
+      }
 
-    const clientId = nanoid();
-    const now = new Date();
+      const clientId = nanoid();
+      const now = new Date();
 
-    const clientRow = {
-      id: clientId,
-      userId: ctx.user.id,
-      name: lead.name,
-      email: lead.email,
-      phone: lead.phone,
-      company: lead.company,
-      website: lead.website,
-      notes: lead.notes,
-      socialLinks: lead.socialLinks,
-      address: lead.address,
-      customFields: lead.customFields,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
-    };
+      const clientRow = {
+        id: clientId,
+        userId: ctx.user.id,
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        company: lead.company,
+        website: lead.website,
+        notes: lead.notes,
+        socialLinks: lead.socialLinks,
+        address: lead.address,
+        customFields: lead.customFields,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
 
-    await db.insert(clients).values(clientRow);
+      await tx.insert(clients).values(clientRow);
 
-    const [updatedLead] = await db
-      .update(leads)
-      .set({
-        convertedClientId: clientId,
-        convertedAt: now,
-      })
-      .where(eq(leads.id, input.id))
-      .returning();
+      const [updatedLead] = await tx
+        .update(leads)
+        .set({
+          convertedClientId: clientId,
+          convertedAt: now,
+        })
+        .where(eq(leads.id, input.id))
+        .returning();
 
-    await db
-      .update(attachments)
-      .set({ entityType: "client", entityId: clientId })
-      .where(
-        and(
-          eq(attachments.entityType, "lead"),
-          eq(attachments.entityId, input.id),
-        ),
+      await tx
+        .update(attachments)
+        .set({ entityType: "client", entityId: clientId })
+        .where(
+          and(
+            eq(attachments.entityType, "lead"),
+            eq(attachments.entityId, input.id),
+          ),
+        );
+
+      await emitEvent(
+        { insert: async () => {} },
+        {
+          type: EVENT_TYPE.LEAD_CONVERTED,
+          userId: ctx.user.id,
+          source: "app",
+          entity: { type: "lead", id: input.id },
+          payload: {
+            leadId: input.id,
+            clientId,
+            name: lead.name,
+          },
+        },
       );
 
-    await emitEvent(
-      { insert: async () => {} },
-      {
-        type: EVENT_TYPE.LEAD_CONVERTED,
-        userId: ctx.user.id,
-        source: "app",
-        entity: { type: "lead", id: input.id },
-        payload: {
-          leadId: input.id,
-          clientId,
-          name: lead.name,
-        },
-      },
-    );
-
-    return {
-      lead: updatedLead ?? null,
-      client: clientRow,
-    };
+      return {
+        lead: updatedLead ?? null,
+        client: clientRow,
+      };
+    });
   });

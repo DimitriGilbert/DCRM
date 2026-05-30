@@ -1,6 +1,6 @@
 import { db } from "@DCRM/db";
 import { notifications } from "@DCRM/db/schema/automation";
-import { eq, and, isNull, desc, lt } from "drizzle-orm";
+import { eq, and, desc, lt } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { listNotificationsSchema } from "./schemas";
@@ -11,7 +11,7 @@ export const listNotifications = protectedProcedure
     const conditions = [eq(notifications.userId, ctx.user.id)];
 
     if (input.unreadOnly) {
-      conditions.push(isNull(notifications.read));
+      conditions.push(eq(notifications.read, false));
     }
 
     if (input.cursor) {

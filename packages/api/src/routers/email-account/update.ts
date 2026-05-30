@@ -30,15 +30,14 @@ export const updateEmailAccount = protectedProcedure
 
     const credentialConfig = createEmailCredentialConfig(env.ENCRYPTION_KEY);
 
-    const setValues: Record<string, unknown> = {
+    const setValues: Partial<typeof emailAccounts.$inferInsert> = {
       updatedAt: new Date(),
     };
 
-    if (updates.email !== undefined) setValues["email"] = updates.email;
-    if (updates.syncEnabled !== undefined) setValues["sync_enabled"] = updates.syncEnabled;
-    if (updates.syncInterval !== undefined) setValues["sync_interval"] = updates.syncInterval;
+    if (updates.email !== undefined) setValues.email = updates.email;
+    if (updates.syncEnabled !== undefined) setValues.syncEnabled = updates.syncEnabled;
+    if (updates.syncInterval !== undefined) setValues.syncInterval = updates.syncInterval;
 
-    // Re-encrypt IMAP credentials if any changed
     if (
       updates.imapHost !== undefined ||
       updates.imapPort !== undefined ||
@@ -59,13 +58,12 @@ export const updateEmailAccount = protectedProcedure
         password: updates.imapPassword ?? currentImap.password,
       });
 
-      setValues["encrypted_imap_host"] = updatedImap.encryptedImapHost;
-      setValues["encrypted_imap_port"] = updatedImap.encryptedImapPort;
-      setValues["encrypted_imap_user"] = updatedImap.encryptedImapUser;
-      setValues["encrypted_imap_password"] = updatedImap.encryptedImapPassword;
+      setValues.encryptedImapHost = updatedImap.encryptedImapHost;
+      setValues.encryptedImapPort = updatedImap.encryptedImapPort;
+      setValues.encryptedImapUser = updatedImap.encryptedImapUser;
+      setValues.encryptedImapPassword = updatedImap.encryptedImapPassword;
     }
 
-    // Re-encrypt SMTP credentials if any changed
     if (
       updates.smtpHost !== undefined ||
       updates.smtpPort !== undefined ||
@@ -86,10 +84,10 @@ export const updateEmailAccount = protectedProcedure
         password: updates.smtpPassword ?? currentSmtp.password,
       });
 
-      setValues["encrypted_smtp_host"] = updatedSmtp.encryptedSmtpHost;
-      setValues["encrypted_smtp_port"] = updatedSmtp.encryptedSmtpPort;
-      setValues["encrypted_smtp_user"] = updatedSmtp.encryptedSmtpUser;
-      setValues["encrypted_smtp_password"] = updatedSmtp.encryptedSmtpPassword;
+      setValues.encryptedSmtpHost = updatedSmtp.encryptedSmtpHost;
+      setValues.encryptedSmtpPort = updatedSmtp.encryptedSmtpPort;
+      setValues.encryptedSmtpUser = updatedSmtp.encryptedSmtpUser;
+      setValues.encryptedSmtpPassword = updatedSmtp.encryptedSmtpPassword;
     }
 
     await db

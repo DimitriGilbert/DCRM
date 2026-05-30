@@ -18,7 +18,7 @@ import {
   aiInsights,
   notifications,
 } from "@DCRM/db/schema/automation";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { fullDataExportSchema } from "./schemas";
@@ -28,13 +28,16 @@ export const fullDataExport = protectedProcedure
   .query(async ({ ctx }) => {
     const userId = ctx.user.id;
 
+    const tagsData = await db.select().from(tags).where(eq(tags.userId, userId));
+
+    const tagIds = tagsData.map(t => t.id);
+
     const [
       clientsData,
       leadsData,
       projectsData,
       ticketsData,
       exchangesData,
-      tagsData,
       entityTagsData,
       attachmentsData,
       userSettingsData,
@@ -50,8 +53,9 @@ export const fullDataExport = protectedProcedure
       db.select().from(projects).where(eq(projects.userId, userId)),
       db.select().from(tickets).where(eq(tickets.userId, userId)),
       db.select().from(exchanges).where(eq(exchanges.userId, userId)),
-      db.select().from(tags).where(eq(tags.userId, userId)),
-      db.select().from(entityTags).where(eq(entityTags.tagId, userId)).catch(() => []),
+      tagIds.length > 0
+        ? db.select().from(entityTags).where(inArray(entityTags.tagId, tagIds))
+        : [],
       db.select().from(attachments).where(eq(attachments.userId, userId)),
       db.select().from(userSettings).where(eq(userSettings.userId, userId)).catch(() => []),
       db.select().from(events).where(eq(events.userId, userId)),

@@ -1,5 +1,5 @@
 import { db } from "@DCRM/db";
-import { entityTags } from "@DCRM/db/schema/crm";
+import { entityTags, tags } from "@DCRM/db/schema/crm";
 import { eq, and } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
@@ -7,20 +7,19 @@ import { detachTagSchema } from "./schemas";
 
 export const detachTag = protectedProcedure
   .input(detachTagSchema)
-  .mutation(async ({ input }) => {
-    const [existing] = await db
+  .mutation(async ({ ctx, input }) => {
+    const [tag] = await db
       .select()
-      .from(entityTags)
+      .from(tags)
       .where(
         and(
-          eq(entityTags.tagId, input.tagId),
-          eq(entityTags.entityType, input.entityType),
-          eq(entityTags.entityId, input.entityId),
+          eq(tags.id, input.tagId),
+          eq(tags.userId, ctx.user.id),
         ),
       )
       .limit(1);
 
-    if (!existing) {
+    if (!tag) {
       return null;
     }
 

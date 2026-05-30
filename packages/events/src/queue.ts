@@ -6,6 +6,7 @@ import { Queue } from "bullmq";
 export type HookJobData = {
   readonly hookId: string;
   readonly hookType: string;
+  readonly hookName: string;
   readonly eventId: string;
   readonly userId: string;
   readonly executionId: string;

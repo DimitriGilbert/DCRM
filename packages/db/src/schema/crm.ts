@@ -17,6 +17,7 @@ import {
 } from "./auth";
 
 import {
+  EXCHANGE_DIRECTION_VALUES,
   EXCHANGE_TYPE_VALUES,
   LEAD_STAGE_VALUES,
   PROJECT_STATUS_VALUES,
@@ -67,7 +68,7 @@ export const exchangeTypeEnum = pgEnum(
 
 export const exchangeDirectionEnum = pgEnum(
   "exchange_direction",
-  ["incoming", "outgoing"],
+  pgEnumValues(EXCHANGE_DIRECTION_VALUES),
 );
 
 // --- Tables ---
@@ -223,7 +224,7 @@ export const exchanges = pgTable(
       onDelete: "set null",
     }),
     ticketId: text("ticket_id").references(() => tickets.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     subject: text("subject"),
     body: text("body"),
@@ -343,8 +344,6 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
   }),
   projects: many(projects),
   exchanges: many(exchanges),
-  tags: many(entityTags),
-  attachments: many(attachments),
 }));
 
 export const leadsRelations = relations(leads, ({ one }) => ({
@@ -369,8 +368,6 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   }),
   tickets: many(tickets),
   exchanges: many(exchanges),
-  tags: many(entityTags),
-  attachments: many(attachments),
 }));
 
 export const ticketsRelations = relations(tickets, ({ one, many }) => ({
@@ -383,8 +380,6 @@ export const ticketsRelations = relations(tickets, ({ one, many }) => ({
     references: [projects.id],
   }),
   exchanges: many(exchanges),
-  tags: many(entityTags),
-  attachments: many(attachments),
 }));
 
 export const exchangesRelations = relations(exchanges, ({ one }) => ({

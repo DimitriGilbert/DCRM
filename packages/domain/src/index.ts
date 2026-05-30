@@ -36,8 +36,16 @@ export {
   EXCHANGE_TYPES,
   EXCHANGE_TYPE_VALUES,
   exchangeTypeSchema,
+  EXCHANGE_DIRECTIONS,
+  EXCHANGE_DIRECTION_VALUES,
+  exchangeDirectionSchema,
 } from "./exchange";
-export type { ExchangeType, ExchangeTypeKey } from "./exchange";
+export type {
+  ExchangeType,
+  ExchangeTypeKey,
+  ExchangeDirection,
+  ExchangeDirectionKey,
+} from "./exchange";
 
 export {
   EVENT_SOURCES,

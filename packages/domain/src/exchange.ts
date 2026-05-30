@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+// --- Exchange Types ---
+
 export const EXCHANGE_TYPES = {
   EMAIL: "email",
   NOTE: "note",
@@ -21,4 +23,23 @@ export const exchangeTypeSchema = z.enum([
   EXCHANGE_TYPES.CALL,
   EXCHANGE_TYPES.MEETING,
   EXCHANGE_TYPES.COMMENT,
+]);
+
+// --- Exchange Directions ---
+
+export const EXCHANGE_DIRECTIONS = {
+  INCOMING: "incoming",
+  OUTGOING: "outgoing",
+} as const;
+
+export type ExchangeDirectionKey = keyof typeof EXCHANGE_DIRECTIONS;
+
+export type ExchangeDirection = (typeof EXCHANGE_DIRECTIONS)[ExchangeDirectionKey];
+
+export const EXCHANGE_DIRECTION_VALUES: readonly ExchangeDirection[] =
+  Object.values(EXCHANGE_DIRECTIONS);
+
+export const exchangeDirectionSchema = z.enum([
+  EXCHANGE_DIRECTIONS.INCOMING,
+  EXCHANGE_DIRECTIONS.OUTGOING,
 ]);

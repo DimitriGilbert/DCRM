@@ -52,6 +52,7 @@ export type EventRow = {
     readonly before?: Record<string, unknown>;
     readonly after?: Record<string, unknown>;
   };
+  readonly createdAt: Date;
 };
 
 /**
@@ -72,6 +73,7 @@ export async function emitEvent(
   input: EmitEventInput,
 ): Promise<DcrmEvent> {
   const id = randomUUID();
+  const createdAt = new Date();
 
   const row: EventRow = {
     id,
@@ -82,6 +84,7 @@ export async function emitEvent(
     entityId: input.entity?.id ?? null,
     payload: input.payload,
     changes: input.changes,
+    createdAt,
   };
 
   await persister.insert(row);
@@ -95,6 +98,6 @@ export async function emitEvent(
     payload: input.payload,
     changes: input.changes,
     provenance: input.provenance,
-    createdAt: new Date(),
+    createdAt,
   };
 }

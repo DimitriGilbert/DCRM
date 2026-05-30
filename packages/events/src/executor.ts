@@ -100,6 +100,7 @@ export async function dispatchHooks(
     const jobData: HookJobData = {
       hookId: hook.id,
       hookType: hook.type,
+      hookName: hook.name,
       eventId: event.id,
       userId: event.userId,
       executionId: record.id,
@@ -115,6 +116,7 @@ export async function dispatchHooks(
       await store.updateStatus(record.id, "failed", {
         error: `Queue dispatch failed: ${queueError}`,
       });
+      records[records.length - 1] = { ...record, status: "failed" };
     }
   }
 
@@ -135,6 +137,7 @@ export async function processJob(
   store: ExecutionStore,
   handlers: HookHandlerRegistry,
   event: DcrmEvent,
+  attemptsMade: number = jobData.retryCount,
 ): Promise<ProcessJobResult> {
   await store.updateStatus(jobData.executionId, "running");
 
@@ -153,7 +156,7 @@ export async function processJob(
   const hook: HookRecord = {
     id: jobData.hookId,
     userId: jobData.userId,
-    name: "",
+    name: jobData.hookName,
     type: jobData.hookType,
     eventType: event.type,
     enabled: true,
@@ -169,13 +172,13 @@ export async function processJob(
     const errorMessage = err instanceof Error ? err.message : String(err);
     const policy: RetryPolicy = {
       maxRetries: jobData.maxRetries,
-      retryCount: jobData.retryCount,
+      retryCount: attemptsMade,
     };
     const canRetry = shouldRetry(policy);
 
     await store.updateStatus(jobData.executionId, "failed", {
       error: errorMessage,
-      retryCount: jobData.retryCount + 1,
+      retryCount: attemptsMade + 1,
     });
 
     return {

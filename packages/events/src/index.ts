@@ -40,6 +40,5 @@ export {
 } from "./executor";
 export {
   shouldRetry,
-  getRetryDelayMs,
   type RetryPolicy,
 } from "./retry";

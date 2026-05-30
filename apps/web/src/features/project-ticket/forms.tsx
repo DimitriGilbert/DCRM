@@ -303,6 +303,7 @@ function projectFormValuesToInput(value: ProjectFormValues): ProjectMutationInpu
 }
 
 function ticketFormValuesToInput(value: TicketFormValues): TicketMutationInput {
+  const closedAt = normalizeTicketClosedAt(value.status, stringToDateOrNull(value.closedAt));
   return {
     projectId: value.projectId,
     title: value.title.trim(),
@@ -311,8 +312,15 @@ function ticketFormValuesToInput(value: TicketFormValues): TicketMutationInput {
     status: value.status,
     priority: value.priority,
     dueAt: stringToDateOrNull(value.dueAt),
-    closedAt: stringToDateOrNull(value.closedAt),
+    closedAt,
   };
+}
+
+function normalizeTicketClosedAt(status: WebTicketStatus, closedAt: Date | null): Date | null {
+  if (status === "open") {
+    return null;
+  }
+  return closedAt ?? new Date();
 }
 
 function emptyToNull(value: string): string | null {

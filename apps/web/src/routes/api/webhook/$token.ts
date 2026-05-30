@@ -1,6 +1,8 @@
 import { receiveIncomingWebhook } from "@DCRM/api/routers/incoming-webhook/receiver";
 import { createFileRoute } from "@tanstack/react-router";
 
+const MAX_BODY_BYTES = 1_048_576;
+
 function handler({ request, params }: { request: Request; params: Record<string, string> }) {
   const urlToken = params["token"];
   if (!urlToken) {
@@ -10,8 +12,22 @@ function handler({ request, params }: { request: Request; params: Record<string,
     });
   }
 
+  const contentLength = request.headers.get("Content-Length");
+  if (contentLength !== null && Number(contentLength) > MAX_BODY_BYTES) {
+    return new Response(JSON.stringify({ error: "Request body too large" }), {
+      status: 413,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   return (async () => {
     const rawBody = await request.text();
+    if (rawBody.length > MAX_BODY_BYTES) {
+      return new Response(JSON.stringify({ error: "Request body too large" }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const signatureHeader = request.headers.get("X-DCRM-Signature");
 
     const result = await receiveIncomingWebhook(urlToken, rawBody, signatureHeader);

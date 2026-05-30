@@ -17,16 +17,9 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { useTRPC } from "@/utils/trpc";
-
-const ENTITY_ROUTES: Record<string, (id: string) => string> = {
-  client: (id) => `/clients/${id}`,
-  lead: (id) => `/leads/${id}`,
-  project: (id) => `/projects/${id}`,
-  ticket: () => "/tickets",
-  exchange: () => "/clients",
-};
 
 const ENTITY_CONFIG: Record<string, { icon: typeof Users; label: string }> = {
   client: { icon: Users, label: "Client" },
@@ -44,6 +37,7 @@ function GlobalSearch({
   readonly onOpenChange: (open: boolean) => void;
 }) {
   const trpc = useTRPC();
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
   const searchQuery = useQuery(
@@ -74,14 +68,26 @@ function GlobalSearch({
 
   const handleSelect = useCallback(
     (entityType: string, entityId: string) => {
-      const routeBuilder = ENTITY_ROUTES[entityType];
-      if (!routeBuilder) return;
       onOpenChange(false);
-      // Use href-based navigation to avoid TanStack Router strict typing issues
-      // with dynamic entity types
-      window.location.href = routeBuilder(entityId);
+      switch (entityType) {
+        case "client":
+          void navigate({ to: "/clients/$clientId", params: { clientId: entityId } });
+          break;
+        case "lead":
+          void navigate({ to: "/leads/$leadId", params: { leadId: entityId } });
+          break;
+        case "project":
+          void navigate({ to: "/projects/$projectId", params: { projectId: entityId } });
+          break;
+        case "ticket":
+          void navigate({ to: "/tickets/", params: {} });
+          break;
+        case "exchange":
+          void navigate({ to: "/clients/$clientId", params: { clientId: entityId } });
+          break;
+      }
     },
-    [onOpenChange],
+    [onOpenChange, navigate],
   );
 
   // Group results by entity type
@@ -120,6 +126,10 @@ function GlobalSearch({
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
+        ) : searchQuery.isError ? (
+          <CommandEmpty>
+            Something went wrong. Please try again.
+          </CommandEmpty>
         ) : (
           <>
             <CommandEmpty>

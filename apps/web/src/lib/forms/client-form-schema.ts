@@ -2,13 +2,15 @@ import { z } from "zod";
 
 import type { FormedibleFieldConfig } from "@DCRM/ui/components/formedible/lib/types";
 
+const emptyStringToUndefined = z.string().transform((v) => (v === "" ? undefined : v)).optional();
+
 const clientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  email: z.string().optional(),
-  phone: z.string().optional(),
-  company: z.string().optional(),
-  website: z.string().optional(),
-  notes: z.string().optional(),
+  email: emptyStringToUndefined,
+  phone: emptyStringToUndefined,
+  company: emptyStringToUndefined,
+  website: emptyStringToUndefined,
+  notes: emptyStringToUndefined,
 });
 
 type ClientFormValues = z.infer<typeof clientFormSchema>;

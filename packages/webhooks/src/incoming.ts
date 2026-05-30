@@ -147,12 +147,11 @@ export async function handleIncomingWebhook(
     };
   }
 
-  // 2. Check enabled
   if (!webhook.enabled) {
     return {
       accepted: false,
-      statusCode: 410,
-      body: { error: "Webhook is disabled" },
+      statusCode: 404,
+      body: { error: "Webhook not found" },
     };
   }
 
@@ -207,11 +206,8 @@ export async function handleIncomingWebhook(
 
   const mappingResult = mapPayload(payload, webhook.mappingConfig);
 
-  // Update lastReceivedAt
-  await deps.updateLastReceived(webhook.id);
-
-  // 6. Test mode: return preview, no event emission
   if (webhook.mode === "test") {
+    await deps.updateLastReceived(webhook.id);
     return {
       accepted: true,
       statusCode: 200,
@@ -229,7 +225,6 @@ export async function handleIncomingWebhook(
     };
   }
 
-  // 7. Live mode: emit normalized internal event
   if (!mappingResult.success) {
     return {
       accepted: false,
@@ -256,6 +251,8 @@ export async function handleIncomingWebhook(
   };
 
   const event = await emitEvent(deps.persister, eventInput);
+
+  await deps.updateLastReceived(webhook.id);
 
   return {
     accepted: true,

@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { FormedibleFieldConfig } from "@DCRM/ui/components/formedible/lib/types";
 
 const emailAccountFormSchema = z.object({
-  email: z.string().min(1, "Email address is required"),
+  email: z.email(),
   imapHost: z.string().min(1, "IMAP host is required"),
   imapPort: z.number().int().min(1).max(65535),
   imapUser: z.string().min(1, "IMAP username is required"),

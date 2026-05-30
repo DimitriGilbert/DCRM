@@ -13,12 +13,14 @@ import { TRPCProvider } from "./utils/trpc";
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
-      toast.error(error.message, {
-        action: {
-          label: "retry",
-          onClick: query.invalidate,
-        },
-      });
+      if (query.state.data === undefined) {
+        toast.error(error.message, {
+          action: {
+            label: "retry",
+            onClick: query.invalidate,
+          },
+        });
+      }
     },
   }),
   defaultOptions: { queries: { staleTime: 60 * 1000 } },

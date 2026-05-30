@@ -64,6 +64,14 @@ export function ExchangeTimeline({ clientId, projectId, ticketId, limit = 50 }: 
     );
   }
 
+  if (timelineQuery.isError) {
+    return (
+      <p className="py-8 text-center text-xs text-destructive">
+        Failed to load activity. Please try again.
+      </p>
+    );
+  }
+
   const items = timelineQuery.data ?? [];
 
   if (items.length === 0) {

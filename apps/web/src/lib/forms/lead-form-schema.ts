@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { FormedibleFieldConfig } from "@DCRM/ui/components/formedible/lib/types";
 
-export const LEAD_STAGES = {
+const LEAD_STAGES = {
   NEW: "new",
   CONTACTED: "contacted",
   QUALIFIED: "qualified",
@@ -12,7 +12,17 @@ export const LEAD_STAGES = {
   LOST: "lost",
 } as const;
 
-export type LeadStage = (typeof LEAD_STAGES)[keyof typeof LEAD_STAGES];
+type LeadStage = (typeof LEAD_STAGES)[keyof typeof LEAD_STAGES];
+
+const leadStageSchema = z.enum([
+  LEAD_STAGES.NEW,
+  LEAD_STAGES.CONTACTED,
+  LEAD_STAGES.QUALIFIED,
+  LEAD_STAGES.PROPOSAL,
+  LEAD_STAGES.NEGOTIATION,
+  LEAD_STAGES.WON,
+  LEAD_STAGES.LOST,
+]);
 
 const LEAD_SOURCE_OPTIONS = [
   { value: "referral", label: "Referral" },
@@ -31,7 +41,7 @@ const leadFormSchema = z.object({
   website: z.string().optional(),
   notes: z.string().optional(),
   source: z.string().optional(),
-  stage: z.string().optional(),
+  stage: leadStageSchema.optional(),
   estimatedValue: z.number().optional(),
   currency: z.string().optional(),
 });
@@ -157,6 +167,7 @@ export {
   leadFormFields,
   leadFormDefaultValues,
   LEAD_SOURCE_OPTIONS,
+  LEAD_STAGES,
   toLeadFormInput,
 };
-export type { LeadFormValues, LeadFormInput };
+export type { LeadFormValues, LeadFormInput, LeadStage };

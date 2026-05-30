@@ -4,7 +4,7 @@ import type { FormedibleFieldConfig } from "@DCRM/ui/components/formedible/lib/t
 
 const incomingWebhookFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  secret: z.string().min(8, "Secret must be at least 8 characters").optional().or(z.literal("")),
+  secret: z.union([z.string().min(8, "Secret must be at least 8 characters"), z.literal(undefined)]),
 });
 
 type IncomingWebhookFormValues = z.infer<typeof incomingWebhookFormSchema>;
@@ -28,7 +28,7 @@ const incomingWebhookFormFields: readonly FormedibleFieldConfig<IncomingWebhookF
 
 const incomingWebhookFormDefaultValues: IncomingWebhookFormValues = {
   name: "",
-  secret: "",
+  secret: undefined,
 };
 
 export {

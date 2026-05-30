@@ -60,8 +60,8 @@ const aiProviderFormDefaultValues: AIProviderFormValues = {
   provider: "openrouter",
   name: "",
   apiKey: "",
-  baseUrl: "",
-  defaultModel: "",
+  baseUrl: undefined,
+  defaultModel: undefined,
 };
 
 export {

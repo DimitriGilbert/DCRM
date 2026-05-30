@@ -6,13 +6,21 @@ const mappingFieldSchema = z.object({
   sourcePath: z.string().min(1, "Source path is required"),
   targetField: z.string().min(1, "Target field is required"),
   defaultValue: z.string().optional(),
-  coerce: z.enum(["string", "number", "boolean"]).optional(),
+  coerce: z.enum(["none", "string", "number", "boolean"]).optional(),
 });
 
 const mappingConfigSchema = z.object({
   eventType: z.string().min(1, "Event type is required"),
   fields: z.array(mappingFieldSchema).min(1, "At least one field mapping is required"),
-  staticPayload: z.string().optional(),
+  staticPayload: z.string().optional().refine((v) => {
+    if (!v || v.trim() === "") return true;
+    try {
+      JSON.parse(v);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Invalid JSON"),
 });
 
 type MappingFieldValues = z.infer<typeof mappingFieldSchema>;
@@ -44,7 +52,7 @@ const mappingFieldEditorFields: readonly FormedibleFieldConfig<MappingFieldValue
     type: "select",
     label: "Type Coercion",
     options: [
-      { label: "None", value: "" },
+      { label: "None", value: "none" },
       { label: "String", value: "string" },
       { label: "Number", value: "number" },
       { label: "Boolean", value: "boolean" },

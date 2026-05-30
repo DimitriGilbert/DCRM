@@ -25,8 +25,12 @@ import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AuthenticatedSettingsIncomingWebhooksRouteImport } from './routes/_authenticated/settings/incoming-webhooks'
 import { Route as AuthenticatedSettingsEmailRouteImport } from './routes/_authenticated/settings/email'
+import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
+import { Route as AuthenticatedSettingsAiProvidersRouteImport } from './routes/_authenticated/settings/ai-providers'
 import { Route as AuthenticatedProjectsCreateRouteImport } from './routes/_authenticated/projects/create'
 import { Route as AuthenticatedProjectsProjectIdRouteImport } from './routes/_authenticated/projects/$projectId'
+import { Route as AuthenticatedOnboardingEmailSetupRouteImport } from './routes/_authenticated/onboarding/email-setup'
+import { Route as AuthenticatedOnboardingAiSetupRouteImport } from './routes/_authenticated/onboarding/ai-setup'
 import { Route as AuthenticatedLeadsCreateRouteImport } from './routes/_authenticated/leads/create'
 import { Route as AuthenticatedLeadsLeadIdRouteImport } from './routes/_authenticated/leads/$leadId'
 import { Route as AuthenticatedClientsCreateRouteImport } from './routes/_authenticated/clients/create'
@@ -125,6 +129,18 @@ const AuthenticatedSettingsEmailRoute =
     path: '/email',
     getParentRoute: () => AuthenticatedSettingsRoute,
   } as any)
+const AuthenticatedSettingsAppearanceRoute =
+  AuthenticatedSettingsAppearanceRouteImport.update({
+    id: '/appearance',
+    path: '/appearance',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
+const AuthenticatedSettingsAiProvidersRoute =
+  AuthenticatedSettingsAiProvidersRouteImport.update({
+    id: '/ai-providers',
+    path: '/ai-providers',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
 const AuthenticatedProjectsCreateRoute =
   AuthenticatedProjectsCreateRouteImport.update({
     id: '/projects/create',
@@ -135,6 +151,18 @@ const AuthenticatedProjectsProjectIdRoute =
   AuthenticatedProjectsProjectIdRouteImport.update({
     id: '/projects/$projectId',
     path: '/projects/$projectId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedOnboardingEmailSetupRoute =
+  AuthenticatedOnboardingEmailSetupRouteImport.update({
+    id: '/onboarding/email-setup',
+    path: '/onboarding/email-setup',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedOnboardingAiSetupRoute =
+  AuthenticatedOnboardingAiSetupRouteImport.update({
+    id: '/onboarding/ai-setup',
+    path: '/onboarding/ai-setup',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedLeadsCreateRoute =
@@ -220,8 +248,12 @@ export interface FileRoutesByFullPath {
   '/clients/create': typeof AuthenticatedClientsCreateRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRouteWithChildren
   '/leads/create': typeof AuthenticatedLeadsCreateRoute
+  '/onboarding/ai-setup': typeof AuthenticatedOnboardingAiSetupRoute
+  '/onboarding/email-setup': typeof AuthenticatedOnboardingEmailSetupRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/settings/ai-providers': typeof AuthenticatedSettingsAiProvidersRoute
+  '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/email': typeof AuthenticatedSettingsEmailRoute
   '/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -251,8 +283,12 @@ export interface FileRoutesByTo {
   '/clients/create': typeof AuthenticatedClientsCreateRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRouteWithChildren
   '/leads/create': typeof AuthenticatedLeadsCreateRoute
+  '/onboarding/ai-setup': typeof AuthenticatedOnboardingAiSetupRoute
+  '/onboarding/email-setup': typeof AuthenticatedOnboardingEmailSetupRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/settings/ai-providers': typeof AuthenticatedSettingsAiProvidersRoute
+  '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/email': typeof AuthenticatedSettingsEmailRoute
   '/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -284,8 +320,12 @@ export interface FileRoutesById {
   '/_authenticated/clients/create': typeof AuthenticatedClientsCreateRoute
   '/_authenticated/leads/$leadId': typeof AuthenticatedLeadsLeadIdRouteWithChildren
   '/_authenticated/leads/create': typeof AuthenticatedLeadsCreateRoute
+  '/_authenticated/onboarding/ai-setup': typeof AuthenticatedOnboardingAiSetupRoute
+  '/_authenticated/onboarding/email-setup': typeof AuthenticatedOnboardingEmailSetupRoute
   '/_authenticated/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/_authenticated/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/_authenticated/settings/ai-providers': typeof AuthenticatedSettingsAiProvidersRoute
+  '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/email': typeof AuthenticatedSettingsEmailRoute
   '/_authenticated/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -317,8 +357,12 @@ export interface FileRouteTypes {
     | '/clients/create'
     | '/leads/$leadId'
     | '/leads/create'
+    | '/onboarding/ai-setup'
+    | '/onboarding/email-setup'
     | '/projects/$projectId'
     | '/projects/create'
+    | '/settings/ai-providers'
+    | '/settings/appearance'
     | '/settings/email'
     | '/settings/incoming-webhooks'
     | '/api/auth/$'
@@ -348,8 +392,12 @@ export interface FileRouteTypes {
     | '/clients/create'
     | '/leads/$leadId'
     | '/leads/create'
+    | '/onboarding/ai-setup'
+    | '/onboarding/email-setup'
     | '/projects/$projectId'
     | '/projects/create'
+    | '/settings/ai-providers'
+    | '/settings/appearance'
     | '/settings/email'
     | '/settings/incoming-webhooks'
     | '/api/auth/$'
@@ -380,8 +428,12 @@ export interface FileRouteTypes {
     | '/_authenticated/clients/create'
     | '/_authenticated/leads/$leadId'
     | '/_authenticated/leads/create'
+    | '/_authenticated/onboarding/ai-setup'
+    | '/_authenticated/onboarding/email-setup'
     | '/_authenticated/projects/$projectId'
     | '/_authenticated/projects/create'
+    | '/_authenticated/settings/ai-providers'
+    | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/email'
     | '/_authenticated/settings/incoming-webhooks'
     | '/api/auth/$'
@@ -525,6 +577,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsEmailRouteImport
       parentRoute: typeof AuthenticatedSettingsRoute
     }
+    '/_authenticated/settings/appearance': {
+      id: '/_authenticated/settings/appearance'
+      path: '/appearance'
+      fullPath: '/settings/appearance'
+      preLoaderRoute: typeof AuthenticatedSettingsAppearanceRouteImport
+      parentRoute: typeof AuthenticatedSettingsRoute
+    }
+    '/_authenticated/settings/ai-providers': {
+      id: '/_authenticated/settings/ai-providers'
+      path: '/ai-providers'
+      fullPath: '/settings/ai-providers'
+      preLoaderRoute: typeof AuthenticatedSettingsAiProvidersRouteImport
+      parentRoute: typeof AuthenticatedSettingsRoute
+    }
     '/_authenticated/projects/create': {
       id: '/_authenticated/projects/create'
       path: '/projects/create'
@@ -537,6 +603,20 @@ declare module '@tanstack/react-router' {
       path: '/projects/$projectId'
       fullPath: '/projects/$projectId'
       preLoaderRoute: typeof AuthenticatedProjectsProjectIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/onboarding/email-setup': {
+      id: '/_authenticated/onboarding/email-setup'
+      path: '/onboarding/email-setup'
+      fullPath: '/onboarding/email-setup'
+      preLoaderRoute: typeof AuthenticatedOnboardingEmailSetupRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/onboarding/ai-setup': {
+      id: '/_authenticated/onboarding/ai-setup'
+      path: '/onboarding/ai-setup'
+      fullPath: '/onboarding/ai-setup'
+      preLoaderRoute: typeof AuthenticatedOnboardingAiSetupRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/leads/create': {
@@ -627,11 +707,15 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedSettingsRouteChildren {
+  AuthenticatedSettingsAiProvidersRoute: typeof AuthenticatedSettingsAiProvidersRoute
+  AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsEmailRoute: typeof AuthenticatedSettingsEmailRoute
   AuthenticatedSettingsIncomingWebhooksRoute: typeof AuthenticatedSettingsIncomingWebhooksRoute
 }
 
 const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
+  AuthenticatedSettingsAiProvidersRoute: AuthenticatedSettingsAiProvidersRoute,
+  AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
   AuthenticatedSettingsEmailRoute: AuthenticatedSettingsEmailRoute,
   AuthenticatedSettingsIncomingWebhooksRoute:
     AuthenticatedSettingsIncomingWebhooksRoute,
@@ -720,6 +804,8 @@ interface AuthenticatedRouteChildren {
   AuthenticatedClientsCreateRoute: typeof AuthenticatedClientsCreateRoute
   AuthenticatedLeadsLeadIdRoute: typeof AuthenticatedLeadsLeadIdRouteWithChildren
   AuthenticatedLeadsCreateRoute: typeof AuthenticatedLeadsCreateRoute
+  AuthenticatedOnboardingAiSetupRoute: typeof AuthenticatedOnboardingAiSetupRoute
+  AuthenticatedOnboardingEmailSetupRoute: typeof AuthenticatedOnboardingEmailSetupRoute
   AuthenticatedProjectsProjectIdRoute: typeof AuthenticatedProjectsProjectIdRouteWithChildren
   AuthenticatedProjectsCreateRoute: typeof AuthenticatedProjectsCreateRoute
   AuthenticatedClientsIndexRoute: typeof AuthenticatedClientsIndexRoute
@@ -738,6 +824,9 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedClientsCreateRoute: AuthenticatedClientsCreateRoute,
   AuthenticatedLeadsLeadIdRoute: AuthenticatedLeadsLeadIdRouteWithChildren,
   AuthenticatedLeadsCreateRoute: AuthenticatedLeadsCreateRoute,
+  AuthenticatedOnboardingAiSetupRoute: AuthenticatedOnboardingAiSetupRoute,
+  AuthenticatedOnboardingEmailSetupRoute:
+    AuthenticatedOnboardingEmailSetupRoute,
   AuthenticatedProjectsProjectIdRoute:
     AuthenticatedProjectsProjectIdRouteWithChildren,
   AuthenticatedProjectsCreateRoute: AuthenticatedProjectsCreateRoute,

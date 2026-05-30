@@ -1,186 +1,76 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
-
-import { Button } from "@DCRM/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@DCRM/ui/components/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@DCRM/ui/components/dialog";
-import { Skeleton } from "@DCRM/ui/components/skeleton";
-import { useFormedible } from "@DCRM/ui/components/formedible/hooks/use-formedible";
-
-import { useTRPC } from "@/utils/trpc";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  aiProviderFormSchema,
-  aiProviderFormFields,
-  aiProviderFormDefaultValues,
-} from "@/lib/forms/ai-provider-form-schema";
-import type { AIProviderFormValues } from "@/lib/forms/ai-provider-form-schema";
+  Palette,
+  Sparkles,
+  Mail,
+  Webhook,
+  ArrowRight,
+} from "lucide-react";
+
+import { Card, CardDescription, CardHeader, CardTitle } from "@DCRM/ui/components/card";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
-function SettingsPage() {
-  const [showAddDialog, setShowAddDialog] = useState(false);
+const SETTINGS_SECTIONS = [
+  {
+    to: "/settings/appearance",
+    title: "Appearance",
+    description: "Theme and language preferences",
+    icon: Palette,
+  },
+  {
+    to: "/settings/ai-providers",
+    title: "AI Providers",
+    description: "Configure AI providers (BYOK). API keys are encrypted at rest.",
+    icon: Sparkles,
+  },
+  {
+    to: "/settings/email",
+    title: "Email",
+    description: "IMAP/SMTP accounts for email sync and matching.",
+    icon: Mail,
+  },
+  {
+    to: "/settings/incoming-webhooks",
+    title: "Incoming Webhooks",
+    description: "Receive data from external services via webhook endpoints.",
+    icon: Webhook,
+  },
+] as const;
 
+function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Settings</h1>
-      </div>
-
-      <AIProvidersSection
-        onAddClick={() => setShowAddDialog(true)}
-      />
-
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add AI Provider</DialogTitle>
-          </DialogHeader>
-          <AddProviderForm
-            onSuccess={() => setShowAddDialog(false)}
-          />
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function AIProvidersSection({ onAddClick }: { readonly onAddClick: () => void }) {
-  const trpc = useTRPC();
-
-  const query = useQuery(
-    trpc.aiProvider.list.queryOptions(),
-  );
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>AI Providers</CardTitle>
-          <CardDescription>
-            Configure your AI providers (BYOK). API keys are encrypted at rest.
-          </CardDescription>
-        </div>
-        <Button size="sm" onClick={onAddClick}>
-          Add Provider
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {query.isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </div>
-        ) : !query.data?.length ? (
-          <p className="text-sm text-muted-foreground">
-            No AI providers configured. Add one to enable AI features.
-          </p>
-        ) : (
-          <div className="divide-y">
-            {query.data.map((provider) => (
-              <ProviderRow key={provider.id} provider={provider} />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ProviderRow({
-  provider,
-}: {
-  readonly provider: {
-    id: string;
-    provider: string;
-    name: string;
-    enabled: boolean;
-    baseUrl: string | null;
-  };
-}) {
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
-
-  const deleteMutation = useMutation(
-    trpc.aiProvider.delete.mutationOptions({
-      onSuccess: () => {
-        toast.success("Provider removed");
-        queryClient.invalidateQueries(trpc.aiProvider.list.queryFilter());
-      },
-      onError: (error) => {
-        toast.error("Failed to remove provider", { description: error.message });
-      },
-    }),
-  );
-
-  return (
-    <div className="flex items-center justify-between py-3">
       <div>
-        <p className="text-sm font-medium">{provider.name}</p>
-        <p className="text-xs text-muted-foreground">
-          {provider.provider}
-          {provider.baseUrl ? ` · ${provider.baseUrl}` : ""}
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage your preferences, integrations, and account configuration.
         </p>
       </div>
-      <div className="flex items-center gap-2">
-        <span
-          className={`text-xs ${provider.enabled ? "text-green-600" : "text-muted-foreground"}`}
-        >
-          {provider.enabled ? "Active" : "Disabled"}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => deleteMutation.mutate({ id: provider.id })}
-          disabled={deleteMutation.isPending}
-        >
-          Remove
-        </Button>
-      </div>
-    </div>
-  );
-}
 
-function AddProviderForm({ onSuccess }: { readonly onSuccess: () => void }) {
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
-
-  const createMutation = useMutation(
-    trpc.aiProvider.create.mutationOptions({
-      onSuccess: () => {
-        toast.success("Provider added");
-        queryClient.invalidateQueries(trpc.aiProvider.list.queryFilter());
-        onSuccess();
-      },
-      onError: (error) => {
-        toast.error("Failed to add provider", { description: error.message });
-      },
-    }),
-  );
-
-  const { Form } = useFormedible<AIProviderFormValues>({
-    schema: aiProviderFormSchema,
-    fields: aiProviderFormFields,
-    formOptions: {
-      defaultValues: aiProviderFormDefaultValues,
-      onSubmit: async ({ value }) => {
-        createMutation.mutate(value);
-      },
-    },
-    submitLabel: "Add Provider",
-    disabled: createMutation.isPending,
-  });
-
-  return (
-    <div className="space-y-4">
-      <Form className="space-y-4" />
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onSuccess}>
-          Cancel
-        </Button>
+      <div className="grid gap-4">
+        {SETTINGS_SECTIONS.map(({ to, title, description, icon: Icon }) => (
+          <Link key={to} to={to}>
+            <Card className="transition-colors hover:bg-muted/50">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm">{title}</CardTitle>
+                    <CardDescription className="text-xs">
+                      {description}
+                    </CardDescription>
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+        ))}
       </div>
     </div>
   );

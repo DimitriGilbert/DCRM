@@ -1,12 +1,11 @@
 {
-  "name": "@DCRM/api",
+  "name": "@DCRM/billing",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
   "exports": {
     ".": {
       "default": "./src/index.ts"
-    },
-    "./*": {
-      "default": "./src/*.ts"
     }
   },
   "scripts": {
@@ -15,27 +14,18 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@DCRM/ai": "workspace:*",
-    "@DCRM/billing": "workspace:*",
-    "@DCRM/auth": "workspace:*",
-    "@DCRM/crypto": "workspace:*",
     "@DCRM/db": "workspace:*",
     "@DCRM/domain": "workspace:*",
-    "@DCRM/email": "workspace:*",
     "@DCRM/env": "workspace:*",
-    "@DCRM/events": "workspace:*",
-    "@DCRM/storage": "workspace:*",
-    "@DCRM/webhooks": "workspace:*",
-    "@trpc/client": "catalog:",
-    "@trpc/server": "catalog:",
     "drizzle-orm": "^0.45.1",
-    "dotenv": "catalog:",
     "nanoid": "^5.1.5",
+    "stripe": "^18.3.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@DCRM/config": "workspace:*",
+    "@types/node": "^22.13.14",
     "typescript": "catalog:",
-    "vitest": "^3.2.1"
+    "vitest": "^3.2.4"
   }
 }

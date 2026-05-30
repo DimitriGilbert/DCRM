@@ -1,0 +1,64 @@
+name: dcrm
+
+services:
+  app:
+    build: .
+    container_name: dcrm-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - dcrm_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3001/robots.txt || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: dcrm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dcrm}
+      POSTGRES_USER: ${POSTGRES_USER:-dcrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dcrm}
+    volumes:
+      - dcrm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dcrm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Do not expose to the host in production; remove "ports" or set to null
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: dcrm-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - dcrm_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Do not expose to the host in production
+    ports:
+      - "6379:6379"
+
+volumes:
+  dcrm_postgres_data:
+  dcrm_redis_data:
+  dcrm_uploads:

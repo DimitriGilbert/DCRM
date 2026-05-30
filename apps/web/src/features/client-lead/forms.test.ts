@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { clientFormValuesToInput, objectText } from "./forms-normalization.js";
+import { clientFormValuesToInput, leadFormValuesToInput, objectText } from "./forms-normalization.js";
 
 describe("client and lead form normalization", () => {
   it("renders unsupported structured objects as JSON", () => {
@@ -45,6 +45,19 @@ describe("client and lead form normalization", () => {
     });
 
     assert.deepEqual(input.address, address);
+  });
+
+  it("preserves null lead currency when an amount is submitted without a currency", () => {
+    const input = leadFormValuesToInput({
+      ...baseClientFormValues,
+      source: "Referral",
+      stage: "new",
+      estimatedValueAmount: "1200.00",
+      estimatedValueCurrency: "",
+    });
+
+    assert.equal(input.estimatedValueAmount, "1200.00");
+    assert.equal(input.estimatedValueCurrency, null);
   });
 });
 

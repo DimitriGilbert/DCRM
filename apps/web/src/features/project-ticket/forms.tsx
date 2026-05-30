@@ -12,7 +12,7 @@ import type { ClientOptionRecord, ProjectListRecord, ProjectRecord, TicketRecord
 const optionalMoneyFormSchema = z.string().trim().refine((value) => value.length === 0 || /^\d+(?:\.\d{1,2})?$/u.test(value), "Use a positive amount with up to 2 decimals.");
 const optionalHoursFormSchema = z.string().trim().refine((value) => value.length === 0 || /^\d+(?:\.\d{1,2})?$/u.test(value), "Use a positive hour value with up to 2 decimals.");
 const optionalCurrencyFormSchema = z.string().trim().refine((value) => value.length === 0 || /^[A-Za-z]{3}$/u.test(value), "Use a 3-letter currency code.");
-const optionalDateFormSchema = z.string().trim().refine((value) => value.length === 0 || !Number.isNaN(new Date(value).getTime()), "Use a valid date.");
+const optionalDateFormSchema = z.string().trim().refine((value) => value.length === 0 || isStrictCalendarDate(value), "Use a valid calendar date.");
 
 export const projectFormSchema = z.object({
   clientId: z.string().trim().min(1, "Client is required."),
@@ -78,9 +78,9 @@ export interface ProjectMutationInput {
   readonly budgetCurrency?: string | null;
   readonly estimatedHours?: string | null;
   readonly actualHours?: string | null;
-  readonly startsAt?: Date | null;
-  readonly dueAt?: Date | null;
-  readonly completedAt?: Date | null;
+  readonly startsAt?: string | null;
+  readonly dueAt?: string | null;
+  readonly completedAt?: string | null;
 }
 
 export interface TicketMutationInput {
@@ -90,8 +90,8 @@ export interface TicketMutationInput {
   readonly type?: WebTicketType;
   readonly status?: WebTicketStatus;
   readonly priority?: WebTicketPriority;
-  readonly dueAt?: Date | null;
-  readonly closedAt?: Date | null;
+  readonly dueAt?: string | null;
+  readonly closedAt?: string | null;
 }
 
 export interface InternalNoteMutationInput {
@@ -308,14 +308,14 @@ function projectFormValuesToInput(value: ProjectFormValues): ProjectMutationInpu
     budgetCurrency: emptyToNull(value.budgetCurrency)?.toUpperCase() ?? null,
     estimatedHours: emptyToNull(value.estimatedHours),
     actualHours: emptyToNull(value.actualHours),
-    startsAt: stringToDateOrNull(value.startsAt),
-    dueAt: stringToDateOrNull(value.dueAt),
-    completedAt: stringToDateOrNull(value.completedAt),
+    startsAt: emptyToNull(value.startsAt),
+    dueAt: emptyToNull(value.dueAt),
+    completedAt: emptyToNull(value.completedAt),
   };
 }
 
 function ticketFormValuesToInput(value: TicketFormValues): TicketMutationInput {
-  const closedAt = normalizeTicketClosedAt(value.status, stringToDateOrNull(value.closedAt));
+  const closedAt = normalizeTicketClosedAt(value.status, emptyToNull(value.closedAt));
   return {
     projectId: value.projectId,
     title: value.title.trim(),
@@ -323,16 +323,16 @@ function ticketFormValuesToInput(value: TicketFormValues): TicketMutationInput {
     type: value.type,
     status: value.status,
     priority: value.priority,
-    dueAt: stringToDateOrNull(value.dueAt),
+    dueAt: emptyToNull(value.dueAt),
     closedAt,
   };
 }
 
-function normalizeTicketClosedAt(status: WebTicketStatus, closedAt: Date | null): Date | null {
+function normalizeTicketClosedAt(status: WebTicketStatus, closedAt: string | null): string | null {
   if (status === "open") {
     return null;
   }
-  return closedAt ?? new Date();
+  return closedAt ?? currentDateInputValue();
 }
 
 function emptyToNull(value: string): string | null {
@@ -340,16 +340,48 @@ function emptyToNull(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function stringToDateOrNull(value: string): Date | null {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? new Date(trimmed) : null;
-}
-
 function dateInputValue(value: string | Date | null | undefined): string {
   if (!value) {
     return "";
   }
-  return new Date(value).toISOString().slice(0, 10);
+  if (typeof value === "string" && isStrictCalendarDate(value)) {
+    return value;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return utcDateInputValue(date);
+}
+
+function isStrictCalendarDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
+  if (!match) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function utcDateInputValue(value: Date): string {
+  const year = value.getUTCFullYear().toString().padStart(4, "0");
+  const month = (value.getUTCMonth() + 1).toString().padStart(2, "0");
+  const day = value.getUTCDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function currentDateInputValue(): string {
+  const now = new Date();
+  const year = now.getFullYear().toString().padStart(4, "0");
+  const month = (now.getMonth() + 1).toString().padStart(2, "0");
+  const day = now.getDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function formatLabel(value: string): string {

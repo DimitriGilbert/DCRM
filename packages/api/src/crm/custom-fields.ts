@@ -13,7 +13,16 @@ export const customFieldDefinitionSchema = z.object({
   options: z.array(z.string().trim().min(1)).optional(),
 });
 
-export const customFieldSchemaInputSchema = z.array(customFieldDefinitionSchema).default([]);
+export const customFieldSchemaInputSchema = z.array(customFieldDefinitionSchema).superRefine((definitions, ctx) => {
+  const seenKeys = new Set<string>();
+  for (const [index, definition] of definitions.entries()) {
+    if (seenKeys.has(definition.key)) {
+      ctx.addIssue({ code: "custom", path: [index, "key"], message: `Duplicate custom field key: ${definition.key}` });
+      continue;
+    }
+    seenKeys.add(definition.key);
+  }
+}).default([]);
 
 export type CustomFieldSchemaInput = z.infer<typeof customFieldSchemaInputSchema>;
 
@@ -21,6 +30,7 @@ export function validateCustomFieldValues(
   definitions: readonly CustomFieldDefinition[],
   values: JsonObject | undefined,
 ): JsonObject {
+  assertUniqueCustomFieldDefinitionKeys(definitions);
   const source = values ?? {};
   const normalized: JsonObject = {};
   const definitionKeys = new Set(definitions.map((definition) => definition.key));
@@ -43,6 +53,16 @@ export function validateCustomFieldValues(
   }
 
   return normalized;
+}
+
+export function assertUniqueCustomFieldDefinitionKeys(definitions: readonly CustomFieldDefinition[]): void {
+  const seenKeys = new Set<string>();
+  for (const definition of definitions) {
+    if (seenKeys.has(definition.key)) {
+      throw new Error(`Duplicate custom field key: ${definition.key}`);
+    }
+    seenKeys.add(definition.key);
+  }
 }
 
 function validateValue(definition: CustomFieldDefinition, value: unknown): string | number | boolean {

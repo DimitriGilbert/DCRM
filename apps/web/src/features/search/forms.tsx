@@ -12,6 +12,10 @@ export const globalSearchFormSchema = z.object({
   tagIdsText: z.string().trim(),
   dateFrom: z.string().trim(),
   dateTo: z.string().trim(),
+}).superRefine((values, context) => {
+  if (!hasBoundedFormSearch(values)) {
+    context.addIssue({ code: "custom", message: "Enter a search term or add a status, tag, or date filter before searching." });
+  }
 });
 
 export type GlobalSearchFormValues = Record<string, unknown> & z.infer<typeof globalSearchFormSchema>;
@@ -59,15 +63,47 @@ function formValuesToFilters(values: GlobalSearchFormValues): GlobalSearchFilter
     entityTypes: values.entityType === "all" ? undefined : [values.entityType],
     status: values.status === "all" ? undefined : values.status,
     tagIds: tagIds.length > 0 ? tagIds : undefined,
-    dateFrom: values.dateFrom ? new Date(values.dateFrom) : undefined,
-    dateTo: values.dateTo ? endOfDay(values.dateTo) : undefined,
+    dateFrom: values.dateFrom ? localStartOfDay(values.dateFrom) : undefined,
+    dateTo: values.dateTo ? localEndOfDay(values.dateTo) : undefined,
   };
 }
 
-function endOfDay(value: string): Date {
-  const date = new Date(value);
+export function hasValidGlobalSearchFilters(filters: GlobalSearchFilters): boolean {
+  return Boolean(
+    (filters.search?.trim().length ?? 0) > 0
+      || (filters.tagIds?.length ?? 0) > 0
+      || filters.status !== undefined
+      || filters.dateFrom !== undefined
+      || filters.dateTo !== undefined,
+  );
+}
+
+function hasBoundedFormSearch(values: GlobalSearchFormValues): boolean {
+  return values.search.length > 0 || values.status !== "all" || values.tagIdsText.split(",").some((tagId) => tagId.trim().length > 0) || values.dateFrom.length > 0 || values.dateTo.length > 0;
+}
+
+function localStartOfDay(value: string): Date {
+  const [year, month, day] = dateParts(value);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+function localEndOfDay(value: string): Date {
+  const [year, month, day] = dateParts(value);
+  const date = new Date(year, month - 1, day);
   date.setHours(23, 59, 59, 999);
   return date;
+}
+
+function dateParts(value: string): readonly [number, number, number] {
+  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+  if (year === undefined || month === undefined || day === undefined || !Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    throw new TypeError("Search date filters must use YYYY-MM-DD values.");
+  }
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new TypeError("Search date filters must be valid calendar dates.");
+  }
+  return [year, month, day];
 }
 
 function formatLabel(value: string): string {

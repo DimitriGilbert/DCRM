@@ -352,6 +352,7 @@ export const attachments = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    uniqueIndex("attachments_user_id_id_idx").on(table.userId, table.id),
     index("attachments_user_id_idx").on(table.userId),
     index("attachments_target_idx").on(table.targetType, table.targetId),
   ],

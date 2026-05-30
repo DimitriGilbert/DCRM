@@ -14,17 +14,57 @@ export function requireStorage(ctx: Context): ContextStorage {
 
 export async function assertAttachmentTarget(ctx: Context & { readonly auth: NonNullable<Context["auth"]> }, targetType: AttachmentTargetType, targetId: string): Promise<void> {
   const userId = ctx.auth.user.id;
-  const record = targetType === "client"
-    ? await ctx.crmRepository.clients.getById({ userId, id: targetId })
-    : targetType === "lead"
-      ? await ctx.crmRepository.leads.getById({ userId, id: targetId })
-      : targetType === "project"
-        ? await ctx.crmRepository.projects.getById({ userId, id: targetId })
-        : targetType === "ticket"
-          ? await ctx.crmRepository.tickets.getById({ userId, id: targetId })
-          : await ctx.crmRepository.exchanges.getById({ userId, id: targetId });
+  switch (targetType) {
+    case "client": {
+      const client = await ctx.crmRepository.clients.getById({ userId, id: targetId });
+      assertActiveTarget(Boolean(client && !client.deletedAt));
+      return;
+    }
+    case "lead": {
+      const lead = await ctx.crmRepository.leads.getById({ userId, id: targetId });
+      assertActiveTarget(Boolean(lead && !lead.deletedAt));
+      return;
+    }
+    case "project": {
+      const project = await ctx.crmRepository.projects.getById({ userId, id: targetId });
+      assertActiveTarget(Boolean(project && !project.deletedAt));
+      const client = project ? await ctx.crmRepository.clients.getById({ userId, id: project.clientId }) : undefined;
+      assertActiveTarget(Boolean(client && !client.deletedAt));
+      return;
+    }
+    case "ticket": {
+      const ticket = await ctx.crmRepository.tickets.getById({ userId, id: targetId });
+      if (!ticket || ticket.deletedAt) {
+        assertActiveTarget(false);
+        return;
+      }
+      await assertAttachmentTarget(ctx, "project", ticket.projectId);
+      return;
+    }
+    case "exchange": {
+      const exchange = await ctx.crmRepository.exchanges.getById({ userId, id: targetId });
+      if (!exchange || exchange.deletedAt) {
+        assertActiveTarget(false);
+        return;
+      }
+      if (exchange.ticketId) {
+        await assertAttachmentTarget(ctx, "ticket", exchange.ticketId);
+        return;
+      }
+      if (exchange.projectId) {
+        await assertAttachmentTarget(ctx, "project", exchange.projectId);
+        return;
+      }
+      if (exchange.clientId) {
+        await assertAttachmentTarget(ctx, "client", exchange.clientId);
+      }
+      return;
+    }
+  }
+}
 
-  if (!record || record.deletedAt) {
+function assertActiveTarget(active: boolean): void {
+  if (!active) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Attachment target not found." });
   }
 }

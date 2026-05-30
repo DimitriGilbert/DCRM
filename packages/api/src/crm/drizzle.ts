@@ -5,7 +5,7 @@ import { resolveLocale } from "@DCRM/i18n";
 import type { AttachmentTargetType } from "@DCRM/domain";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql, sum } from "drizzle-orm";
 
-import { DuplicateTagNameError, TicketProjectMoveBlockedError } from "./repository.js";
+import { AttachmentTargetNotFoundError, DuplicateTagNameError, TicketProjectMoveBlockedError } from "./repository.js";
 import { authorizedEmailPatternsOverlap, normalizeAuthorizedEmailPattern } from "../email/matching.js";
 import type { CrmRepository } from "./repository.js";
 import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
@@ -507,12 +507,16 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
     },
     attachments: {
       async create(input) {
-        const rows = await database.insert(attachments).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
-        return requireAttachment(rows[0], input.id);
+        return database.transaction(async (tx) => {
+          await requireActiveAttachmentTargetForUpdate(tx, input.userId, input.fields.targetType, input.fields.targetId);
+          const rows = await tx.insert(attachments).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
+          return requireAttachment(rows[0], input.id);
+        });
       },
       async createWithinUserQuota(input) {
         return database.transaction(async (tx) => {
           await tx.execute(sql`select pg_advisory_xact_lock(${ATTACHMENT_QUOTA_LOCK_NAMESPACE}, hashtext(${input.userId}))`);
+          await requireActiveAttachmentTargetForUpdate(tx, input.userId, input.fields.targetType, input.fields.targetId);
           const totalRows = await tx.select({ total: sum(attachments.byteSize) }).from(attachments).where(and(eq(attachments.userId, input.userId), isNull(attachments.deletedAt)));
           const usedBytes = Number(totalRows[0]?.total ?? 0);
           if (usedBytes + input.fields.byteSize > input.userQuotaBytes) {
@@ -713,6 +717,15 @@ async function requireActiveClient(database: CrmExecutor, userId: string, client
   return client;
 }
 
+async function requireActiveClientForUpdate(database: CrmTransaction, userId: string, clientId: string): Promise<typeof clients.$inferSelect> {
+  const rows = await database.select().from(clients).where(and(eq(clients.userId, userId), eq(clients.id, clientId), isNull(clients.deletedAt))).limit(1).for("update");
+  const client = rows[0];
+  if (!client) {
+    throw new AttachmentTargetNotFoundError("client", clientId);
+  }
+  return client;
+}
+
 async function requireActiveProject(database: CrmExecutor, userId: string, projectId: string): Promise<typeof projects.$inferSelect> {
   const rows = await database.select().from(projects).where(and(eq(projects.userId, userId), eq(projects.id, projectId), isNull(projects.deletedAt))).limit(1);
   const project = rows[0];
@@ -720,6 +733,16 @@ async function requireActiveProject(database: CrmExecutor, userId: string, proje
     throw new Error("Project not found.");
   }
   await requireActiveClient(database, userId, project.clientId);
+  return project;
+}
+
+async function requireActiveProjectForUpdate(database: CrmTransaction, userId: string, projectId: string): Promise<typeof projects.$inferSelect> {
+  const rows = await database.select().from(projects).where(and(eq(projects.userId, userId), eq(projects.id, projectId), isNull(projects.deletedAt))).limit(1).for("update");
+  const project = rows[0];
+  if (!project) {
+    throw new AttachmentTargetNotFoundError("project", projectId);
+  }
+  await requireActiveClientForUpdate(database, userId, project.clientId);
   return project;
 }
 
@@ -764,6 +787,16 @@ async function requireActiveTicket(database: CrmExecutor, userId: string, ticket
     throw new Error("Ticket not found.");
   }
   await requireActiveProject(database, userId, ticket.projectId);
+  return ticket;
+}
+
+async function requireActiveTicketForAttachment(database: CrmTransaction, userId: string, ticketId: string): Promise<typeof tickets.$inferSelect> {
+  const rows = await database.select().from(tickets).where(and(eq(tickets.userId, userId), eq(tickets.id, ticketId), isNull(tickets.deletedAt))).limit(1).for("update");
+  const ticket = rows[0];
+  if (!ticket) {
+    throw new AttachmentTargetNotFoundError("ticket", ticketId);
+  }
+  await requireActiveProjectForUpdate(database, userId, ticket.projectId);
   return ticket;
 }
 
@@ -832,6 +865,59 @@ async function validateActiveExchangeParents(database: CrmExecutor, userId: stri
   }
   if (clientId) {
     await requireActiveClient(database, userId, clientId);
+  }
+}
+
+async function requireActiveAttachmentTargetForUpdate(database: CrmTransaction, userId: string, targetType: AttachmentTargetType, targetId: string): Promise<void> {
+  switch (targetType) {
+    case "client":
+      await requireActiveClientForUpdate(database, userId, targetId);
+      return;
+    case "lead": {
+      const rows = await database.select({ id: leads.id }).from(leads).where(and(eq(leads.userId, userId), eq(leads.id, targetId), isNull(leads.deletedAt))).limit(1).for("update");
+      if (!rows[0]) {
+        throw new AttachmentTargetNotFoundError(targetType, targetId);
+      }
+      return;
+    }
+    case "project":
+      await requireActiveProjectForUpdate(database, userId, targetId);
+      return;
+    case "ticket":
+      await requireActiveTicketForAttachment(database, userId, targetId);
+      return;
+    case "exchange": {
+      const rows = await database.select().from(exchanges).where(and(eq(exchanges.userId, userId), eq(exchanges.id, targetId), isNull(exchanges.deletedAt))).limit(1).for("update");
+      const exchange = rows[0];
+      if (!exchange) {
+        throw new AttachmentTargetNotFoundError(targetType, targetId);
+      }
+      await validateActiveAttachmentExchangeParentsForUpdate(database, userId, exchange.clientId, exchange.projectId, exchange.ticketId);
+      return;
+    }
+  }
+}
+
+async function validateActiveAttachmentExchangeParentsForUpdate(database: CrmTransaction, userId: string, clientId: string | null, projectId: string | null, ticketId: string | null): Promise<void> {
+  if (ticketId) {
+    const ticket = await requireActiveTicketForAttachment(database, userId, ticketId);
+    const project = await requireActiveProjectForUpdate(database, userId, ticket.projectId);
+    const client = await requireActiveClientForUpdate(database, userId, project.clientId);
+    if ((projectId && projectId !== project.id) || (clientId && clientId !== client.id)) {
+      throw new AttachmentTargetNotFoundError("exchange", ticketId);
+    }
+    return;
+  }
+  if (projectId) {
+    const project = await requireActiveProjectForUpdate(database, userId, projectId);
+    const client = await requireActiveClientForUpdate(database, userId, project.clientId);
+    if (clientId && clientId !== client.id) {
+      throw new AttachmentTargetNotFoundError("exchange", projectId);
+    }
+    return;
+  }
+  if (clientId) {
+    await requireActiveClientForUpdate(database, userId, clientId);
   }
 }
 

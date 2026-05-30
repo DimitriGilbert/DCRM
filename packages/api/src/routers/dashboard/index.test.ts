@@ -20,8 +20,8 @@ describe("dashboard tRPC API", () => {
     const client = await caller.clients.create({ name: "Ada Lovelace" });
     await otherUser.clients.create({ name: "Grace Hopper" });
     const lead = await caller.leads.create({ name: "Analytical Engines", stage: "qualified", estimatedValueAmount: "1200.00", estimatedValueCurrency: "USD" });
-    const project = await caller.projects.create({ clientId: client.id, name: "Calculator launch", status: "active", dueAt: new Date("2027-01-15T00:00:00.000Z") });
-    const ticket = await caller.tickets.create({ projectId: project.id, title: "Ship prototype", status: "open", dueAt: new Date("2027-01-10T00:00:00.000Z") });
+    const project = await caller.projects.create({ clientId: client.id, name: "Calculator launch", status: "active", dueAt: "2027-01-15" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Ship prototype", status: "open", dueAt: "2027-01-10" });
     await caller.exchanges.create({ clientId: client.id, type: "note", body: "Kickoff notes", occurredAt: new Date("2027-01-01T12:00:00.000Z") });
 
     const summary = await caller.dashboard.summary();

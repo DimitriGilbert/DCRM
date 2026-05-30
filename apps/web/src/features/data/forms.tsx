@@ -22,7 +22,7 @@ const importFields = [
     name: "csv",
     type: "textarea",
     label: "Client CSV",
-    description: "Required header: name. Optional headers: email, phone, company, website, notes.",
+    description: "Required header: name. Optional headers: email, phone, company, website, notes. Example: name,email,company followed by your client rows.",
     textareaConfig: { rows: 8 },
   },
 ] satisfies readonly FormedibleFieldConfig<ClientImportFormValues>[];
@@ -47,7 +47,7 @@ export function ClientImportForm({ submitting, onSubmit }: { readonly submitting
     schema: clientImportFormSchema,
     fields: importFields,
     formOptions: {
-      defaultValues: { csv: "name,email,company\nAda Lovelace,ada@example.com,Analytical Engines" },
+      defaultValues: { csv: "" },
       onSubmit: async ({ value }) => onSubmit(value),
     },
     submitLabel: "Import clients",

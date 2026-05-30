@@ -10,11 +10,12 @@ export const globalSearch = protectedProcedure.input(globalSearchSchema).query(a
   const leadStage = leadStageFromStatus(input.status);
   const projectStatus = projectStatusFromStatus(input.status);
   const ticketStatus = ticketStatusFromStatus(input.status);
-  const shouldSearchLeads = activeEntityTypes.has("lead") && (!input.status || leadStage !== undefined);
-  const shouldSearchProjects = activeEntityTypes.has("project") && (!input.status || projectStatus !== undefined);
-  const shouldSearchTickets = activeEntityTypes.has("ticket") && (!input.status || ticketStatus !== undefined);
+  const shouldSearchNonExchange = input.exchangeType === undefined || hasGloballyApplicableFilter(input);
+  const shouldSearchLeads = shouldSearchNonExchange && activeEntityTypes.has("lead") && (!input.status || leadStage !== undefined);
+  const shouldSearchProjects = shouldSearchNonExchange && activeEntityTypes.has("project") && (!input.status || projectStatus !== undefined);
+  const shouldSearchTickets = shouldSearchNonExchange && activeEntityTypes.has("ticket") && (!input.status || ticketStatus !== undefined);
   const searches = await Promise.all([
-    activeEntityTypes.has("client") && !input.status ? ctx.crmRepository.clients.list({ userId, search: input.search, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "client", entityId: record.id, title: record.name, description: record.company ?? record.email, href: `/clients/${record.id}`, status: null, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
+    shouldSearchNonExchange && activeEntityTypes.has("client") && !input.status ? ctx.crmRepository.clients.list({ userId, search: input.search, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "client", entityId: record.id, title: record.name, description: record.company ?? record.email, href: `/clients/${record.id}`, status: null, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
     shouldSearchLeads ? ctx.crmRepository.leads.list({ userId, search: input.search, stage: leadStage, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo, includeConverted: true }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "lead", entityId: record.id, title: record.name, description: record.company ?? record.source ?? record.email, href: `/leads/${record.id}`, status: record.stage, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
     shouldSearchProjects ? ctx.crmRepository.projects.list({ userId, search: input.search, status: projectStatus, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "project", entityId: record.id, title: record.name, description: record.description, href: `/projects/${record.id}`, status: record.status, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
     shouldSearchTickets ? ctx.crmRepository.tickets.list({ userId, search: input.search, status: ticketStatus, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "ticket", entityId: record.id, title: record.title, description: record.description, href: `/tickets/${record.id}`, status: record.status, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
@@ -23,6 +24,10 @@ export const globalSearch = protectedProcedure.input(globalSearchSchema).query(a
 
   return searches.flat().sort(compareSearchResults).slice(0, input.limit);
 });
+
+function hasGloballyApplicableFilter(input: GlobalSearchInput): boolean {
+  return Boolean((input.search?.length ?? 0) > 0 || (input.tagIds?.length ?? 0) > 0 || input.status !== undefined || input.dateFrom !== undefined || input.dateTo !== undefined);
+}
 
 function leadStageFromStatus(status: GlobalSearchInput["status"]): LeadStage | undefined {
   switch (status) {

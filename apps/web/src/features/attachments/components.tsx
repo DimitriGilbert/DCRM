@@ -3,13 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@DCRM
 import { useFormedible } from "@DCRM/ui/components/formedible/hooks/use-formedible";
 import type { FormedibleFieldConfig } from "@DCRM/ui/components/formedible/lib/types";
 import type { ReactNode } from "react";
-import { z } from "zod";
 
-const fileSchema = z.custom<File | null>((value) => value === null || (typeof File !== "undefined" && value instanceof File)).refine(isFile, "Choose a file to attach.");
-
-export const attachmentUploadFormSchema = z.object({
-  file: fileSchema,
-});
+import { attachmentUploadFormSchema, isFile } from "./validation";
 
 export type AttachmentUploadFormValues = Record<string, unknown> & {
   readonly file: File | null;
@@ -88,7 +83,7 @@ export function AttachmentPanel({ attachments, children }: { readonly attachment
 
 function attachmentFields(maxBytes: number): readonly FormedibleFieldConfig<AttachmentUploadFormValues>[] {
   return [
-    { name: "file", type: "file", label: "File", required: true, description: `Maximum file size: ${formatByteSize(maxBytes)}.`, fileConfig: { maxSize: maxBytes, maxFiles: 1 } },
+    { name: "file", type: "file", label: "File", required: true, description: `Maximum file size: ${formatByteSize(maxBytes)}. Empty files are not accepted.`, fileConfig: { maxSize: maxBytes, maxFiles: 1 } },
   ];
 }
 
@@ -115,8 +110,4 @@ function formatByteSize(byteSize: number): string {
     return `${(byteSize / 1024).toFixed(1)} KB`;
   }
   return `${(byteSize / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function isFile(value: File | null): value is File {
-  return typeof File !== "undefined" && value instanceof File;
 }

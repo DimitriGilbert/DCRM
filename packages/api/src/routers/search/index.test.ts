@@ -77,6 +77,16 @@ describe("global search tRPC API", () => {
     assert.deepEqual(result.map((item) => item.entityId), [client.id]);
   });
 
+  it("treats date-only dateFrom filters as inclusive from the selected day", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const input = JSON.parse(JSON.stringify({ entityTypes: ["client"], dateFrom: new Date().toISOString().slice(0, 10) })) as Parameters<typeof caller.search.global>[0];
+
+    const result = await caller.search.global(input);
+
+    assert.deepEqual(result.map((item) => item.entityId), [client.id]);
+  });
+
   it("rejects unbounded empty global search requests", async () => {
     const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
     await caller.clients.create({ name: "Ada Lovelace" });
@@ -96,6 +106,26 @@ describe("global search tRPC API", () => {
     assert.equal(result[0]?.title.includes("secret tail"), false);
     assert.equal(result[0]?.description?.includes("secret tail"), false);
     assert.ok((result[0]?.description?.length ?? 0) <= 161);
+  });
+
+  it("does not let exchangeType-only searches leak unfiltered non-exchange records", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    await caller.leads.create({ name: "Babbage Labs" });
+    await caller.projects.create({ clientId: client.id, name: "Portal rebuild" });
+    const note = await caller.exchanges.create({ clientId: client.id, type: "note", body: "Internal planning note" });
+    await caller.exchanges.create({ clientId: client.id, type: "call", body: "Client call" });
+
+    const result = await caller.search.global({ exchangeType: "note" });
+
+    assert.deepEqual(result.map((item) => item.entityType), ["exchange"]);
+    assert.deepEqual(result.map((item) => item.entityId), [note.id]);
+  });
+
+  it("rejects exchangeType filters when exchange results are excluded", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+
+    await assert.rejects(caller.search.global({ entityTypes: ["client"], exchangeType: "note" }), /exchangeType can only be used/u);
   });
 });
 

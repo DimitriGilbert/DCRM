@@ -229,7 +229,7 @@ function leadToFormValues(lead?: LeadRecord): LeadFormValues {
     source: lead?.source ?? "",
     stage: lead?.stage ?? "new",
     estimatedValueAmount: lead?.estimatedValueAmount ?? "",
-    estimatedValueCurrency: lead?.estimatedValueAmount ? (lead.estimatedValueCurrency ?? "USD") : (lead?.estimatedValueCurrency ?? ""),
+    estimatedValueCurrency: lead?.estimatedValueCurrency ?? "",
   };
 }
 

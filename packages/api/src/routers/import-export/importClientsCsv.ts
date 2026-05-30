@@ -11,6 +11,7 @@ import type { ClientMutationFields, ClientRecord } from "../../crm/types.js";
 export const importClientsCsv = protectedProcedure.input(importClientsCsvSchema).mutation(async ({ ctx, input }) => {
   const rows = parseCsvForImport(input.csv);
   const fieldsList = rows.map(rowToClientFields);
+  const importId = crypto.randomUUID();
   const now = new Date();
   let importedCount = 0;
   const createdClients: ClientRecord[] = [];
@@ -28,6 +29,7 @@ export const importClientsCsv = protectedProcedure.input(importClientsCsvSchema)
       await ctx.eventService.emitApi({
         type: "import.import_failed",
         userId: ctx.auth.user.id,
+        entity: { type: "import", id: importId },
         payload: { entityType: "client", importedCount, skippedCount: 0, failedRowNumber, source: "csv", rowResults },
         metadata: { source: "csv", failureMode: "partial_persistence" },
       });
@@ -49,6 +51,7 @@ export const importClientsCsv = protectedProcedure.input(importClientsCsvSchema)
   await ctx.eventService.emitApi({
     type: "import.import_completed",
     userId: ctx.auth.user.id,
+    entity: { type: "import", id: importId },
     payload: { entityType: "client", importedCount, skippedCount: 0, source: "csv" },
     metadata: { source: "csv" },
   });

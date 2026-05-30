@@ -110,6 +110,49 @@ describe("attachments tRPC API", () => {
     assert.equal(trackingStorage.putCount(), 0);
   });
 
+  it("rejects unsafe content types and oversized metadata before writing to storage", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
+    const trackingStorage = createTrackingStorageService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService, { service: trackingStorage, maxAttachmentBytes: 25, userQuotaBytes: 1_000 }));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "contract.txt",
+        contentType: "text/plain\r\nx-bad: 1",
+        byteSize: 6,
+        contentBase64: Buffer.from("signed").toString("base64"),
+      }),
+      /content type/u,
+    );
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "contract.txt",
+        contentType: "bad type",
+        byteSize: 6,
+        contentBase64: Buffer.from("signed").toString("base64"),
+      }),
+      /content type/u,
+    );
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "contract.txt",
+        byteSize: 6,
+        contentBase64: Buffer.from("signed").toString("base64"),
+        metadata: { oversized: "x".repeat(9_000) },
+      }),
+      /metadata/u,
+    );
+    assert.equal(trackingStorage.putCount(), 0);
+  });
+
   it("cleans up stored objects when atomic quota enforcement rejects persistence", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
@@ -150,6 +193,7 @@ describe("attachments tRPC API", () => {
   it("enforces attachment user quota atomically in the repository", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const now = new Date("2026-05-30T00:00:00.000Z");
+    await crmRepository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Ada Lovelace" }, now });
     const fields = {
       targetType: "client" as const,
       targetId: "client_1",
@@ -169,6 +213,28 @@ describe("attachments tRPC API", () => {
 
     assert.equal(results.filter(Boolean).length, 1);
     assert.equal(await crmRepository.attachments.sumByteSizeForUser({ userId: "user_1" }), 6);
+  });
+
+  it("rejects repository attachment writes for missing and deleted targets", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const now = new Date("2026-05-30T00:00:00.000Z");
+    const client = await crmRepository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Ada Lovelace" }, now });
+    await crmRepository.clients.setDeletedAt({ userId: "user_1", id: client.id, deletedAt: now, now });
+    const fields = {
+      targetType: "client" as const,
+      targetId: client.id,
+      storageBackend: "local" as const,
+      storageKey: "user_1/attachment/contract.txt",
+      fileName: "contract.txt",
+      contentType: "text/plain",
+      byteSize: 6,
+      checksum: undefined,
+      metadata: undefined,
+    };
+
+    await assert.rejects(crmRepository.attachments.create({ id: "attachment_1", userId: "user_1", fields, now }), /Client not found|Attachment target not found/u);
+    await assert.rejects(crmRepository.attachments.createWithinUserQuota({ id: "attachment_2", userId: "user_1", fields, now, userQuotaBytes: 10 }), /Client not found|Attachment target not found/u);
+    assert.equal(await crmRepository.attachments.sumByteSizeForUser({ userId: "user_1" }), 0);
   });
 });
 

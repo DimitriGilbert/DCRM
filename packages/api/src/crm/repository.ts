@@ -131,6 +131,13 @@ export class TicketProjectMoveBlockedError extends Error {
   }
 }
 
+export class AttachmentTargetNotFoundError extends Error {
+  constructor(readonly targetType: AttachmentRecord["targetType"], readonly targetId: string) {
+    super("Attachment target not found.");
+    this.name = "AttachmentTargetNotFoundError";
+  }
+}
+
 export function createInMemoryCrmRepository(options: { readonly isActiveEmailAccount?: ActiveEmailAccountLookup } = {}): CrmRepository {
   const clients: ClientRecord[] = [];
   const clientAuthorizedEmails: ClientAuthorizedEmailRecord[] = [];
@@ -729,6 +736,7 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
     },
     attachments: {
       async create(input) {
+        requireActiveAttachmentTarget({ clients, leads, projects, tickets, exchanges, userId: input.userId, targetType: input.fields.targetType, targetId: input.fields.targetId });
         const record: AttachmentRecord = {
           id: input.id,
           userId: input.userId,
@@ -749,6 +757,7 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         return record;
       },
       async createWithinUserQuota(input) {
+        requireActiveAttachmentTarget({ clients, leads, projects, tickets, exchanges, userId: input.userId, targetType: input.fields.targetType, targetId: input.fields.targetId });
         const usedBytes = attachments.reduce((total, attachment) => (attachment.userId === input.userId && !attachment.deletedAt ? total + attachment.byteSize : total), 0);
         if (usedBytes + input.fields.byteSize > input.userQuotaBytes) {
           return undefined;
@@ -940,6 +949,44 @@ function validateActiveExchangeParents(input: {
   }
   if (input.clientId) {
     requireActiveClient(input.clients, input.userId, input.clientId);
+  }
+}
+
+function requireActiveAttachmentTarget(input: {
+  readonly clients: readonly ClientRecord[];
+  readonly leads: readonly LeadRecord[];
+  readonly projects: readonly ProjectRecord[];
+  readonly tickets: readonly TicketRecord[];
+  readonly exchanges: readonly ExchangeRecord[];
+  readonly userId: string;
+  readonly targetType: AttachmentRecord["targetType"];
+  readonly targetId: string;
+}): void {
+  switch (input.targetType) {
+    case "client":
+      requireActiveClient(input.clients, input.userId, input.targetId);
+      return;
+    case "lead": {
+      const lead = input.leads.find((candidate) => candidate.userId === input.userId && candidate.id === input.targetId && !candidate.deletedAt);
+      if (!lead) {
+        throw new AttachmentTargetNotFoundError(input.targetType, input.targetId);
+      }
+      return;
+    }
+    case "project":
+      requireActiveProject(input.projects, input.clients, input.userId, input.targetId);
+      return;
+    case "ticket":
+      requireActiveTicket(input.tickets, input.projects, input.clients, input.userId, input.targetId);
+      return;
+    case "exchange": {
+      const exchange = input.exchanges.find((candidate) => candidate.userId === input.userId && candidate.id === input.targetId && !candidate.deletedAt);
+      if (!exchange) {
+        throw new AttachmentTargetNotFoundError(input.targetType, input.targetId);
+      }
+      validateActiveExchangeParents({ clients: input.clients, projects: input.projects, tickets: input.tickets, userId: input.userId, clientId: exchange.clientId, projectId: exchange.projectId, ticketId: exchange.ticketId });
+      return;
+    }
   }
 }
 

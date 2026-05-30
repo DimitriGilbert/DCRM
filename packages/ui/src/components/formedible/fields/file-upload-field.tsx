@@ -15,7 +15,8 @@ export function FileUploadField<TFormValues extends FormedibleFormValues>({ fiel
   function setFiles(nextFiles: readonly File[]) {
     const limitedFiles = config?.maxFiles === undefined ? nextFiles : nextFiles.slice(0, config.maxFiles);
     const maxSize = config?.maxSize;
-    const acceptedFiles = maxSize === undefined ? limitedFiles : limitedFiles.filter((file) => file.size <= maxSize);
+    const nonEmptyFiles = limitedFiles.filter((file) => file.size > 0);
+    const acceptedFiles = maxSize === undefined ? nonEmptyFiles : nonEmptyFiles.filter((file) => file.size <= maxSize);
     field.onChange(config?.multiple ? acceptedFiles : acceptedFiles[0] ?? null);
     config?.onFilesChange?.(acceptedFiles);
     field.onBlur();

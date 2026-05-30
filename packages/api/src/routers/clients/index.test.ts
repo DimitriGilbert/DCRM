@@ -123,6 +123,17 @@ describe("clients tRPC API", () => {
       caller.clients.update({ id: client.id, customFieldSchema: [{ key: "portal", label: "Portal", type: "url", required: true }], customFields: { portal: "not-a-url" } }),
       /Invalid URL/u,
     );
+    await assert.rejects(
+      caller.clients.create({
+        name: "Duplicate Fields",
+        customFieldSchema: [
+          { key: "portal", label: "Portal", type: "url" },
+          { key: "portal", label: "Duplicate portal", type: "text" },
+        ],
+        customFields: { portal: "https://example.com" },
+      }),
+      /Duplicate custom field key: portal/u,
+    );
   });
 
   it("manages tags and client entity tags without crossing user scope", async () => {

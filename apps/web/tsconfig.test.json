@@ -12,6 +12,8 @@
     "types": ["node"]
   },
   "include": [
+    "src/features/attachments/validation.ts",
+    "src/features/attachments/validation.test.ts",
     "src/features/client-lead/constants.ts",
     "src/features/client-lead/forms-normalization.ts",
     "src/features/client-lead/forms.test.ts"

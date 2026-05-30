@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 
+import { AttachmentTargetNotFoundError } from "../../crm/repository.js";
 import { protectedProcedure } from "../../index.js";
 import { assertAttachmentTarget, assertAttachmentUploadBounds, decodeAttachmentContent, requireStorage, safeStorageFileName } from "./helpers.js";
 import { createAttachmentSchema } from "./schemas.js";
@@ -33,6 +34,9 @@ export const createAttachment = protectedProcedure.input(createAttachmentSchema)
     })
     .catch(async (error: unknown) => {
       await deleteStoredAttachment(storage.service, stored.key);
+      if (error instanceof AttachmentTargetNotFoundError) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Attachment target not found." });
+      }
       throw error;
     });
 

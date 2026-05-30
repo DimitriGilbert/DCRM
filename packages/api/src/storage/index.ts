@@ -4,6 +4,9 @@ import { dirname, join } from "node:path";
 
 import type { AttachmentStorageBackend } from "@DCRM/domain";
 
+const CONTENT_TYPE_PATTERN = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+(?:\s*;\s*[A-Za-z0-9!#$&^_.+-]+=(?:[A-Za-z0-9!#$&^_.+-]+|"(?:[\t !#-\[\]-~]|\\[\t !-~])*"))*$/u;
+const HEADER_VALUE_PATTERN = /^[\x20-\x7E]+$/u;
+
 export type StoragePutInput = {
   readonly key: string;
   readonly content: Buffer;
@@ -52,6 +55,7 @@ function createLocalStorageService(rootPath: string): StorageService {
   return {
     backend: "local",
     async put(input) {
+      assertSafeContentType(input.contentType);
       const filePath = resolveLocalObjectPath(rootPath, input.key);
       await mkdir(dirname(filePath), { recursive: true });
       await writeFile(filePath, input.content);
@@ -100,6 +104,7 @@ function createS3CompatibleStorageService(options: S3CompatibleStorageOptions): 
   return {
     backend: "s3_compatible",
     async put(input) {
+      assertSafeContentType(input.contentType);
       const response = await signedS3Request(options, "PUT", input.key, input.content, input.contentType ?? "application/octet-stream");
       if (!response.ok) {
         throw new Error(`S3-compatible storage put failed with status ${response.status}.`);
@@ -124,6 +129,15 @@ function createS3CompatibleStorageService(options: S3CompatibleStorageOptions): 
       return true;
     },
   };
+}
+
+function assertSafeContentType(contentType: string | null | undefined): void {
+  if (contentType === undefined || contentType === null) {
+    return;
+  }
+  if (!HEADER_VALUE_PATTERN.test(contentType) || !CONTENT_TYPE_PATTERN.test(contentType)) {
+    throw new Error("Attachment content type must be a valid MIME type.");
+  }
 }
 
 async function signedS3Request(options: S3CompatibleStorageOptions, method: "DELETE" | "GET" | "PUT", key: string, body?: Buffer, contentType?: string): Promise<Response> {

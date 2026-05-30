@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { GlobalSearchForm } from "@/features/search/forms";
+import { GlobalSearchForm, hasValidGlobalSearchFilters } from "@/features/search/forms";
 import type { GlobalSearchFilters } from "@/features/search/forms";
 import { SearchLoading, SearchResults } from "@/features/search/views";
 import { getUser } from "@/functions/get-user";
@@ -21,8 +21,9 @@ export const Route = createFileRoute("/search")({
 
 function RouteComponent() {
   const trpc = useTRPC();
-  const [filters, setFilters] = useState<GlobalSearchFilters>({});
-  const search = useQuery(trpc.search.global.queryOptions(filters));
+  const [filters, setFilters] = useState<GlobalSearchFilters | null>(null);
+  const canSearch = filters !== null && hasValidGlobalSearchFilters(filters);
+  const search = useQuery({ ...trpc.search.global.queryOptions(filters ?? { search: "__idle_search__" }), enabled: canSearch });
 
   return (
     <main className="overflow-auto bg-muted/20">
@@ -35,9 +36,20 @@ function RouteComponent() {
           </div>
         </section>
         <GlobalSearchForm onSubmit={setFilters} />
-        {search.isError ? <SearchError /> : search.data ? <SearchResults results={search.data} /> : <SearchLoading />}
+        {canSearch ? search.isError ? <SearchError /> : search.data ? <SearchResults results={search.data} /> : <SearchLoading /> : <SearchIdle />}
       </div>
     </main>
+  );
+}
+
+function SearchIdle() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Search your CRM</CardTitle>
+        <CardDescription>Enter a search term or add a status, tag, or date filter to find matching records.</CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
 

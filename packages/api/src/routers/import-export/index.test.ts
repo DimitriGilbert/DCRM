@@ -26,10 +26,13 @@ describe("import/export tRPC API", () => {
       (await caller.clients.list({})).map((client) => client.name),
       ["Ada Lovelace", "Grace Hopper"],
     );
+    const events = await eventService.listForUser("user_1");
     assert.deepEqual(
-      (await eventService.listForUser("user_1")).map((event) => event.type),
+      events.map((event) => event.type),
       ["client.created", "client.created", "import.import_completed"],
     );
+    assert.equal(events[2]?.entity?.type, "import");
+    assert.match(events[2]?.entity?.id ?? "", /^[0-9a-f-]{36}$/u);
   });
 
   it("exports CSV cells with spreadsheet-leading characters as inert text", async () => {
@@ -88,6 +91,8 @@ describe("import/export tRPC API", () => {
       events.map((event) => event.type),
       ["import.import_failed"],
     );
+    assert.equal(events[0]?.entity?.type, "import");
+    assert.match(events[0]?.entity?.id ?? "", /^[0-9a-f-]{36}$/u);
     assert.deepEqual(events[0]?.payload, {
       entityType: "client",
       importedCount: 1,

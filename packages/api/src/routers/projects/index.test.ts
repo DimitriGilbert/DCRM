@@ -117,6 +117,18 @@ describe("projects tRPC API", () => {
     assert.equal(project.budgetCurrency, "USD");
   });
 
+  it("accepts strict project calendar dates and rejects rollover dates", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild", startsAt: "2026-02-28", dueAt: "2026-03-01" });
+
+    assert.deepEqual(project.startsAt, new Date(Date.UTC(2026, 1, 28)));
+    assert.deepEqual(project.dueAt, new Date(Date.UTC(2026, 2, 1)));
+    await assert.rejects(caller.projects.create({ clientId: client.id, name: "Invalid date", startsAt: "2026-02-31" }), /startsAt/u);
+    await assert.rejects(caller.projects.update({ id: project.id, dueAt: "2026-04-31" }), /dueAt/u);
+  });
+
   it("enforces active project and expected-status invariants at the repository write boundary", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const now = new Date("2026-01-01T00:00:00.000Z");

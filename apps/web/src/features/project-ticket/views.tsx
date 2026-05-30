@@ -301,5 +301,5 @@ function formatHours(estimated: string | null | undefined, actual: string | null
 }
 
 function formatDate(value: string | Date): string {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(value));
 }

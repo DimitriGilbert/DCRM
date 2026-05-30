@@ -21,7 +21,7 @@ describe("tickets and exchanges tRPC API", () => {
     const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
     const client = await caller.clients.create({ name: "Ada Lovelace" });
     const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
-    const dueAt = new Date("2026-06-15T12:00:00.000Z");
+    const dueAt = "2026-06-15";
 
     const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form", type: "bug", status: "open", priority: "urgent", dueAt });
 
@@ -29,7 +29,7 @@ describe("tickets and exchanges tRPC API", () => {
     assert.equal(ticket.projectId, project.id);
     assert.equal(ticket.type, "bug");
     assert.equal(ticket.priority, "urgent");
-    assert.deepEqual(ticket.dueAt, dueAt);
+    assert.deepEqual(ticket.dueAt, new Date(Date.UTC(2026, 5, 15)));
     assert.deepEqual(
       (await eventService.listForUser("user_1")).map((event) => event.type),
       ["client.created", "project.created", "ticket.created"],
@@ -105,7 +105,7 @@ describe("tickets and exchanges tRPC API", () => {
     const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
     const client = await caller.clients.create({ name: "Ada Lovelace" });
     const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
-    const suppliedClosedAt = new Date("2026-06-15T12:00:00.000Z");
+    const suppliedClosedAt = "2026-06-15";
 
     const openTicket = await caller.tickets.create({ projectId: project.id, title: "Open ticket", status: "open", closedAt: suppliedClosedAt });
     const closedTicket = await caller.tickets.create({ projectId: project.id, title: "Closed ticket", status: "closed" });
@@ -120,6 +120,18 @@ describe("tickets and exchanges tRPC API", () => {
     assert.equal(reopenedTicket.closedAt, null);
     assert.equal(reclosedTicket.status, "closed");
     assert.ok(reclosedTicket.closedAt instanceof Date);
+  });
+
+  it("accepts strict ticket calendar dates and rejects rollover dates", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form", dueAt: "2026-02-28" });
+
+    assert.deepEqual(ticket.dueAt, new Date(Date.UTC(2026, 1, 28)));
+    await assert.rejects(caller.tickets.create({ projectId: project.id, title: "Invalid due date", dueAt: "2026-02-31" }), /dueAt/u);
+    await assert.rejects(caller.tickets.update({ id: ticket.id, closedAt: "2026-04-31" }), /closedAt/u);
   });
 
   it("rejects ticket parent project IDs that are missing, deleted, or owned by another user", async () => {

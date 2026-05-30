@@ -1,6 +1,7 @@
 import { protectedProcedure, publicProcedure, router } from "../index.js";
 
 import { clientsRouter } from "./clients/index.js";
+import { dashboardRouter } from "./dashboard/index.js";
 import { exchangesRouter } from "./exchanges/index.js";
 import { leadsRouter } from "./leads/index.js";
 import { projectsRouter } from "./projects/index.js";
@@ -23,5 +24,6 @@ export const appRouter = router({
   tags: tagsRouter,
   tickets: ticketsRouter,
   exchanges: exchangesRouter,
+  dashboard: dashboardRouter,
 });
 export type AppRouter = typeof appRouter;

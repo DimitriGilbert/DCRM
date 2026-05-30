@@ -12,17 +12,9 @@ function handler({ request, params }: { request: Request; params: Record<string,
     });
   }
 
-  const contentLength = request.headers.get("Content-Length");
-  if (contentLength !== null && Number(contentLength) > MAX_BODY_BYTES) {
-    return new Response(JSON.stringify({ error: "Request body too large" }), {
-      status: 413,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
   return (async () => {
     const rawBody = await request.text();
-    if (rawBody.length > MAX_BODY_BYTES) {
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
       return new Response(JSON.stringify({ error: "Request body too large" }), {
         status: 413,
         headers: { "Content-Type": "application/json" },

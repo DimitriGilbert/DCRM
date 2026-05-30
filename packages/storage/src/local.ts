@@ -141,6 +141,7 @@ export class LocalStorageBackend implements StorageBackend {
 
   async put(userId: string, key: string, data: Uint8Array, mimeType: string): Promise<StoredFile> {
     this.validateKey(key);
+    this.validateUserId(userId);
 
     if (data.byteLength > this.limits.maxFileSize) {
       throw new StorageError(
@@ -176,6 +177,7 @@ export class LocalStorageBackend implements StorageBackend {
 
   async get(userId: string, key: string): Promise<Uint8Array> {
     this.validateKey(key);
+    this.validateUserId(userId);
     const fullPath = this.resolvePath(userId, key);
 
     try {
@@ -188,6 +190,7 @@ export class LocalStorageBackend implements StorageBackend {
 
   async delete(userId: string, key: string): Promise<void> {
     this.validateKey(key);
+    this.validateUserId(userId);
     const fullPath = this.resolvePath(userId, key);
 
     try {
@@ -200,6 +203,7 @@ export class LocalStorageBackend implements StorageBackend {
 
   async exists(userId: string, key: string): Promise<boolean> {
     this.validateKey(key);
+    this.validateUserId(userId);
     const fullPath = this.resolvePath(userId, key);
     return this.fsOps.exists(fullPath);
   }
@@ -225,6 +229,18 @@ export class LocalStorageBackend implements StorageBackend {
     }
     if (key.includes("..")) {
       throw new StorageError("Key must not contain path traversal segments", "PUT_FAILED");
+    }
+  }
+
+  private validateUserId(userId: string): void {
+    if (userId.startsWith("/")) {
+      throw new StorageError("UserId must not be absolute", "PUT_FAILED");
+    }
+    if (userId.includes("..")) {
+      throw new StorageError("UserId must not contain path traversal segments", "PUT_FAILED");
+    }
+    if (userId.includes("\0")) {
+      throw new StorageError("UserId must not contain null bytes", "PUT_FAILED");
     }
   }
 }

@@ -4,9 +4,9 @@ import { exchangeTypeSchema } from "@DCRM/domain";
 
 export const createExchangeSchema = z.object({
   type: exchangeTypeSchema,
-  clientId: z.string().optional(),
-  projectId: z.string().optional(),
-  ticketId: z.string().optional(),
+  clientId: z.string().min(1).optional(),
+  projectId: z.string().min(1).optional(),
+  ticketId: z.string().min(1).optional(),
   subject: z.string().optional(),
   body: z.string().optional(),
   direction: z.enum(["incoming", "outgoing"]),

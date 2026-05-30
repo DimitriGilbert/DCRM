@@ -3,12 +3,13 @@ import { projects } from "@DCRM/db/schema/crm";
 import { eq, and, isNull, or, ilike, desc } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
+import { escapeLikeWildcards } from "../../utils/escape-like";
 import { searchProjectsSchema } from "./schemas";
 
 export const searchProjects = protectedProcedure
   .input(searchProjectsSchema)
   .query(async ({ ctx, input }) => {
-    const pattern = `%${input.query}%`;
+    const pattern = `%${escapeLikeWildcards(input.query)}%`;
 
     const rows = await db
       .select()

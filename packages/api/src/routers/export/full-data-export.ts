@@ -61,7 +61,15 @@ export const fullDataExport = protectedProcedure
       db.select().from(events).where(eq(events.userId, userId)),
       db.select().from(hooks).where(eq(hooks.userId, userId)),
       db.select().from(hookExecutions).where(eq(hookExecutions.userId, userId)),
-      db.select().from(aiProviders).where(eq(aiProviders.userId, userId)),
+      db.select({
+        id: aiProviders.id,
+        provider: aiProviders.provider,
+        name: aiProviders.name,
+        baseUrl: aiProviders.baseUrl,
+        enabled: aiProviders.enabled,
+        createdAt: aiProviders.createdAt,
+        updatedAt: aiProviders.updatedAt,
+      }).from(aiProviders).where(eq(aiProviders.userId, userId)),
       db.select().from(aiInsights).where(eq(aiInsights.userId, userId)),
       db.select().from(notifications).where(eq(notifications.userId, userId)),
     ]);

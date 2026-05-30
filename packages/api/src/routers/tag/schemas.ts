@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const createTagSchema = z.object({
   name: z.string().min(1),
-  color: z.string().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a hex color (#RRGGBB)").optional(),
 });
 
 export type CreateTagInput = z.infer<typeof createTagSchema>;
@@ -10,7 +10,7 @@ export type CreateTagInput = z.infer<typeof createTagSchema>;
 export const updateTagSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).optional(),
-  color: z.string().nullable().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a hex color (#RRGGBB)").nullable().optional(),
 });
 
 export type UpdateTagInput = z.infer<typeof updateTagSchema>;

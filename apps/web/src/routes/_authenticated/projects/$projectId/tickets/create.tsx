@@ -69,7 +69,7 @@ function CreateTicketPage() {
       <h2 className="text-sm font-medium">New Ticket in {project.name}</h2>
       <CreateTicketForm
         onSubmit={(values) => {
-          createMutation.mutate({ projectId, ...values });
+          createMutation.mutate({ projectId, ...values, dueDate: values.dueDate || undefined });
         }}
         isPending={createMutation.isPending}
       />

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@DCRM/ui/components/ca
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@DCRM/ui/components/dialog";
 import { Skeleton } from "@DCRM/ui/components/skeleton";
 
+import { LEAD_STAGES } from "@/lib/forms/lead-form-schema";
 import { useTRPC } from "@/utils/trpc";
 
 export const Route = createFileRoute("/_authenticated/leads/$leadId/convert")({
@@ -34,7 +35,7 @@ function ConvertLeadPage() {
           toast.success("Lead converted to client");
           navigate({ to: "/clients/$clientId", params: { clientId: data.client.id } });
         } else {
-          toast.error("Conversion succeeded but no client was created");
+          toast.error("Conversion failed. The lead may not be in 'won' stage or has already been converted.");
           navigate({ to: "/leads" });
         }
       },
@@ -68,7 +69,7 @@ function ConvertLeadPage() {
     );
   }
 
-  if (lead.stage !== "won") {
+  if (lead.stage !== LEAD_STAGES.WON) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <p className="text-sm text-muted-foreground">

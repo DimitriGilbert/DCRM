@@ -33,14 +33,16 @@ const LEAD_SOURCE_OPTIONS = [
   { value: "other", label: "Other" },
 ] as const;
 
+const emptyStringToNull = z.string().transform((v) => (v === "" ? null : v)).optional().nullable();
+
 const leadFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  email: z.string().optional(),
-  phone: z.string().optional(),
-  company: z.string().optional(),
-  website: z.string().optional(),
-  notes: z.string().optional(),
-  source: z.string().optional(),
+  email: emptyStringToNull,
+  phone: emptyStringToNull,
+  company: emptyStringToNull,
+  website: emptyStringToNull,
+  notes: emptyStringToNull,
+  source: emptyStringToNull,
   stage: leadStageSchema.optional(),
   estimatedValue: z.number().optional(),
   currency: z.string().optional(),

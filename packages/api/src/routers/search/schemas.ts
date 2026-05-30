@@ -77,6 +77,9 @@ export interface SearchResultItem {
   sublabel: string | null;
   status: string | null;
   createdAt: Date;
+  /** For entities that belong to a parent (e.g. ticket → project, exchange → client). */
+  parentId: string | null;
+  parentType: "client" | "project" | "ticket" | null;
 }
 
 // --- Schema validation tests are in schemas.test.ts ---

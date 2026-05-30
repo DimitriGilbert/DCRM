@@ -113,6 +113,8 @@ async function searchClients(
     sublabel: r.email ?? r.company ?? null,
     status: null,
     createdAt: r.createdAt,
+    parentId: null,
+    parentType: null,
   }));
 }
 
@@ -162,6 +164,8 @@ async function searchLeads(
     sublabel: r.email ?? r.company ?? null,
     status: r.stage,
     createdAt: r.createdAt,
+    parentId: null,
+    parentType: null,
   }));
 }
 
@@ -208,6 +212,8 @@ async function searchProjects(
     sublabel: r.description ?? null,
     status: r.status,
     createdAt: r.createdAt,
+    parentId: null,
+    parentType: null,
   }));
 }
 
@@ -254,6 +260,8 @@ async function searchTickets(
     sublabel: r.description ?? null,
     status: r.status,
     createdAt: r.createdAt,
+    parentId: r.projectId,
+    parentType: "project" as const,
   }));
 }
 
@@ -290,6 +298,14 @@ async function searchExchanges(
     sublabel: r.body ? r.body.slice(0, 100) : null,
     status: r.type,
     createdAt: r.createdAt,
+    parentId: r.clientId ?? r.projectId ?? r.ticketId ?? null,
+    parentType: r.clientId
+      ? ("client" as const)
+      : r.projectId
+        ? ("project" as const)
+        : r.ticketId
+          ? ("ticket" as const)
+          : null,
   }));
 }
 

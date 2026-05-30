@@ -67,7 +67,7 @@ function GlobalSearch({
   }, [onOpenChange]);
 
   const handleSelect = useCallback(
-    (entityType: string, entityId: string) => {
+    (entityType: string, entityId: string, parentId: string | null, parentType: string | null) => {
       onOpenChange(false);
       switch (entityType) {
         case "client":
@@ -80,10 +80,20 @@ function GlobalSearch({
           void navigate({ to: "/projects/$projectId", params: { projectId: entityId } });
           break;
         case "ticket":
-          void navigate({ to: "/tickets/", params: {} });
+          if (parentId && parentType === "project") {
+            void navigate({ to: "/projects/$projectId/tickets/$ticketId", params: { projectId: parentId, ticketId: entityId } });
+          } else {
+            void navigate({ to: "/tickets" });
+          }
           break;
         case "exchange":
-          void navigate({ to: "/clients/$clientId", params: { clientId: entityId } });
+          if (parentId && parentType === "client") {
+            void navigate({ to: "/clients/$clientId", params: { clientId: parentId } });
+          } else if (parentId && parentType === "project") {
+            void navigate({ to: "/projects/$projectId", params: { projectId: parentId } });
+          } else {
+            void navigate({ to: "/clients" });
+          }
           break;
       }
     },
@@ -145,7 +155,7 @@ function GlobalSearch({
                     <CommandItem
                       key={`${item.entityType}-${item.id}`}
                       value={`${item.entityType}-${item.label}`}
-                      onSelect={() => handleSelect(item.entityType, item.id)}
+                      onSelect={() => handleSelect(item.entityType, item.id, item.parentId, item.parentType)}
                     >
                       <Icon className="size-4 shrink-0 text-muted-foreground" />
                       <div className="flex flex-col gap-0.5 overflow-hidden">

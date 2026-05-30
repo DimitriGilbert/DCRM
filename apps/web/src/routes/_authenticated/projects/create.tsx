@@ -61,7 +61,11 @@ function CreateProjectPage() {
       <CreateProjectForm
         fields={enrichedFields}
         onSubmit={(values) => {
-          createMutation.mutate(values);
+          createMutation.mutate({
+            ...values,
+            startDate: values.startDate || undefined,
+            endDate: values.endDate || undefined,
+          });
         }}
         isPending={createMutation.isPending}
       />

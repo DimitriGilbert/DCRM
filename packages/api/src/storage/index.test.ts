@@ -25,4 +25,17 @@ describe("attachment storage service", () => {
       await rm(rootPath, { force: true, recursive: true });
     }
   });
+
+  it("rejects storage keys with collapsing dot segments", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "dcrm-storage-"));
+    const storage = createStorageService({ backend: "local", localPath: rootPath });
+
+    try {
+      await assert.rejects(storage.put({ key: "user_1/attachment_1/../contract.txt", content: Buffer.from("signed") }));
+      await assert.rejects(storage.put({ key: "user_1/attachment_1/./contract.txt", content: Buffer.from("signed") }));
+      await assert.rejects(storage.put({ key: "user_1//contract.txt", content: Buffer.from("signed") }));
+    } finally {
+      await rm(rootPath, { force: true, recursive: true });
+    }
+  });
 });

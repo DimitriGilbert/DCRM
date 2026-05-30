@@ -1,6 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, normalize, sep } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { AttachmentStorageBackend } from "@DCRM/domain";
 
@@ -75,11 +75,19 @@ function createLocalStorageService(rootPath: string): StorageService {
 }
 
 function resolveLocalObjectPath(rootPath: string, key: string): string {
-  const normalizedKey = normalize(key);
-  if (normalizedKey.startsWith("..") || normalizedKey.includes(`${sep}..${sep}`) || normalizedKey.startsWith(sep)) {
+  const segments = safeStorageKeySegments(key);
+  return join(rootPath, ...segments);
+}
+
+function safeStorageKeySegments(key: string): readonly string[] {
+  if (key.includes("\\")) {
     throw new Error("Storage key must stay inside the configured local storage path.");
   }
-  return join(rootPath, normalizedKey);
+  const segments = key.split("/");
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+    throw new Error("Storage key must stay inside the configured local storage path.");
+  }
+  return segments;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -147,7 +155,7 @@ async function signedS3Request(options: S3CompatibleStorageOptions, method: "DEL
 }
 
 function encodeS3Path(key: string): string {
-  return key.split("/").map(encodeURIComponent).join("/");
+  return safeStorageKeySegments(key).map(encodeURIComponent).join("/");
 }
 
 function toAmzDate(date: Date): string {

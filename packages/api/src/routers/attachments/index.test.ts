@@ -9,6 +9,7 @@ import { appRouter } from "../index.js";
 
 import type { Context } from "../../context.js";
 import type { CrmRepository } from "../../crm/repository.js";
+import type { StorageService } from "../../storage/index.js";
 
 describe("attachments tRPC API", () => {
   it("attaches a file to an owned client, stores metadata, and emits a file event", async () => {
@@ -42,18 +43,180 @@ describe("attachments tRPC API", () => {
       ["client.created", "attachment.file_attached"],
     );
   });
+
+  it("rejects impossible base64 lengths before writing to storage", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
+    const trackingStorage = createTrackingStorageService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService, { service: trackingStorage, maxAttachmentBytes: 25, userQuotaBytes: 1_000 }));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "contract.txt",
+        byteSize: 1,
+        contentBase64: "AAAAAAAA",
+      }),
+    );
+    assert.equal(trackingStorage.putCount(), 0);
+  });
+
+  it("rejects encoded content beyond the configured max before writing to storage", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
+    const trackingStorage = createTrackingStorageService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService, { service: trackingStorage, maxAttachmentBytes: 25, userQuotaBytes: 1_000 }));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "contract.txt",
+        byteSize: 28,
+        contentBase64: Buffer.alloc(28).toString("base64"),
+      }),
+    );
+    assert.equal(trackingStorage.putCount(), 0);
+  });
+
+  it("rejects non-canonical padded base64 before writing to storage", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
+    const trackingStorage = createTrackingStorageService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService, { service: trackingStorage, maxAttachmentBytes: 25, userQuotaBytes: 1_000 }));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "one-byte.bin",
+        byteSize: 1,
+        contentBase64: "AB==",
+      }),
+    );
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "two-bytes.bin",
+        byteSize: 2,
+        contentBase64: "AAB=",
+      }),
+    );
+    assert.equal(trackingStorage.putCount(), 0);
+  });
+
+  it("cleans up stored objects when atomic quota enforcement rejects persistence", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
+    const trackingStorage = createTrackingStorageService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService, { service: trackingStorage, maxAttachmentBytes: 25, userQuotaBytes: 5 }));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "contract.txt",
+        byteSize: 6,
+        contentBase64: Buffer.from("signed").toString("base64"),
+      }),
+    );
+    assert.equal(trackingStorage.storedKeyCount(), 0);
+    assert.equal(trackingStorage.deleteCount(), 1);
+  });
+
+  it("rejects dot-segment attachment file names", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(
+      caller.attachments.create({
+        targetType: "client",
+        targetId: client.id,
+        fileName: "..",
+        byteSize: 6,
+        contentBase64: Buffer.from("signed").toString("base64"),
+      }),
+    );
+  });
+
+  it("enforces attachment user quota atomically in the repository", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const now = new Date("2026-05-30T00:00:00.000Z");
+    const fields = {
+      targetType: "client" as const,
+      targetId: "client_1",
+      storageBackend: "local" as const,
+      storageKey: "user_1/attachment/contract.txt",
+      fileName: "contract.txt",
+      contentType: "text/plain",
+      byteSize: 6,
+      checksum: undefined,
+      metadata: undefined,
+    };
+
+    const results = await Promise.all([
+      crmRepository.attachments.createWithinUserQuota({ id: "attachment_1", userId: "user_1", fields, now, userQuotaBytes: 10 }),
+      crmRepository.attachments.createWithinUserQuota({ id: "attachment_2", userId: "user_1", fields: { ...fields, storageKey: "user_1/attachment-2/contract.txt" }, now, userQuotaBytes: 10 }),
+    ]);
+
+    assert.equal(results.filter(Boolean).length, 1);
+    assert.equal(await crmRepository.attachments.sumByteSizeForUser({ userId: "user_1" }), 6);
+  });
 });
 
-function createTestContext(userId: string, crmRepository: CrmRepository, eventService: ReturnType<typeof createEventService>): Context {
+function createTestContext(userId: string, crmRepository: CrmRepository, eventService: ReturnType<typeof createEventService>, storage?: Context["storage"]): Context {
   return {
     auth: { kind: "session", user: { id: userId, email: `${userId}@example.com`, name: userId, image: null } },
     crmRepository,
     eventService,
     session: null,
-    storage: {
+    storage: storage ?? {
       service: createStorageService({ backend: "local", localPath: "/tmp/dcrm-attachment-test" }),
       maxAttachmentBytes: 25,
       userQuotaBytes: 1_000,
+    },
+  };
+}
+
+function createTrackingStorageService(): StorageService & { readonly putCount: () => number; readonly deleteCount: () => number; readonly storedKeyCount: () => number } {
+  const objects = new Map<string, Buffer>();
+  let putCount = 0;
+  let deleteCount = 0;
+
+  return {
+    backend: "local",
+    async put(input) {
+      putCount += 1;
+      objects.set(input.key, input.content);
+      return { backend: "local", key: input.key, byteSize: input.content.byteLength, contentType: input.contentType ?? null };
+    },
+    async get(key) {
+      const content = objects.get(key);
+      if (!content) {
+        throw new Error("Object not found.");
+      }
+      return content;
+    },
+    async delete(key) {
+      deleteCount += 1;
+      return objects.delete(key);
+    },
+    putCount() {
+      return putCount;
+    },
+    deleteCount() {
+      return deleteCount;
+    },
+    storedKeyCount() {
+      return objects.size;
     },
   };
 }

@@ -1,40 +1,45 @@
 import { TRPCError } from "@trpc/server";
 
 import { protectedProcedure } from "../../index.js";
-import { assertAttachmentTarget, decodeAttachmentContent, requireStorage, safeStorageFileName } from "./helpers.js";
+import { assertAttachmentTarget, assertAttachmentUploadBounds, decodeAttachmentContent, requireStorage, safeStorageFileName } from "./helpers.js";
 import { createAttachmentSchema } from "./schemas.js";
 
 export const createAttachment = protectedProcedure.input(createAttachmentSchema).mutation(async ({ ctx, input }) => {
   const storage = requireStorage(ctx);
-  if (input.byteSize > storage.maxAttachmentBytes) {
-    throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Attachment exceeds the configured file size limit." });
-  }
-  const usedBytes = await ctx.crmRepository.attachments.sumByteSizeForUser({ userId: ctx.auth.user.id });
-  if (usedBytes + input.byteSize > storage.userQuotaBytes) {
-    throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Attachment would exceed the configured user storage quota." });
-  }
+  assertAttachmentUploadBounds(input.contentBase64, input.byteSize, storage.maxAttachmentBytes);
   await assertAttachmentTarget(ctx, input.targetType, input.targetId);
   const attachmentId = crypto.randomUUID();
   const content = decodeAttachmentContent(input.contentBase64, input.byteSize);
   const storageKey = `${ctx.auth.user.id}/${attachmentId}/${safeStorageFileName(input.fileName)}`;
   const stored = await storage.service.put({ key: storageKey, content, contentType: input.contentType });
   const now = new Date();
-  const attachment = await ctx.crmRepository.attachments.create({
-    id: attachmentId,
-    userId: ctx.auth.user.id,
-    fields: {
-      targetType: input.targetType,
-      targetId: input.targetId,
-      storageBackend: stored.backend,
-      storageKey: stored.key,
-      fileName: input.fileName,
-      contentType: stored.contentType,
-      byteSize: stored.byteSize,
-      checksum: input.checksum,
-      metadata: input.metadata,
-    },
-    now,
-  });
+  const attachment = await ctx.crmRepository.attachments
+    .createWithinUserQuota({
+      id: attachmentId,
+      userId: ctx.auth.user.id,
+      fields: {
+        targetType: input.targetType,
+        targetId: input.targetId,
+        storageBackend: stored.backend,
+        storageKey: stored.key,
+        fileName: input.fileName,
+        contentType: stored.contentType,
+        byteSize: stored.byteSize,
+        checksum: input.checksum,
+        metadata: input.metadata,
+      },
+      now,
+      userQuotaBytes: storage.userQuotaBytes,
+    })
+    .catch(async (error: unknown) => {
+      await deleteStoredAttachment(storage.service, stored.key);
+      throw error;
+    });
+
+  if (!attachment) {
+    await deleteStoredAttachment(storage.service, stored.key);
+    throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Attachment would exceed the configured user storage quota." });
+  }
   await ctx.eventService.emitApi({
     type: "attachment.file_attached",
     userId: ctx.auth.user.id,
@@ -44,3 +49,11 @@ export const createAttachment = protectedProcedure.input(createAttachmentSchema)
   });
   return attachment;
 });
+
+async function deleteStoredAttachment(service: ReturnType<typeof requireStorage>["service"], key: string): Promise<void> {
+  try {
+    await service.delete(key);
+  } catch {
+    return;
+  }
+}

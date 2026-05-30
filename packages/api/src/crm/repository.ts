@@ -97,6 +97,7 @@ export type CrmRepository = {
   };
   readonly attachments: {
     readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: AttachmentMutationFields; readonly now: Date }) => Promise<AttachmentRecord>;
+    readonly createWithinUserQuota: (input: { readonly id: string; readonly userId: string; readonly fields: AttachmentMutationFields; readonly now: Date; readonly userQuotaBytes: number }) => Promise<AttachmentRecord | undefined>;
     readonly listForTarget: (input: AttachmentTargetInput) => Promise<readonly AttachmentRecord[]>;
     readonly sumByteSizeForUser: (input: { readonly userId: string }) => Promise<number>;
   };
@@ -640,6 +641,30 @@ export function createInMemoryCrmRepository(): CrmRepository {
     },
     attachments: {
       async create(input) {
+        const record: AttachmentRecord = {
+          id: input.id,
+          userId: input.userId,
+          targetType: input.fields.targetType,
+          targetId: input.fields.targetId,
+          storageBackend: input.fields.storageBackend,
+          storageKey: input.fields.storageKey,
+          fileName: input.fields.fileName,
+          contentType: input.fields.contentType ?? null,
+          byteSize: input.fields.byteSize,
+          checksum: input.fields.checksum ?? null,
+          metadata: input.fields.metadata ?? {},
+          createdAt: input.now,
+          updatedAt: input.now,
+          deletedAt: null,
+        };
+        attachments.push(record);
+        return record;
+      },
+      async createWithinUserQuota(input) {
+        const usedBytes = attachments.reduce((total, attachment) => (attachment.userId === input.userId && !attachment.deletedAt ? total + attachment.byteSize : total), 0);
+        if (usedBytes + input.fields.byteSize > input.userQuotaBytes) {
+          return undefined;
+        }
         const record: AttachmentRecord = {
           id: input.id,
           userId: input.userId,

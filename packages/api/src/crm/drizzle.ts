@@ -2,12 +2,13 @@ import { createDb } from "@DCRM/db";
 import { attachments, clientAuthorizedEmails, clients, entityTags, exchanges, leads, notifications, projects, tags, tickets, userSettings } from "@DCRM/db/schema/core-crm";
 import { resolveLocale } from "@DCRM/i18n";
 import type { AttachmentTargetType } from "@DCRM/domain";
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sum } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql, sum } from "drizzle-orm";
 
 import type { CrmRepository } from "./repository.js";
 import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
 
 type CrmDatabase = ReturnType<typeof createDb>;
+const ATTACHMENT_QUOTA_LOCK_NAMESPACE = 22_003;
 
 export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): CrmRepository {
   return {
@@ -399,6 +400,18 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
       async create(input) {
         const rows = await database.insert(attachments).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
         return requireAttachment(rows[0], input.id);
+      },
+      async createWithinUserQuota(input) {
+        return database.transaction(async (tx) => {
+          await tx.execute(sql`select pg_advisory_xact_lock(${ATTACHMENT_QUOTA_LOCK_NAMESPACE}, hashtext(${input.userId}))`);
+          const totalRows = await tx.select({ total: sum(attachments.byteSize) }).from(attachments).where(and(eq(attachments.userId, input.userId), isNull(attachments.deletedAt)));
+          const usedBytes = Number(totalRows[0]?.total ?? 0);
+          if (usedBytes + input.fields.byteSize > input.userQuotaBytes) {
+            return undefined;
+          }
+          const rows = await tx.insert(attachments).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
+          return requireAttachment(rows[0], input.id);
+        });
       },
       async listForTarget(input) {
         const rows = await database

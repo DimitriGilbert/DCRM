@@ -1,5 +1,6 @@
 import { protectedProcedure, publicProcedure, router } from "../index.js";
 
+import { aiRouter } from "./ai/index.js";
 import { automationRouter } from "./automation/index.js";
 import { attachmentsRouter } from "./attachments/index.js";
 import { clientsRouter } from "./clients/index.js";
@@ -24,6 +25,7 @@ export const appRouter = router({
       user: ctx.auth.user,
     };
   }),
+  ai: aiRouter,
   automation: automationRouter,
   clients: clientsRouter,
   leads: leadsRouter,

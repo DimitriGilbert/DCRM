@@ -9,6 +9,7 @@ import {
   WEBHOOK_AUTH_TYPES,
   WEBHOOK_MODES,
 } from "@DCRM/domain";
+import type { EncryptedSecretV1 } from "@DCRM/crypto";
 import { relations } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
@@ -16,12 +17,7 @@ import { user } from "./auth.js";
 
 type JsonObject = Record<string, unknown>;
 
-export type EncryptedValue = {
-  readonly ciphertext: string;
-  readonly nonce: string;
-  readonly tag: string;
-  readonly version: string;
-};
+export type EncryptedValue = EncryptedSecretV1;
 
 export const eventSourceEnum = pgEnum("event_source", EVENT_SOURCES);
 export const hookTypeEnum = pgEnum("hook_type", HOOK_TYPES);

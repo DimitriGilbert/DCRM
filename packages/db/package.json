@@ -23,6 +23,7 @@
     "db:down": "docker compose down"
   },
   "dependencies": {
+    "@DCRM/crypto": "workspace:*",
     "@DCRM/domain": "workspace:*",
     "@DCRM/env": "workspace:*",
     "dotenv": "catalog:",

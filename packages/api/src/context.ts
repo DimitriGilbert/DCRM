@@ -1,15 +1,20 @@
 import { auth } from "@DCRM/auth";
 import { verifyApiKeyFromHeaders } from "@DCRM/auth/api-keys";
 import { createDcrmApiKeyService } from "@DCRM/auth/api-keys.drizzle";
+import { createSecretCrypto } from "@DCRM/crypto";
 import { createDb } from "@DCRM/db";
 import { createServerEnv } from "@DCRM/env/create-server-env";
 import { createEventService } from "@DCRM/events";
 import { createDrizzleEventRepository } from "@DCRM/events/drizzle";
 
 import type { ApiKeyService, VerifiedApiKey } from "@DCRM/auth/api-keys";
+import type { CrmChatRunner } from "@DCRM/ai";
+import type { SecretCrypto } from "@DCRM/crypto";
 import type { EventService } from "@DCRM/events";
+import type { HookExecutionQueue, HookExecutionRepository } from "@DCRM/events/hooks";
 
 import { createDrizzleAutomationRepository } from "./automation/drizzle.js";
+import { createHookAwareAiEventService, createProductionHookExecutionQueue } from "./automation/runtime.js";
 import { createDrizzleCrmRepository } from "./crm/drizzle.js";
 import { createStorageService } from "./storage/index.js";
 
@@ -38,10 +43,14 @@ export type RequestAuth =
 
 type CreateContextOptions = {
   automationRepository?: AutomationRepository;
+  aiChatRunner?: CrmChatRunner;
   apiKeyService?: ApiKeyService;
   crmRepository?: CrmRepository;
   eventService?: EventService;
+  hookExecutionQueue?: HookExecutionQueue;
+  hookExecutionRepository?: HookExecutionRepository;
   req: Request;
+  secretCrypto?: SecretCrypto;
   storage?: ContextStorage;
 };
 
@@ -53,20 +62,30 @@ export type ContextStorage = {
 
 export type Context = {
   readonly auth: RequestAuth | null;
+  readonly aiChatRunner?: CrmChatRunner;
   readonly automationRepository?: AutomationRepository;
   readonly crmRepository: CrmRepository;
   readonly eventService: EventService;
+  readonly secretCrypto?: SecretCrypto;
   readonly session: Session | null;
   readonly storage?: ContextStorage;
 };
 
-export async function createContext({ apiKeyService, automationRepository, crmRepository, eventService, req, storage }: CreateContextOptions): Promise<Context> {
+export async function createContext({ apiKeyService, aiChatRunner, automationRepository, crmRepository, eventService, hookExecutionQueue, hookExecutionRepository, req, secretCrypto, storage }: CreateContextOptions): Promise<Context> {
   const database = crmRepository || eventService || automationRepository ? undefined : createDb();
+  const env = createServerEnv(process.env);
   const resolvedAutomationRepository = automationRepository ?? createDrizzleAutomationRepository(database ?? createDb());
   const resolvedCrmRepository = crmRepository ?? createDrizzleCrmRepository(database ?? createDb());
-  const resolvedEventService =
-    eventService ?? createEventService({ repository: createDrizzleEventRepository(database ?? createDb()) });
+  const baseEventService = eventService ?? createEventService({ repository: createDrizzleEventRepository(database ?? createDb()) });
   const resolvedStorage = storage ?? createDefaultStorage();
+  const resolvedSecretCrypto = secretCrypto ?? createSecretCrypto(env);
+  const resolvedHookExecutionRepository = hookExecutionRepository ?? (await import("@DCRM/events/hooks.drizzle")).createDrizzleHookExecutionRepository(database ?? createDb());
+  const resolvedEventService = createHookAwareAiEventService({
+    eventService: baseEventService,
+    automationRepository: resolvedAutomationRepository,
+    executionRepository: resolvedHookExecutionRepository,
+    queue: hookExecutionQueue ?? createProductionHookExecutionQueue(env.REDIS_URL),
+  });
   const session = await auth.api.getSession({
     headers: req.headers,
   });
@@ -77,9 +96,11 @@ export async function createContext({ apiKeyService, automationRepository, crmRe
         kind: "session",
         user: session.user,
       } satisfies RequestAuth,
+      aiChatRunner,
       automationRepository: resolvedAutomationRepository,
       crmRepository: resolvedCrmRepository,
       eventService: resolvedEventService,
+      secretCrypto: resolvedSecretCrypto,
       session,
       storage: resolvedStorage,
     };
@@ -97,9 +118,11 @@ export async function createContext({ apiKeyService, automationRepository, crmRe
           user: verifiedApiKey.user,
         } satisfies RequestAuth)
       : null,
+    aiChatRunner,
     automationRepository: resolvedAutomationRepository,
     crmRepository: resolvedCrmRepository,
     eventService: resolvedEventService,
+    secretCrypto: resolvedSecretCrypto,
     session,
     storage: resolvedStorage,
   };

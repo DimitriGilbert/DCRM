@@ -21,6 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TicketsNewRouteImport } from './routes/tickets.new'
 import { Route as TicketsKanbanRouteImport } from './routes/tickets.kanban'
 import { Route as TicketsTicketIdRouteImport } from './routes/tickets.$ticketId'
+import { Route as SettingsAiRouteImport } from './routes/settings.ai'
 import { Route as ProjectsNewRouteImport } from './routes/projects.new'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
 import { Route as OnboardingLanguageRouteImport } from './routes/onboarding.language'
@@ -29,6 +30,7 @@ import { Route as LeadsKanbanRouteImport } from './routes/leads.kanban'
 import { Route as LeadsLeadIdRouteImport } from './routes/leads.$leadId'
 import { Route as ClientsNewRouteImport } from './routes/clients.new'
 import { Route as ClientsClientIdRouteImport } from './routes/clients.$clientId'
+import { Route as AiChatRouteImport } from './routes/ai.chat'
 import { Route as TicketsTicketIdEditRouteImport } from './routes/tickets.$ticketId.edit'
 import { Route as ProjectsProjectIdEditRouteImport } from './routes/projects.$projectId.edit'
 import { Route as LeadsLeadIdEditRouteImport } from './routes/leads.$leadId.edit'
@@ -97,6 +99,11 @@ const TicketsTicketIdRoute = TicketsTicketIdRouteImport.update({
   path: '/$ticketId',
   getParentRoute: () => TicketsRoute,
 } as any)
+const SettingsAiRoute = SettingsAiRouteImport.update({
+  id: '/settings/ai',
+  path: '/settings/ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsNewRoute = ProjectsNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -136,6 +143,11 @@ const ClientsClientIdRoute = ClientsClientIdRouteImport.update({
   id: '/$clientId',
   path: '/$clientId',
   getParentRoute: () => ClientsRoute,
+} as any)
+const AiChatRoute = AiChatRouteImport.update({
+  id: '/ai/chat',
+  path: '/ai/chat',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const TicketsTicketIdEditRoute = TicketsTicketIdEditRouteImport.update({
   id: '/edit',
@@ -183,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/projects': typeof ProjectsRouteWithChildren
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRouteWithChildren
+  '/ai/chat': typeof AiChatRoute
   '/clients/$clientId': typeof ClientsClientIdRouteWithChildren
   '/clients/new': typeof ClientsNewRoute
   '/leads/$leadId': typeof LeadsLeadIdRouteWithChildren
@@ -191,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/onboarding/language': typeof OnboardingLanguageRoute
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
+  '/settings/ai': typeof SettingsAiRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
@@ -212,6 +226,7 @@ export interface FileRoutesByTo {
   '/projects': typeof ProjectsRouteWithChildren
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRouteWithChildren
+  '/ai/chat': typeof AiChatRoute
   '/clients/$clientId': typeof ClientsClientIdRouteWithChildren
   '/clients/new': typeof ClientsNewRoute
   '/leads/$leadId': typeof LeadsLeadIdRouteWithChildren
@@ -220,6 +235,7 @@ export interface FileRoutesByTo {
   '/onboarding/language': typeof OnboardingLanguageRoute
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
+  '/settings/ai': typeof SettingsAiRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
@@ -242,6 +258,7 @@ export interface FileRoutesById {
   '/projects': typeof ProjectsRouteWithChildren
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRouteWithChildren
+  '/ai/chat': typeof AiChatRoute
   '/clients/$clientId': typeof ClientsClientIdRouteWithChildren
   '/clients/new': typeof ClientsNewRoute
   '/leads/$leadId': typeof LeadsLeadIdRouteWithChildren
@@ -250,6 +267,7 @@ export interface FileRoutesById {
   '/onboarding/language': typeof OnboardingLanguageRoute
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
+  '/settings/ai': typeof SettingsAiRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
@@ -273,6 +291,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/search'
     | '/tickets'
+    | '/ai/chat'
     | '/clients/$clientId'
     | '/clients/new'
     | '/leads/$leadId'
@@ -281,6 +300,7 @@ export interface FileRouteTypes {
     | '/onboarding/language'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/settings/ai'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
@@ -302,6 +322,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/search'
     | '/tickets'
+    | '/ai/chat'
     | '/clients/$clientId'
     | '/clients/new'
     | '/leads/$leadId'
@@ -310,6 +331,7 @@ export interface FileRouteTypes {
     | '/onboarding/language'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/settings/ai'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
@@ -331,6 +353,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/search'
     | '/tickets'
+    | '/ai/chat'
     | '/clients/$clientId'
     | '/clients/new'
     | '/leads/$leadId'
@@ -339,6 +362,7 @@ export interface FileRouteTypes {
     | '/onboarding/language'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/settings/ai'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
@@ -361,7 +385,9 @@ export interface RootRouteChildren {
   ProjectsRoute: typeof ProjectsRouteWithChildren
   SearchRoute: typeof SearchRoute
   TicketsRoute: typeof TicketsRouteWithChildren
+  AiChatRoute: typeof AiChatRoute
   OnboardingLanguageRoute: typeof OnboardingLanguageRoute
+  SettingsAiRoute: typeof SettingsAiRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
@@ -452,6 +478,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TicketsTicketIdRouteImport
       parentRoute: typeof TicketsRoute
     }
+    '/settings/ai': {
+      id: '/settings/ai'
+      path: '/settings/ai'
+      fullPath: '/settings/ai'
+      preLoaderRoute: typeof SettingsAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects/new': {
       id: '/projects/new'
       path: '/new'
@@ -507,6 +540,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/clients/$clientId'
       preLoaderRoute: typeof ClientsClientIdRouteImport
       parentRoute: typeof ClientsRoute
+    }
+    '/ai/chat': {
+      id: '/ai/chat'
+      path: '/ai/chat'
+      fullPath: '/ai/chat'
+      preLoaderRoute: typeof AiChatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/tickets/$ticketId/edit': {
       id: '/tickets/$ticketId/edit'
@@ -675,7 +715,9 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsRoute: ProjectsRouteWithChildren,
   SearchRoute: SearchRoute,
   TicketsRoute: TicketsRouteWithChildren,
+  AiChatRoute: AiChatRoute,
   OnboardingLanguageRoute: OnboardingLanguageRoute,
+  SettingsAiRoute: SettingsAiRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }

@@ -46,12 +46,12 @@ export type LeadIdInput = z.infer<typeof leadIdSchema>;
 
 export const listLeadsSchema = z.object({
   limit: z.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  cursor: z.string().datetime().optional(),
   includeDeleted: z.boolean().default(false),
   stage: leadStageSchema.optional(),
   tagIds: z.array(z.string().min(1)).optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
 });
 
 export type ListLeadsInput = z.infer<typeof listLeadsSchema>;

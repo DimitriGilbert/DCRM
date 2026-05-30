@@ -59,7 +59,7 @@ export const sendExchangeEmail = protectedProcedure
       const [ticket] = await db
         .select({ id: tickets.id, title: tickets.title, projectId: tickets.projectId })
         .from(tickets)
-        .where(eq(tickets.id, exchange.ticketId))
+        .where(and(eq(tickets.id, exchange.ticketId), eq(tickets.userId, ctx.user.id)))
         .limit(1);
 
       if (ticket) {
@@ -67,14 +67,14 @@ export const sendExchangeEmail = protectedProcedure
         const [project] = await db
           .select({ clientId: projects.clientId })
           .from(projects)
-          .where(eq(projects.id, ticket.projectId))
+          .where(and(eq(projects.id, ticket.projectId), eq(projects.userId, ctx.user.id)))
           .limit(1);
 
         if (project) {
           const [client] = await db
             .select({ email: clients.email })
             .from(clients)
-            .where(eq(clients.id, project.clientId))
+            .where(and(eq(clients.id, project.clientId), eq(clients.userId, ctx.user.id)))
             .limit(1);
 
           recipientEmail = client?.email ?? null;
@@ -87,7 +87,7 @@ export const sendExchangeEmail = protectedProcedure
       const [client] = await db
         .select({ email: clients.email })
         .from(clients)
-        .where(eq(clients.id, exchange.clientId))
+        .where(and(eq(clients.id, exchange.clientId), eq(clients.userId, ctx.user.id)))
         .limit(1);
 
       recipientEmail = client?.email ?? null;
@@ -143,6 +143,7 @@ export const sendExchangeEmail = protectedProcedure
         .where(
           and(
             eq(exchanges.ticketId, exchange.ticketId),
+            eq(exchanges.userId, ctx.user.id),
             isNotNull(exchanges.metadata),
           ),
         )

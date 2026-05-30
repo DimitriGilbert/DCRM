@@ -38,12 +38,13 @@ export const acceptInsight = protectedProcedure
       throw new TRPCError({ code: "BAD_REQUEST", message: "AI insight has no mappable fields" });
     }
 
-    await db.transaction(async (tx) => {
-      await tx
-        .update(aiInsights)
-        .set({ applied: true, fieldMappingResult: { ...mappingResult, fields, appliedAt: new Date().toISOString() } })
-        .where(eq(aiInsights.id, input.id));
-    });
+    // Known gap: applied is set to true without actually writing the mapped fields
+    // to the target entity. A future iteration must resolve the field values against
+    // the entity (client, lead, etc.) and persist them before marking applied.
+    await db
+      .update(aiInsights)
+      .set({ applied: true, fieldMappingResult: { ...mappingResult, fields, appliedAt: new Date().toISOString() } })
+      .where(eq(aiInsights.id, input.id));
 
     return {
       id: insight.id,

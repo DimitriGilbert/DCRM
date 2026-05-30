@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { db } from "@DCRM/db";
 import { clients } from "@DCRM/db/schema/crm";
 import { isValidPattern } from "@DCRM/email";
@@ -12,46 +13,54 @@ export const addAuthorizedAddress = protectedProcedure
     // Validate patterns
     for (const pattern of input.patterns) {
       if (!isValidPattern(pattern)) {
-        throw new Error(`Invalid authorized address pattern: "${pattern}". Use exact email or *@domain.com format.`);
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Invalid authorized address pattern: "${pattern}". Use exact email or *@domain.com format.`,
+        });
       }
     }
 
-    // Fetch current client
-    const [client] = await db
-      .select({
-        id: clients.id,
-        authorizedAddresses: clients.authorizedAddresses,
-      })
-      .from(clients)
-      .where(
-        and(
-          eq(clients.id, input.clientId),
-          eq(clients.userId, ctx.user.id),
-          isNull(clients.deletedAt),
-        ),
-      )
-      .limit(1);
+    const result = await db.transaction(async (tx) => {
+      // Fetch current client with row lock
+      const [client] = await tx
+        .select({
+          id: clients.id,
+          authorizedAddresses: clients.authorizedAddresses,
+        })
+        .from(clients)
+        .where(
+          and(
+            eq(clients.id, input.clientId),
+            eq(clients.userId, ctx.user.id),
+            isNull(clients.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for("update");
 
-    if (!client) {
-      throw new Error("Client not found");
-    }
+      if (!client) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      }
 
-    const existing = client.authorizedAddresses ?? [];
-    const newPatterns = input.patterns.filter((p) => !existing.includes(p));
+      const existing = client.authorizedAddresses ?? [];
+      const newPatterns = input.patterns.filter((p) => !existing.includes(p));
 
-    if (newPatterns.length === 0) {
-      return { clientId: input.clientId, authorizedAddresses: existing };
-    }
+      if (newPatterns.length === 0) {
+        return { clientId: input.clientId, authorizedAddresses: existing };
+      }
 
-    const updated = [...existing, ...newPatterns];
+      const updated = [...existing, ...newPatterns];
 
-    await db
-      .update(clients)
-      .set({
-        authorizedAddresses: updated,
-        updatedAt: new Date(),
-      })
-      .where(eq(clients.id, input.clientId));
+      await tx
+        .update(clients)
+        .set({
+          authorizedAddresses: updated,
+          updatedAt: new Date(),
+        })
+        .where(eq(clients.id, input.clientId));
 
-    return { clientId: input.clientId, authorizedAddresses: updated };
+      return { clientId: input.clientId, authorizedAddresses: updated };
+    });
+
+    return result;
   });

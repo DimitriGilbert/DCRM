@@ -1,5 +1,6 @@
 import { db } from "@DCRM/db";
 import { tickets } from "@DCRM/db/schema/crm";
+import { TICKET_STATUSES } from "@DCRM/domain";
 import { eq, and, isNull, isNotNull, gte, asc, inArray } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
@@ -22,7 +23,7 @@ export const upcomingTicketDeadlines = protectedProcedure
         and(
           eq(tickets.userId, ctx.user.id),
           isNull(tickets.deletedAt),
-          inArray(tickets.status, ["open", "in_progress"]),
+          inArray(tickets.status, [TICKET_STATUSES.OPEN, TICKET_STATUSES.IN_PROGRESS]),
           isNotNull(tickets.dueDate),
           gte(tickets.dueDate, now),
         ),

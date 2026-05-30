@@ -28,7 +28,7 @@ export const restoreProject = protectedProcedure
     const [updated] = await db
       .update(projects)
       .set({ deletedAt: null })
-      .where(eq(projects.id, input.id))
+      .where(and(eq(projects.id, input.id), eq(projects.userId, ctx.user.id)))
       .returning();
 
     await emitEvent(

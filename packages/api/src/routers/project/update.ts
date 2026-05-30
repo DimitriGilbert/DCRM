@@ -62,7 +62,7 @@ export const updateProject = protectedProcedure
     const [updated] = await db
       .update(projects)
       .set(updates)
-      .where(eq(projects.id, id))
+      .where(and(eq(projects.id, id), eq(projects.userId, ctx.user.id)))
       .returning();
 
     // Check if status changed and emit status_changed event

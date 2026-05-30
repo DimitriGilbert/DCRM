@@ -6,6 +6,7 @@ import {
   tickets,
   exchanges,
   entityTags,
+  tags,
 } from "@DCRM/db/schema/crm";
 import {
   eq,
@@ -49,14 +50,17 @@ function dateRangeCondition(
 async function resolveEntityIdsByTags(
   entityType: string,
   tagIds: string[],
+  userId: string,
 ): Promise<string[]> {
   const rows = await db
     .select({ entityId: entityTags.entityId })
     .from(entityTags)
+    .innerJoin(tags, eq(entityTags.tagId, tags.id))
     .where(
       and(
         eq(entityTags.entityType, entityType),
         inArray(entityTags.tagId, tagIds),
+        eq(tags.userId, userId),
       ),
     );
 
@@ -90,7 +94,7 @@ async function searchClients(
   conditions = [...conditions, ...dateConds];
 
   if (tagIds && tagIds.length > 0) {
-    const matchingIds = await resolveEntityIdsByTags("client", tagIds);
+    const matchingIds = await resolveEntityIdsByTags("client", tagIds, userId);
     if (matchingIds.length === 0) return [];
     conditions.push(inArray(clients.id, matchingIds));
   }
@@ -139,7 +143,7 @@ async function searchLeads(
   conditions = [...conditions, ...dateConds];
 
   if (tagIds && tagIds.length > 0) {
-    const matchingIds = await resolveEntityIdsByTags("lead", tagIds);
+    const matchingIds = await resolveEntityIdsByTags("lead", tagIds, userId);
     if (matchingIds.length === 0) return [];
     conditions.push(inArray(leads.id, matchingIds));
   }
@@ -185,7 +189,7 @@ async function searchProjects(
   conditions = [...conditions, ...dateConds];
 
   if (tagIds && tagIds.length > 0) {
-    const matchingIds = await resolveEntityIdsByTags("project", tagIds);
+    const matchingIds = await resolveEntityIdsByTags("project", tagIds, userId);
     if (matchingIds.length === 0) return [];
     conditions.push(inArray(projects.id, matchingIds));
   }
@@ -231,7 +235,7 @@ async function searchTickets(
   conditions = [...conditions, ...dateConds];
 
   if (tagIds && tagIds.length > 0) {
-    const matchingIds = await resolveEntityIdsByTags("ticket", tagIds);
+    const matchingIds = await resolveEntityIdsByTags("ticket", tagIds, userId);
     if (matchingIds.length === 0) return [];
     conditions.push(inArray(tickets.id, matchingIds));
   }

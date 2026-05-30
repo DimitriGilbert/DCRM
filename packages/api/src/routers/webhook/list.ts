@@ -1,6 +1,7 @@
 import { db } from "@DCRM/db";
 import { hooks } from "@DCRM/db/schema/automation";
-import { eq } from "drizzle-orm";
+import { HOOK_TYPES } from "@DCRM/domain";
+import { eq, and } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 
@@ -17,27 +18,24 @@ export const listOutgoingWebhooks = protectedProcedure.query(async ({ ctx }) => 
       updatedAt: hooks.updatedAt,
     })
     .from(hooks)
-    .where(eq(hooks.userId, ctx.user.id));
+    .where(and(eq(hooks.userId, ctx.user.id), eq(hooks.type, HOOK_TYPES.OUTGOING_WEBHOOK)));
 
-  // Filter to only outgoing_webhook type hooks
-  return rows
-    .filter((row) => row.type === "outgoing_webhook")
-    .map((row) => {
-      const config = row.config as Record<string, unknown>;
-      const auth = config["auth"] as Record<string, unknown> | undefined;
-      return {
-        id: row.id,
-        name: row.name,
-        eventType: row.eventType,
-        enabled: row.enabled,
-        url: config["url"] as string,
-        method: (config["method"] as string) ?? "POST",
-        authMode: (auth?.["mode"] as string) ?? "none",
-        headers: (config["headers"] as Record<string, string>) ?? {},
-        timeoutMs: (config["timeoutMs"] as number) ?? 10_000,
-        maxRetries: (config["maxRetries"] as number) ?? 3,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
-    });
+  return rows.map((row) => {
+    const config = row.config as Record<string, unknown>;
+    const auth = config["auth"] as Record<string, unknown> | undefined;
+    return {
+      id: row.id,
+      name: row.name,
+      eventType: row.eventType,
+      enabled: row.enabled,
+      url: config["url"] as string,
+      method: (config["method"] as string) ?? "POST",
+      authMode: (auth?.["mode"] as string) ?? "none",
+      headers: (config["headers"] as Record<string, string>) ?? {},
+      timeoutMs: (config["timeoutMs"] as number) ?? 10_000,
+      maxRetries: (config["maxRetries"] as number) ?? 3,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  });
 });

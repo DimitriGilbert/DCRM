@@ -28,7 +28,7 @@ export const restoreTicket = protectedProcedure
     const [updated] = await db
       .update(tickets)
       .set({ deletedAt: null })
-      .where(eq(tickets.id, input.id))
+      .where(and(eq(tickets.id, input.id), eq(tickets.userId, ctx.user.id)))
       .returning();
 
     await emitEvent(

@@ -1,7 +1,7 @@
 import { db } from "@DCRM/db";
 import { leads } from "@DCRM/db/schema/crm";
 import { emitEvent, EVENT_TYPE } from "@DCRM/events";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { updateLeadSchema } from "./schemas";
@@ -18,6 +18,7 @@ export const updateLead = protectedProcedure
         and(
           eq(leads.id, id),
           eq(leads.userId, ctx.user.id),
+          isNull(leads.deletedAt),
         ),
       )
       .limit(1);

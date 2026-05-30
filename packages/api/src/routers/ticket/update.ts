@@ -61,7 +61,7 @@ export const updateTicket = protectedProcedure
     const [updated] = await db
       .update(tickets)
       .set(updates)
-      .where(eq(tickets.id, id))
+      .where(and(eq(tickets.id, id), eq(tickets.userId, ctx.user.id)))
       .returning();
 
     // Check if status changed and emit status_changed event

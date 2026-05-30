@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { outgoingWebhookAuthModeSchema } from "@DCRM/domain";
 
 export const createOutgoingWebhookSchema = z.object({
   name: z.string().min(1).max(200),
@@ -10,7 +9,6 @@ export const createOutgoingWebhookSchema = z.object({
     { message: "URL must use http or https scheme" },
   ),
   method: z.enum(["POST", "PUT", "PATCH"]).optional().default("POST"),
-  authMode: outgoingWebhookAuthModeSchema.optional().default("custom_headers"),
   /** Raw (unencrypted) auth values — encrypted server-side before storage. */
   authConfig: z.union([
     z.object({
@@ -54,7 +52,6 @@ export const updateOutgoingWebhookSchema = z.object({
     { message: "URL must use http or https scheme" },
   ).optional(),
   method: z.enum(["POST", "PUT", "PATCH"]).optional(),
-  authMode: outgoingWebhookAuthModeSchema.optional(),
   authConfig: z.union([
     z.object({ mode: z.literal("none") }),
     z.object({ mode: z.literal("bearer"), token: z.string().min(1) }),

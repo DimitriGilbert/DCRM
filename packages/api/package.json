@@ -9,18 +9,27 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit"
+  },
   "dependencies": {
     "@DCRM/auth": "workspace:*",
     "@DCRM/db": "workspace:*",
+    "@DCRM/domain": "workspace:*",
     "@DCRM/env": "workspace:*",
+    "@DCRM/events": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
+    "drizzle-orm": "^0.45.1",
     "dotenv": "catalog:",
+    "nanoid": "^5.1.5",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@DCRM/config": "workspace:*",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^3.2.1"
   }
 }

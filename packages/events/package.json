@@ -1,0 +1,31 @@
+{
+  "name": "@DCRM/events",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "check-types": "tsc --noEmit",
+    "test": "rm -rf dist-test && tsc --project tsconfig.test.json && node --test \"dist-test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@DCRM/db": "workspace:*",
+    "@DCRM/domain": "workspace:*",
+    "bullmq": "^5.77.6",
+    "drizzle-orm": "^0.45.1"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

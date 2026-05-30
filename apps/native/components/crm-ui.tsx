@@ -48,6 +48,14 @@ function emptyToNull(value: string) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Please try again.";
+}
+
 function useRequireSession() {
   const { data: session, isPending } = authClient.useSession();
   return { session, isPending, isSignedIn: Boolean(session?.user) };
@@ -149,36 +157,42 @@ function StateBlock({ title, description }: { title: string; description?: strin
 }
 
 export function CrmDashboardScreen() {
+  return (
+    <ProtectedCrmScreen>
+      <CrmDashboardContent />
+    </ProtectedCrmScreen>
+  );
+}
+
+function CrmDashboardContent() {
   const dashboard = useQuery(trpc.dashboard.summary.queryOptions());
   const clients = useQuery(trpc.clients.list.queryOptions({ includeDeleted: false }));
 
   return (
-    <ProtectedCrmScreen>
-      <Container className="p-6">
-        <ScreenHeader title="DCRM mobile" description="Core client, project, ticket, and exchange access for work on the go." />
-        {dashboard.data ? (
-          <View className="gap-4">
-            <View className="flex-row gap-3">
-              <MetricCard label="Clients" value={dashboard.data.metrics.activeClients} />
-              <MetricCard label="Projects" value={dashboard.data.metrics.activeProjects} />
-              <MetricCard label="Open tickets" value={dashboard.data.metrics.openTickets} />
-            </View>
-            <QuickActions hasClients={(clients.data?.length ?? 0) > 0} />
-            <Card variant="secondary" className="p-4">
-              <Card.Title>Recent activity</Card.Title>
-              <View className="mt-3 gap-3">
-                {dashboard.data.recentActivity.length > 0 ? dashboard.data.recentActivity.map((item) => (
-                  <View key={item.id} className="border-b border-border pb-3">
-                    <Text className="text-foreground font-medium">{item.title}</Text>
-                    <Text className="text-muted text-xs">{formatLabel(item.kind)} · {formatDate(item.occurredAt)}</Text>
-                  </View>
-                )) : <Text className="text-muted">No recent exchanges yet.</Text>}
-              </View>
-            </Card>
+    <Container className="p-6">
+      <ScreenHeader title="DCRM mobile" description="Core client, project, ticket, and exchange access for work on the go." />
+      {dashboard.data ? (
+        <View className="gap-4">
+          <View className="flex-row gap-3">
+            <MetricCard label="Clients" value={dashboard.data.metrics.activeClients} />
+            <MetricCard label="Projects" value={dashboard.data.metrics.activeProjects} />
+            <MetricCard label="Open tickets" value={dashboard.data.metrics.openTickets} />
           </View>
-        ) : dashboard.isError ? <StateBlock title="Dashboard could not load" description="Check your connection and API session." /> : <Spinner />}
-      </Container>
-    </ProtectedCrmScreen>
+          <QuickActions hasClients={(clients.data?.length ?? 0) > 0} />
+          <Card variant="secondary" className="p-4">
+            <Card.Title>Recent activity</Card.Title>
+            <View className="mt-3 gap-3">
+              {dashboard.data.recentActivity.length > 0 ? dashboard.data.recentActivity.map((item) => (
+                <View key={item.id} className="border-b border-border pb-3">
+                  <Text className="text-foreground font-medium">{item.title}</Text>
+                  <Text className="text-muted text-xs">{formatLabel(item.kind)} · {formatDate(item.occurredAt)}</Text>
+                </View>
+              )) : <Text className="text-muted">No recent exchanges yet.</Text>}
+            </View>
+          </Card>
+        </View>
+      ) : dashboard.isError ? <StateBlock title="Dashboard could not load" description="Check your connection and API session." /> : <Spinner />}
+    </Container>
   );
 }
 
@@ -202,17 +216,23 @@ function QuickActions({ hasClients }: { hasClients: boolean }) {
 }
 
 export function ClientsScreen() {
+  return (
+    <ProtectedCrmScreen>
+      <ClientsContent />
+    </ProtectedCrmScreen>
+  );
+}
+
+function ClientsContent() {
   const [search, setSearch] = useState("");
   const clients = useQuery(trpc.clients.list.queryOptions({ search: search.trim() || undefined, includeDeleted: false }));
 
   return (
-    <ProtectedCrmScreen>
-      <Container className="p-6">
-        <ScreenHeader title="Clients" description="Browse and maintain the relationships that anchor your CRM." action={<IconLink href="/clients/new" icon="add" label="New" />} />
-        <Field label="Search" value={search} onChangeText={setSearch} placeholder="Name, email, company, website" />
-        <View className="mt-5 gap-3">{renderClientList(clients.data, clients.isError)}</View>
-      </Container>
-    </ProtectedCrmScreen>
+    <Container className="p-6">
+      <ScreenHeader title="Clients" description="Browse and maintain the relationships that anchor your CRM." action={<IconLink href="/clients/new" icon="add" label="New" />} />
+      <Field label="Search" value={search} onChangeText={setSearch} placeholder="Name, email, company, website" />
+      <View className="mt-5 gap-3">{renderClientList(clients.data, clients.isError)}</View>
+    </Container>
   );
 }
 
@@ -237,21 +257,27 @@ function ClientCard({ client }: { client: Client }) {
 }
 
 export function ClientDetailScreen({ clientId }: { clientId: string }) {
+  return (
+    <ProtectedCrmScreen>
+      <ClientDetailContent clientId={clientId} />
+    </ProtectedCrmScreen>
+  );
+}
+
+function ClientDetailContent({ clientId }: { clientId: string }) {
   const client = useQuery(trpc.clients.get.queryOptions({ id: clientId }));
   const projects = useQuery(trpc.projects.list.queryOptions({ clientId, includeDeleted: false }));
   const timeline = useQuery(trpc.exchanges.timeline.queryOptions({ clientId, includeDeleted: false }));
 
   return (
-    <ProtectedCrmScreen>
-      <Container className="p-6">
-        <ScreenHeader title={client.data?.name ?? "Client"} description="Profile, related projects, and internal timeline." action={<IconLink href={`/clients/${clientId}/edit`} icon="create-outline" label="Edit" />} />
-        {client.data ? <ClientDetails client={client.data} /> : client.isError ? <StateBlock title="Client could not load" /> : <Spinner />}
-        <SectionTitle title="Projects" />
-        <View className="gap-3">{projects.data?.length ? projects.data.map((project) => <ProjectCard key={project.id} project={project} />) : <StateBlock title="No projects for this client" />}</View>
-        <SectionTitle title="Timeline" />
-        <Timeline exchanges={timeline.data} isError={timeline.isError} />
-      </Container>
-    </ProtectedCrmScreen>
+    <Container className="p-6">
+      <ScreenHeader title={client.data?.name ?? "Client"} description="Profile, related projects, and internal timeline." action={<IconLink href={`/clients/${clientId}/edit`} icon="create-outline" label="Edit" />} />
+      {client.data ? <ClientDetails client={client.data} /> : client.isError ? <StateBlock title="Client could not load" /> : <Spinner />}
+      <SectionTitle title="Projects" />
+      <View className="gap-3">{renderProjectList(projects.data, projects.isError, "No projects for this client")}</View>
+      <SectionTitle title="Timeline" />
+      <Timeline exchanges={timeline.data} isError={timeline.isError} />
+    </Container>
   );
 }
 
@@ -268,6 +294,14 @@ function ClientDetails({ client }: { client: Client }) {
 }
 
 export function ClientFormScreen({ clientId }: { clientId?: string }) {
+  return (
+    <ProtectedCrmScreen>
+      <ClientFormContent clientId={clientId} />
+    </ProtectedCrmScreen>
+  );
+}
+
+function ClientFormContent({ clientId }: { clientId?: string }) {
   const { toast } = useToast();
   const client = useQuery({ ...trpc.clients.get.queryOptions({ id: clientId ?? "" }), enabled: Boolean(clientId) });
   const createClient = useMutation(trpc.clients.create.mutationOptions());
@@ -296,40 +330,78 @@ export function ClientFormScreen({ clientId }: { clientId?: string }) {
       toast.show({ variant: "danger", label: "Client name is required" });
       return;
     }
-    const saved = clientId ? await updateClient.mutateAsync({ id: clientId, ...input }) : await createClient.mutateAsync(input);
-    await queryClient.invalidateQueries();
-    toast.show({ variant: "success", label: clientId ? "Client updated" : "Client created" });
-    router.replace(`/clients/${saved.id}`);
+    try {
+      const saved = clientId ? await updateClient.mutateAsync({ id: clientId, ...input }) : await createClient.mutateAsync(input);
+      try {
+        await queryClient.invalidateQueries();
+      } catch (error) {
+        toast.show({ variant: "danger", label: "Client saved, but refresh failed", description: getErrorMessage(error) });
+        return;
+      }
+      toast.show({ variant: "success", label: clientId ? "Client updated" : "Client created" });
+      router.replace(`/clients/${saved.id}`);
+    } catch (error) {
+      toast.show({ variant: "danger", label: clientId ? "Client update failed" : "Client creation failed", description: getErrorMessage(error) });
+    }
+  }
+
+  if (clientId && client.isError) {
+    return (
+      <Container className="p-6">
+        <ScreenHeader title="Edit client" description="Capture simple profile details from mobile." />
+        <StateBlock title="Client could not load" description="Check your connection and try opening this client again." />
+      </Container>
+    );
+  }
+
+  if (clientId && !client.data) {
+    return (
+      <Container className="p-6">
+        <ScreenHeader title="Edit client" description="Capture simple profile details from mobile." />
+        <Spinner />
+      </Container>
+    );
   }
 
   return (
-    <ProtectedCrmScreen>
-      <Container className="p-6">
-        <ScreenHeader title={clientId ? "Edit client" : "New client"} description="Capture simple profile details from mobile." />
-        <Surface variant="secondary" className="gap-4 rounded-xl p-4">
-          <Field label="Name" value={name} onChangeText={setName} placeholder="Acme Studio" />
-          <Field label="Email" value={email} onChangeText={setEmail} placeholder="client@example.com" />
-          <Field label="Phone" value={phone} onChangeText={setPhone} />
-          <Field label="Company" value={company} onChangeText={setCompany} />
-          <Field label="Website" value={website} onChangeText={setWebsite} placeholder="https://example.com" />
-          <Field label="Notes" value={notes} onChangeText={setNotes} multiline />
-          <Button onPress={submit} isDisabled={createClient.isPending || updateClient.isPending}><Button.Label>{clientId ? "Save client" : "Create client"}</Button.Label></Button>
-        </Surface>
-      </Container>
-    </ProtectedCrmScreen>
+    <Container className="p-6">
+      <ScreenHeader title={clientId ? "Edit client" : "New client"} description="Capture simple profile details from mobile." />
+      <Surface variant="secondary" className="gap-4 rounded-xl p-4">
+        <Field label="Name" value={name} onChangeText={setName} placeholder="Acme Studio" />
+        <Field label="Email" value={email} onChangeText={setEmail} placeholder="client@example.com" />
+        <Field label="Phone" value={phone} onChangeText={setPhone} />
+        <Field label="Company" value={company} onChangeText={setCompany} />
+        <Field label="Website" value={website} onChangeText={setWebsite} placeholder="https://example.com" />
+        <Field label="Notes" value={notes} onChangeText={setNotes} multiline />
+        <Button onPress={submit} isDisabled={createClient.isPending || updateClient.isPending}><Button.Label>{clientId ? "Save client" : "Create client"}</Button.Label></Button>
+      </Surface>
+    </Container>
   );
 }
 
 export function ProjectsScreen() {
-  const projects = useQuery(trpc.projects.list.queryOptions({ includeDeleted: false }));
   return (
     <ProtectedCrmScreen>
-      <Container className="p-6">
-        <ScreenHeader title="Projects" description="Browse active work and deadlines." action={<IconLink href="/projects/new" icon="add" label="New" />} />
-        <View className="gap-3">{projects.data ? projects.data.map((project) => <ProjectCard key={project.id} project={project} />) : projects.isError ? <StateBlock title="Projects could not load" /> : <Spinner />}</View>
-      </Container>
+      <ProjectsContent />
     </ProtectedCrmScreen>
   );
+}
+
+function ProjectsContent() {
+  const projects = useQuery(trpc.projects.list.queryOptions({ includeDeleted: false }));
+  return (
+    <Container className="p-6">
+      <ScreenHeader title="Projects" description="Browse active work and deadlines." action={<IconLink href="/projects/new" icon="add" label="New" />} />
+      <View className="gap-3">{renderProjectList(projects.data, projects.isError, "No projects yet")}</View>
+    </Container>
+  );
+}
+
+function renderProjectList(projects: readonly Project[] | undefined, isError: boolean, emptyTitle: string) {
+  if (isError) return <StateBlock title="Projects could not load" />;
+  if (!projects) return <Spinner />;
+  if (projects.length === 0) return <StateBlock title={emptyTitle} />;
+  return projects.map((project) => <ProjectCard key={project.id} project={project} />);
 }
 
 function ProjectCard({ project }: { project: Project }) {
@@ -339,11 +411,19 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 export function ProjectDetailScreen({ projectId }: { projectId: string }) {
+  return (
+    <ProtectedCrmScreen>
+      <ProjectDetailContent projectId={projectId} />
+    </ProtectedCrmScreen>
+  );
+}
+
+function ProjectDetailContent({ projectId }: { projectId: string }) {
   const project = useQuery(trpc.projects.get.queryOptions({ id: projectId }));
   const tickets = useQuery(trpc.tickets.list.queryOptions({ projectId, includeDeleted: false }));
   const timeline = useQuery(trpc.exchanges.timeline.queryOptions({ projectId, includeDeleted: false }));
   return (
-    <ProtectedCrmScreen><Container className="p-6"><ScreenHeader title={project.data?.name ?? "Project"} description="Project details, tickets, and exchanges." action={<IconLink href={`/projects/${projectId}/edit`} icon="create-outline" label="Edit" />} />{project.data ? <ProjectDetails project={project.data} /> : project.isError ? <StateBlock title="Project could not load" /> : <Spinner />}<SectionTitle title="Tickets" /><View className="gap-3">{tickets.data?.length ? tickets.data.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />) : <StateBlock title="No tickets for this project" />}</View><SectionTitle title="Timeline" /><Timeline exchanges={timeline.data} isError={timeline.isError} /></Container></ProtectedCrmScreen>
+    <Container className="p-6"><ScreenHeader title={project.data?.name ?? "Project"} description="Project details, tickets, and exchanges." action={<IconLink href={`/projects/${projectId}/edit`} icon="create-outline" label="Edit" />} />{project.data ? <ProjectDetails project={project.data} /> : project.isError ? <StateBlock title="Project could not load" /> : <Spinner />}<SectionTitle title="Tickets" /><View className="gap-3">{renderTicketList(tickets.data, tickets.isError, "No tickets for this project")}</View><SectionTitle title="Timeline" /><Timeline exchanges={timeline.data} isError={timeline.isError} /></Container>
   );
 }
 
@@ -352,6 +432,14 @@ function ProjectDetails({ project }: { project: Project }) {
 }
 
 export function ProjectFormScreen({ projectId }: { projectId?: string }) {
+  return (
+    <ProtectedCrmScreen>
+      <ProjectFormContent projectId={projectId} />
+    </ProtectedCrmScreen>
+  );
+}
+
+function ProjectFormContent({ projectId }: { projectId?: string }) {
   const { toast } = useToast();
   const clients = useQuery(trpc.clients.list.queryOptions({ includeDeleted: false }));
   const project = useQuery({ ...trpc.projects.get.queryOptions({ id: projectId ?? "" }), enabled: Boolean(projectId) });
@@ -378,18 +466,68 @@ export function ProjectFormScreen({ projectId }: { projectId?: string }) {
       return;
     }
     const input: ProjectInput = { clientId: selectedClientId, name: name.trim(), description: emptyToNull(description), status };
-    const saved = projectId ? await updateProject.mutateAsync({ id: projectId, ...input }) : await createProject.mutateAsync(input);
-    await queryClient.invalidateQueries();
-    toast.show({ variant: "success", label: projectId ? "Project updated" : "Project created" });
-    router.replace(`/projects/${saved.id}`);
+    try {
+      const saved = projectId ? await updateProject.mutateAsync({ id: projectId, ...input }) : await createProject.mutateAsync(input);
+      try {
+        await queryClient.invalidateQueries();
+      } catch (error) {
+        toast.show({ variant: "danger", label: "Project saved, but refresh failed", description: getErrorMessage(error) });
+        return;
+      }
+      toast.show({ variant: "success", label: projectId ? "Project updated" : "Project created" });
+      router.replace(`/projects/${saved.id}`);
+    } catch (error) {
+      toast.show({ variant: "danger", label: projectId ? "Project update failed" : "Project creation failed", description: getErrorMessage(error) });
+    }
   }
 
-  return <ProtectedCrmScreen><Container className="p-6"><ScreenHeader title={projectId ? "Edit project" : "New project"} description="Simple project capture for mobile." />{clients.data?.length ? <Surface variant="secondary" className="gap-4 rounded-xl p-4"><EntitySelectChips label="Client" options={clients.data.map((clientItem) => ({ value: clientItem.id, label: clientItem.name }))} value={clientId || (clients.data[0]?.id ?? "")} onChange={setClientId} /><Field label="Name" value={name} onChangeText={setName} /><SelectChips label="Status" options={projectStatuses} value={status ?? "active"} onChange={setStatus} /><Field label="Description" value={description} onChangeText={setDescription} multiline /><Button onPress={submit} isDisabled={createProject.isPending || updateProject.isPending}><Button.Label>{projectId ? "Save project" : "Create project"}</Button.Label></Button></Surface> : <StateBlock title="Create a client first" description="Projects must belong to a client." />}</Container></ProtectedCrmScreen>;
+  if (projectId && project.isError) {
+    return (
+      <Container className="p-6">
+        <ScreenHeader title="Edit project" description="Simple project capture for mobile." />
+        <StateBlock title="Project could not load" description="Check your connection and try opening this project again." />
+      </Container>
+    );
+  }
+
+  if (projectId && !project.data) {
+    return (
+      <Container className="p-6">
+        <ScreenHeader title="Edit project" description="Simple project capture for mobile." />
+        <Spinner />
+      </Container>
+    );
+  }
+
+  return <Container className="p-6"><ScreenHeader title={projectId ? "Edit project" : "New project"} description="Simple project capture for mobile." />{renderProjectFormBody({ clients: clients.data, isError: clients.isError, clientId, setClientId, name, setName, status, setStatus, description, setDescription, submit, isPending: createProject.isPending || updateProject.isPending, isEditing: Boolean(projectId) })}</Container>;
+}
+
+function renderProjectFormBody({ clients, isError, clientId, setClientId, name, setName, status, setStatus, description, setDescription, submit, isPending, isEditing }: { clients: readonly Client[] | undefined; isError: boolean; clientId: string; setClientId: (value: string) => void; name: string; setName: (value: string) => void; status: ProjectInput["status"]; setStatus: (value: ProjectInput["status"]) => void; description: string; setDescription: (value: string) => void; submit: () => Promise<void>; isPending: boolean; isEditing: boolean }) {
+  if (isError) return <StateBlock title="Clients could not load" description="Projects must be linked to a client." />;
+  if (!clients) return <Spinner />;
+  if (clients.length === 0) return <StateBlock title="Create a client first" description="Projects must belong to a client." />;
+
+  return <Surface variant="secondary" className="gap-4 rounded-xl p-4"><EntitySelectChips label="Client" options={clients.map((clientItem) => ({ value: clientItem.id, label: clientItem.name }))} value={clientId || (clients[0]?.id ?? "")} onChange={setClientId} /><Field label="Name" value={name} onChangeText={setName} /><SelectChips label="Status" options={projectStatuses} value={status ?? "active"} onChange={setStatus} /><Field label="Description" value={description} onChangeText={setDescription} multiline /><Button onPress={submit} isDisabled={isPending}><Button.Label>{isEditing ? "Save project" : "Create project"}</Button.Label></Button></Surface>;
 }
 
 export function TicketsScreen() {
+  return (
+    <ProtectedCrmScreen>
+      <TicketsContent />
+    </ProtectedCrmScreen>
+  );
+}
+
+function TicketsContent() {
   const tickets = useQuery(trpc.tickets.list.queryOptions({ includeDeleted: false }));
-  return <ProtectedCrmScreen><Container className="p-6"><ScreenHeader title="Tickets" description="Track tasks, bugs, features, and questions." action={<IconLink href="/tickets/new" icon="add" label="New" />} /><View className="gap-3">{tickets.data ? tickets.data.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />) : tickets.isError ? <StateBlock title="Tickets could not load" /> : <Spinner />}</View></Container></ProtectedCrmScreen>;
+  return <Container className="p-6"><ScreenHeader title="Tickets" description="Track tasks, bugs, features, and questions." action={<IconLink href="/tickets/new" icon="add" label="New" />} /><View className="gap-3">{renderTicketList(tickets.data, tickets.isError, "No tickets yet")}</View></Container>;
+}
+
+function renderTicketList(tickets: readonly Ticket[] | undefined, isError: boolean, emptyTitle: string) {
+  if (isError) return <StateBlock title="Tickets could not load" />;
+  if (!tickets) return <Spinner />;
+  if (tickets.length === 0) return <StateBlock title={emptyTitle} />;
+  return tickets.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />);
 }
 
 function TicketCard({ ticket }: { ticket: Ticket }) {
@@ -397,9 +535,17 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
 }
 
 export function TicketDetailScreen({ ticketId }: { ticketId: string }) {
+  return (
+    <ProtectedCrmScreen>
+      <TicketDetailContent ticketId={ticketId} />
+    </ProtectedCrmScreen>
+  );
+}
+
+function TicketDetailContent({ ticketId }: { ticketId: string }) {
   const ticket = useQuery(trpc.tickets.get.queryOptions({ id: ticketId }));
   const timeline = useQuery(trpc.exchanges.timeline.queryOptions({ ticketId, includeDeleted: false }));
-  return <ProtectedCrmScreen><Container className="p-6"><ScreenHeader title={ticket.data?.title ?? "Ticket"} description="Ticket details and comments." action={<IconLink href={`/tickets/${ticketId}/edit`} icon="create-outline" label="Edit" />} />{ticket.data ? <TicketDetails ticket={ticket.data} /> : ticket.isError ? <StateBlock title="Ticket could not load" /> : <Spinner />}<SectionTitle title="Timeline" /><Timeline exchanges={timeline.data} isError={timeline.isError} /><ExchangeForm defaultTicketId={ticketId} /></Container></ProtectedCrmScreen>;
+  return <Container className="p-6"><ScreenHeader title={ticket.data?.title ?? "Ticket"} description="Ticket details and comments." action={<IconLink href={`/tickets/${ticketId}/edit`} icon="create-outline" label="Edit" />} />{ticket.data ? <TicketDetails ticket={ticket.data} /> : ticket.isError ? <StateBlock title="Ticket could not load" /> : <Spinner />}<SectionTitle title="Timeline" /><Timeline exchanges={timeline.data} isError={timeline.isError} /><ExchangeForm defaultTicketId={ticketId} /></Container>;
 }
 
 function TicketDetails({ ticket }: { ticket: Ticket }) {
@@ -407,6 +553,14 @@ function TicketDetails({ ticket }: { ticket: Ticket }) {
 }
 
 export function TicketFormScreen({ ticketId }: { ticketId?: string }) {
+  return (
+    <ProtectedCrmScreen>
+      <TicketFormContent ticketId={ticketId} />
+    </ProtectedCrmScreen>
+  );
+}
+
+function TicketFormContent({ ticketId }: { ticketId?: string }) {
   const { toast } = useToast();
   const projects = useQuery(trpc.projects.list.queryOptions({ includeDeleted: false }));
   const ticket = useQuery({ ...trpc.tickets.get.queryOptions({ id: ticketId ?? "" }), enabled: Boolean(ticketId) });
@@ -437,18 +591,61 @@ export function TicketFormScreen({ ticketId }: { ticketId?: string }) {
       return;
     }
     const input: TicketInput = { projectId: selectedProjectId, title: title.trim(), description: emptyToNull(description), type, status, priority };
-    const saved = ticketId ? await updateTicket.mutateAsync({ id: ticketId, ...input }) : await createTicket.mutateAsync(input);
-    await queryClient.invalidateQueries();
-    toast.show({ variant: "success", label: ticketId ? "Ticket updated" : "Ticket created" });
-    router.replace(`/tickets/${saved.id}`);
+    try {
+      const saved = ticketId ? await updateTicket.mutateAsync({ id: ticketId, ...input }) : await createTicket.mutateAsync(input);
+      try {
+        await queryClient.invalidateQueries();
+      } catch (error) {
+        toast.show({ variant: "danger", label: "Ticket saved, but refresh failed", description: getErrorMessage(error) });
+        return;
+      }
+      toast.show({ variant: "success", label: ticketId ? "Ticket updated" : "Ticket created" });
+      router.replace(`/tickets/${saved.id}`);
+    } catch (error) {
+      toast.show({ variant: "danger", label: ticketId ? "Ticket update failed" : "Ticket creation failed", description: getErrorMessage(error) });
+    }
   }
 
-  return <ProtectedCrmScreen><Container className="p-6"><ScreenHeader title={ticketId ? "Edit ticket" : "New ticket"} description="Simple ticket capture for mobile." />{projects.data?.length ? <Surface variant="secondary" className="gap-4 rounded-xl p-4"><EntitySelectChips label="Project" options={projects.data.map((projectItem) => ({ value: projectItem.id, label: projectItem.name }))} value={projectId || (projects.data[0]?.id ?? "")} onChange={setProjectId} /><Field label="Title" value={title} onChangeText={setTitle} /><SelectChips label="Type" options={ticketTypes} value={type ?? "task"} onChange={setType} /><SelectChips label="Status" options={ticketStatuses} value={status ?? "open"} onChange={setStatus} /><SelectChips label="Priority" options={ticketPriorities} value={priority ?? "normal"} onChange={setPriority} /><Field label="Description" value={description} onChangeText={setDescription} multiline /><Button onPress={submit} isDisabled={createTicket.isPending || updateTicket.isPending}><Button.Label>{ticketId ? "Save ticket" : "Create ticket"}</Button.Label></Button></Surface> : <StateBlock title="Create a project first" description="Tickets must belong to a project." />}</Container></ProtectedCrmScreen>;
+  if (ticketId && ticket.isError) {
+    return (
+      <Container className="p-6">
+        <ScreenHeader title="Edit ticket" description="Simple ticket capture for mobile." />
+        <StateBlock title="Ticket could not load" description="Check your connection and try opening this ticket again." />
+      </Container>
+    );
+  }
+
+  if (ticketId && !ticket.data) {
+    return (
+      <Container className="p-6">
+        <ScreenHeader title="Edit ticket" description="Simple ticket capture for mobile." />
+        <Spinner />
+      </Container>
+    );
+  }
+
+  return <Container className="p-6"><ScreenHeader title={ticketId ? "Edit ticket" : "New ticket"} description="Simple ticket capture for mobile." />{renderTicketFormBody({ projects: projects.data, isError: projects.isError, projectId, setProjectId, title, setTitle, type, setType, status, setStatus, priority, setPriority, description, setDescription, submit, isPending: createTicket.isPending || updateTicket.isPending, isEditing: Boolean(ticketId) })}</Container>;
+}
+
+function renderTicketFormBody({ projects, isError, projectId, setProjectId, title, setTitle, type, setType, status, setStatus, priority, setPriority, description, setDescription, submit, isPending, isEditing }: { projects: readonly Project[] | undefined; isError: boolean; projectId: string; setProjectId: (value: string) => void; title: string; setTitle: (value: string) => void; type: TicketInput["type"]; setType: (value: TicketInput["type"]) => void; status: TicketInput["status"]; setStatus: (value: TicketInput["status"]) => void; priority: TicketInput["priority"]; setPriority: (value: TicketInput["priority"]) => void; description: string; setDescription: (value: string) => void; submit: () => Promise<void>; isPending: boolean; isEditing: boolean }) {
+  if (isError) return <StateBlock title="Projects could not load" description="Tickets must be linked to a project." />;
+  if (!projects) return <Spinner />;
+  if (projects.length === 0) return <StateBlock title="Create a project first" description="Tickets must belong to a project." />;
+
+  return <Surface variant="secondary" className="gap-4 rounded-xl p-4"><EntitySelectChips label="Project" options={projects.map((projectItem) => ({ value: projectItem.id, label: projectItem.name }))} value={projectId || (projects[0]?.id ?? "")} onChange={setProjectId} /><Field label="Title" value={title} onChangeText={setTitle} /><SelectChips label="Type" options={ticketTypes} value={type ?? "task"} onChange={setType} /><SelectChips label="Status" options={ticketStatuses} value={status ?? "open"} onChange={setStatus} /><SelectChips label="Priority" options={ticketPriorities} value={priority ?? "normal"} onChange={setPriority} /><Field label="Description" value={description} onChangeText={setDescription} multiline /><Button onPress={submit} isDisabled={isPending}><Button.Label>{isEditing ? "Save ticket" : "Create ticket"}</Button.Label></Button></Surface>;
 }
 
 export function ExchangesScreen() {
+  return (
+    <ProtectedCrmScreen>
+      <ExchangesContent />
+    </ProtectedCrmScreen>
+  );
+}
+
+function ExchangesContent() {
   const timeline = useQuery(trpc.exchanges.timeline.queryOptions({ includeDeleted: false }));
-  return <ProtectedCrmScreen><Container className="p-6"><ScreenHeader title="Exchanges" description="Unified CRM timeline for notes, calls, meetings, and comments." /><SectionTitle title="Recent exchanges" /><Timeline exchanges={timeline.data} isError={timeline.isError} /></Container></ProtectedCrmScreen>;
+  return <Container className="p-6"><ScreenHeader title="Exchanges" description="Unified CRM timeline for notes, calls, meetings, and comments." /><SectionTitle title="Recent exchanges" /><Timeline exchanges={timeline.data} isError={timeline.isError} /></Container>;
 }
 
 function ExchangeForm({ defaultTicketId }: { defaultTicketId: string }) {
@@ -463,11 +660,20 @@ function ExchangeForm({ defaultTicketId }: { defaultTicketId: string }) {
       toast.show({ variant: "danger", label: "Exchange body is required" });
       return;
     }
-    await createExchange.mutateAsync({ ticketId: defaultTicketId, type, visibility: "internal", subject: emptyToNull(subject), body: body.trim() });
-    setSubject("");
-    setBody("");
-    await queryClient.invalidateQueries();
-    toast.show({ variant: "success", label: "Exchange added" });
+    try {
+      await createExchange.mutateAsync({ ticketId: defaultTicketId, type, visibility: "internal", subject: emptyToNull(subject), body: body.trim() });
+      try {
+        await queryClient.invalidateQueries();
+      } catch (error) {
+        toast.show({ variant: "danger", label: "Exchange saved, but refresh failed", description: getErrorMessage(error) });
+        return;
+      }
+      setSubject("");
+      setBody("");
+      toast.show({ variant: "success", label: "Exchange added" });
+    } catch (error) {
+      toast.show({ variant: "danger", label: "Exchange creation failed", description: getErrorMessage(error) });
+    }
   }
 
   return <Surface variant="secondary" className="mb-5 gap-4 rounded-xl p-4"><Text className="text-lg font-semibold text-foreground">Add internal exchange</Text><SelectChips label="Type" options={exchangeTypes} value={type} onChange={setType} /><Field label="Subject" value={subject} onChangeText={setSubject} /><Field label="Body" value={body} onChangeText={setBody} multiline /><Button onPress={submit} isDisabled={createExchange.isPending}><Button.Label>Add exchange</Button.Label></Button></Surface>;

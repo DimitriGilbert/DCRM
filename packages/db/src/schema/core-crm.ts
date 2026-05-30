@@ -13,6 +13,7 @@ import {
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -25,6 +26,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+import { emailAccounts } from "./automation-integrations.js";
 import { user } from "./auth.js";
 
 type JsonObject = Record<string, unknown>;
@@ -65,6 +67,7 @@ export const clients = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    uniqueIndex("clients_user_id_id_idx").on(table.userId, table.id),
     index("clients_user_id_idx").on(table.userId),
     index("clients_name_idx").on(table.name),
     index("clients_email_idx").on(table.email),
@@ -90,6 +93,7 @@ export const clientAuthorizedEmails = pgTable(
       .notNull(),
   },
   (table) => [
+    foreignKey({ columns: [table.userId, table.clientId], foreignColumns: [clients.userId, clients.id], name: "client_authorized_emails_user_client_fk" }).onDelete("cascade"),
     index("client_authorized_emails_user_id_idx").on(table.userId),
     index("client_authorized_emails_client_id_idx").on(table.clientId),
     uniqueIndex("client_authorized_emails_client_pattern_idx").on(table.clientId, table.pattern),
@@ -163,6 +167,8 @@ export const projects = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    uniqueIndex("projects_user_id_id_idx").on(table.userId, table.id),
+    foreignKey({ columns: [table.userId, table.clientId], foreignColumns: [clients.userId, clients.id], name: "projects_user_client_fk" }).onDelete("cascade"),
     index("projects_user_id_idx").on(table.userId),
     index("projects_client_id_idx").on(table.clientId),
     index("projects_status_idx").on(table.status),
@@ -196,6 +202,8 @@ export const tickets = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    uniqueIndex("tickets_user_id_id_idx").on(table.userId, table.id),
+    foreignKey({ columns: [table.userId, table.projectId], foreignColumns: [projects.userId, projects.id], name: "tickets_user_project_fk" }).onDelete("cascade"),
     index("tickets_user_id_idx").on(table.userId),
     index("tickets_project_id_idx").on(table.projectId),
     index("tickets_status_idx").on(table.status),
@@ -219,7 +227,7 @@ export const exchanges = pgTable(
     body: text("body").notNull(),
     occurredAt: timestamp("occurred_at").defaultNow().notNull(),
     externalMessageId: text("external_message_id"),
-    syncedEmailAccountId: text("synced_email_account_id"),
+    syncedEmailAccountId: text("synced_email_account_id").references(() => emailAccounts.id, { onDelete: "set null" }),
     syncedEmailMailbox: text("synced_email_mailbox"),
     syncedEmailUid: text("synced_email_uid"),
     threadId: text("thread_id"),
@@ -232,6 +240,11 @@ export const exchanges = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    uniqueIndex("exchanges_user_id_id_idx").on(table.userId, table.id),
+    foreignKey({ columns: [table.userId, table.clientId], foreignColumns: [clients.userId, clients.id], name: "exchanges_user_client_fk" }).onDelete("cascade"),
+    foreignKey({ columns: [table.userId, table.projectId], foreignColumns: [projects.userId, projects.id], name: "exchanges_user_project_fk" }).onDelete("cascade"),
+    foreignKey({ columns: [table.userId, table.ticketId], foreignColumns: [tickets.userId, tickets.id], name: "exchanges_user_ticket_fk" }).onDelete("cascade"),
+    foreignKey({ columns: [table.userId, table.syncedEmailAccountId], foreignColumns: [emailAccounts.userId, emailAccounts.id], name: "exchanges_user_synced_email_account_fk" }),
     index("exchanges_user_id_idx").on(table.userId),
     index("exchanges_client_id_idx").on(table.clientId),
     index("exchanges_project_id_idx").on(table.projectId),
@@ -262,6 +275,7 @@ export const exchangeParticipants = pgTable(
       .notNull(),
   },
   (table) => [
+    foreignKey({ columns: [table.userId, table.exchangeId], foreignColumns: [exchanges.userId, exchanges.id], name: "exchange_participants_user_exchange_fk" }).onDelete("cascade"),
     index("exchange_participants_user_id_idx").on(table.userId),
     index("exchange_participants_exchange_id_idx").on(table.exchangeId),
   ],
@@ -284,7 +298,7 @@ export const tags = pgTable(
       .notNull(),
     deletedAt: timestamp("deleted_at"),
   },
-  (table) => [index("tags_user_id_idx").on(table.userId), uniqueIndex("tags_user_id_name_idx").on(table.userId, table.name)],
+  (table) => [uniqueIndex("tags_user_id_id_idx").on(table.userId, table.id), index("tags_user_id_idx").on(table.userId), uniqueIndex("tags_user_id_name_idx").on(table.userId, table.name)],
 );
 
 export const entityTags = pgTable(
@@ -305,6 +319,7 @@ export const entityTags = pgTable(
       .notNull(),
   },
   (table) => [
+    foreignKey({ columns: [table.userId, table.tagId], foreignColumns: [tags.userId, tags.id], name: "entity_tags_user_tag_fk" }).onDelete("cascade"),
     primaryKey({ columns: [table.tagId, table.entityType, table.entityId] }),
     index("entity_tags_user_id_idx").on(table.userId),
     index("entity_tags_entity_idx").on(table.entityType, table.entityId),

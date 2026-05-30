@@ -61,6 +61,26 @@ describe("tickets and exchanges tRPC API", () => {
     );
   });
 
+  it("rejects ticket parent project IDs that are missing, deleted, or owned by another user", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const userOne = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const userTwo = appRouter.createCaller(createTestContext("user_2", crmRepository, eventService));
+    const client = await userOne.clients.create({ name: "Ada Lovelace" });
+    const activeProject = await userOne.projects.create({ clientId: client.id, name: "Active project" });
+    const deletedProject = await userOne.projects.create({ clientId: client.id, name: "Deleted project" });
+    const foreignClient = await userTwo.clients.create({ name: "Grace Hopper" });
+    const foreignProject = await userTwo.projects.create({ clientId: foreignClient.id, name: "Foreign project" });
+    const ticket = await userOne.tickets.create({ projectId: activeProject.id, title: "Owned ticket" });
+    await userOne.projects.delete({ id: deletedProject.id });
+
+    await assert.rejects(userOne.tickets.create({ projectId: "missing_project", title: "Missing parent" }), /Project not found/u);
+    await assert.rejects(userOne.tickets.create({ projectId: deletedProject.id, title: "Deleted parent" }), /Project not found/u);
+    await assert.rejects(userOne.tickets.create({ projectId: foreignProject.id, title: "Foreign parent" }), /Project not found/u);
+    await assert.rejects(userOne.tickets.update({ id: ticket.id, projectId: deletedProject.id }), /Project not found/u);
+    await assert.rejects(userOne.tickets.update({ id: ticket.id, projectId: foreignProject.id }), /Project not found/u);
+  });
+
   it("stores ticket comments as exchanges and exposes them through client, project, and ticket timelines", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();
@@ -82,6 +102,28 @@ describe("tickets and exchanges tRPC API", () => {
       (await eventService.listForUser("user_1")).map((event) => event.type),
       ["client.created", "project.created", "ticket.created", "exchange.created", "ticket.updated"],
     );
+  });
+
+  it("rejects exchange parent IDs that are missing, deleted, mismatched, or owned by another user", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const userOne = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const userTwo = appRouter.createCaller(createTestContext("user_2", crmRepository, eventService));
+    const client = await userOne.clients.create({ name: "Ada Lovelace" });
+    const otherClient = await userOne.clients.create({ name: "Charles Babbage" });
+    const project = await userOne.projects.create({ clientId: client.id, name: "Active project" });
+    const otherProject = await userOne.projects.create({ clientId: otherClient.id, name: "Other project" });
+    const deletedProject = await userOne.projects.create({ clientId: client.id, name: "Deleted project" });
+    const ticket = await userOne.tickets.create({ projectId: project.id, title: "Owned ticket" });
+    const foreignClient = await userTwo.clients.create({ name: "Grace Hopper" });
+    const foreignProject = await userTwo.projects.create({ clientId: foreignClient.id, name: "Foreign project" });
+    await userOne.projects.delete({ id: deletedProject.id });
+
+    await assert.rejects(userOne.exchanges.create({ clientId: foreignClient.id, type: "note", body: "Foreign client" }), /Client not found/u);
+    await assert.rejects(userOne.exchanges.create({ projectId: deletedProject.id, type: "note", body: "Deleted project" }), /Project not found/u);
+    await assert.rejects(userOne.exchanges.create({ projectId: foreignProject.id, type: "note", body: "Foreign project" }), /Project not found/u);
+    await assert.rejects(userOne.exchanges.create({ clientId: otherClient.id, projectId: project.id, type: "note", body: "Mismatched client" }), /Exchange client does not match project client/u);
+    await assert.rejects(userOne.exchanges.update({ id: (await userOne.exchanges.create({ clientId: client.id, type: "note", body: "Owned exchange" })).id, projectId: otherProject.id, ticketId: ticket.id }), /Exchange project does not match ticket project/u);
   });
 
   it("keeps internal notes from being externally sendable", async () => {

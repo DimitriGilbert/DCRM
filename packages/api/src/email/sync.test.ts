@@ -13,8 +13,7 @@ import type { EmailSyncJobData, EmailSyncJobResult, ImapEmailMessage, ImapMailbo
 describe("IMAP email sync", () => {
   it("creates an exchange and emits an email event for matched incoming mail", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const eventService = createEventService({ repository: eventRepository, clock: () => now, idGenerator: nextId("event") });
     const emailSyncRepository = createInMemoryEmailSyncRepository();
@@ -43,8 +42,7 @@ describe("IMAP email sync", () => {
 
   it("stores unmatched mail for manual linking without creating an exchange", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const emailSyncRepository = createInMemoryEmailSyncRepository();
     const secretCrypto = createTaggingSecretCrypto();
@@ -64,8 +62,7 @@ describe("IMAP email sync", () => {
 
   it("respects the DCRM loop-prevention header case-insensitively and still advances sync state", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const emailSyncRepository = createInMemoryEmailSyncRepository();
     const secretCrypto = createTaggingSecretCrypto();
@@ -84,8 +81,7 @@ describe("IMAP email sync", () => {
 
   it("does not duplicate matched exchanges or events when the same IMAP message is retried", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const eventService = createEventService({ repository: eventRepository, clock: () => now, idGenerator: nextId("event") });
     const emailSyncRepository = createInMemoryEmailSyncRepository();
@@ -110,8 +106,7 @@ describe("IMAP email sync", () => {
 
   it("links client replies back to ticket threads using In-Reply-To headers", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const emailSyncRepository = createInMemoryEmailSyncRepository();
     const secretCrypto = createTaggingSecretCrypto();
@@ -134,8 +129,7 @@ describe("IMAP email sync", () => {
 
   it("stores a matched sender as unmatched when threading headers reference another client's ticket", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const emailSyncRepository = createInMemoryEmailSyncRepository();
     const secretCrypto = createTaggingSecretCrypto();
@@ -168,8 +162,7 @@ describe("IMAP email sync", () => {
 
   it("uses the production IMAP boundary with decrypted stored account settings", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const emailSyncRepository = createInMemoryEmailSyncRepository();
     const secretCrypto = createTaggingSecretCrypto();
@@ -200,8 +193,7 @@ describe("IMAP email sync", () => {
 
   it("resets the IMAP UID cursor when UIDVALIDITY changes", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
-    const automationRepository = createInMemoryAutomationRepository();
-    const crmRepository = createInMemoryCrmRepository();
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
     const eventRepository = createInMemoryEventRepository();
     const emailSyncRepository = createInMemoryEmailSyncRepository();
     const secretCrypto = createTaggingSecretCrypto();
@@ -251,6 +243,17 @@ describe("IMAP email sync", () => {
     assert.equal(typeof createdWorkers[0]?.processor, "function");
   });
 });
+
+function createSyncedTestRepositories() {
+  const automationRepository = createInMemoryAutomationRepository();
+  const crmRepository = createInMemoryCrmRepository({
+    async isActiveEmailAccount(input) {
+      const accounts = await automationRepository.emailAccounts.listEncrypted({ userId: input.userId });
+      return accounts.some((account) => account.id === input.emailAccountId && account.enabled);
+    },
+  });
+  return { automationRepository, crmRepository };
+}
 
 class FakeImapNetworkClient implements ImapNetworkClient {
   readonly passwordSeen: string;

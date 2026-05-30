@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { getTableColumns, getTableName } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 
 import {
   aiInsights,
@@ -90,4 +91,29 @@ describe("automation and integration schema public exports", () => {
       ],
     );
   });
+
+  it("declares event definition and email account ownership integrity constraints", () => {
+    const eventForeignKeys = getTableConfig(events).foreignKeys.map(foreignKeyName);
+    const hookForeignKeys = getTableConfig(hooks).foreignKeys.map(foreignKeyName);
+    const incomingWebhookForeignKeys = getTableConfig(incomingWebhooks).foreignKeys.map(foreignKeyName);
+    const syncStateForeignKeys = getTableConfig(emailSyncStates).foreignKeys.map(foreignKeyName);
+    const unmatchedMessageForeignKeys = getTableConfig(unmatchedEmailMessages).foreignKeys.map(foreignKeyName);
+
+    assert.ok(getTableConfig(emailAccounts).indexes.some((indexDefinition) => indexDefinition.config.name === "email_accounts_user_id_id_idx" && indexDefinition.config.unique));
+    assert.ok(eventForeignKeys.includes("events_type_event_definitions_type_fk"));
+    assert.ok(hookForeignKeys.includes("hooks_event_type_event_definitions_type_fk"));
+    assert.ok(incomingWebhookForeignKeys.includes("incoming_webhooks_target_event_type_event_definitions_type_fk"));
+    assert.ok(syncStateForeignKeys.includes("email_sync_states_user_email_account_fk"));
+    assert.ok(unmatchedMessageForeignKeys.includes("unmatched_email_messages_user_email_account_fk"));
+  });
 });
+
+function foreignKeyName(foreignKey: object): string {
+  if ("getName" in foreignKey && typeof foreignKey.getName === "function") {
+    return foreignKey.getName();
+  }
+  if ("name" in foreignKey && typeof foreignKey.name === "string") {
+    return foreignKey.name;
+  }
+  return "";
+}

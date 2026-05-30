@@ -48,6 +48,24 @@ describe("projects tRPC API", () => {
     );
   });
 
+  it("rejects project parent client IDs that are missing, deleted, or owned by another user", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const userOne = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const userTwo = appRouter.createCaller(createTestContext("user_2", crmRepository, eventService));
+    const deletedClient = await userOne.clients.create({ name: "Deleted client" });
+    const foreignClient = await userTwo.clients.create({ name: "Foreign client" });
+    const activeClient = await userOne.clients.create({ name: "Active client" });
+    const project = await userOne.projects.create({ clientId: activeClient.id, name: "Owned project" });
+    await userOne.clients.delete({ id: deletedClient.id });
+
+    await assert.rejects(userOne.projects.create({ clientId: "missing_client", name: "Missing parent" }), /Client not found/u);
+    await assert.rejects(userOne.projects.create({ clientId: deletedClient.id, name: "Deleted parent" }), /Client not found/u);
+    await assert.rejects(userOne.projects.create({ clientId: foreignClient.id, name: "Foreign parent" }), /Client not found/u);
+    await assert.rejects(userOne.projects.update({ id: project.id, clientId: deletedClient.id }), /Client not found/u);
+    await assert.rejects(userOne.projects.update({ id: project.id, clientId: foreignClient.id }), /Client not found/u);
+  });
+
   it("updates budget, currency, hours, custom fields, and emits update plus status change events", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();

@@ -43,6 +43,13 @@
       "when": 1780121149781,
       "tag": "0005_pale_gorgon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780137612283,
+      "tag": "0006_database_ownership_integrity",
+      "breakpoints": true
     }
   ]
 }

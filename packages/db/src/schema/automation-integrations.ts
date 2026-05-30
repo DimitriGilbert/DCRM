@@ -11,7 +11,7 @@ import {
 } from "@DCRM/domain";
 import type { EncryptedSecretV1 } from "@DCRM/crypto";
 import { relations } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { user } from "./auth.js";
 
@@ -53,7 +53,9 @@ export const events = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    type: text("type").notNull(),
+    type: text("type")
+      .notNull()
+      .references(() => eventDefinitions.type),
     source: eventSourceEnum("source").notNull(),
     entityType: text("entity_type"),
     entityId: text("entity_id"),
@@ -77,7 +79,9 @@ export const hooks = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    eventType: text("event_type").notNull(),
+    eventType: text("event_type")
+      .notNull()
+      .references(() => eventDefinitions.type),
     type: hookTypeEnum("type").notNull(),
     enabled: boolean("enabled").default(true).notNull(),
     config: jsonb("config").$type<JsonObject>().default({}).notNull(),
@@ -151,7 +155,9 @@ export const incomingWebhooks = pgTable(
     tokenHash: text("token_hash"),
     encryptedSecret: jsonb("encrypted_secret").$type<EncryptedValue>(),
     mappingConfig: jsonb("mapping_config").$type<JsonObject>().default({}).notNull(),
-    targetEventType: text("target_event_type").notNull(),
+    targetEventType: text("target_event_type")
+      .notNull()
+      .references(() => eventDefinitions.type),
     lastTestPayload: jsonb("last_test_payload").$type<JsonObject>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -263,7 +269,7 @@ export const emailAccounts = pgTable(
       .notNull(),
     deletedAt: timestamp("deleted_at"),
   },
-  (table) => [index("email_accounts_user_id_idx").on(table.userId), index("email_accounts_email_address_idx").on(table.emailAddress)],
+  (table) => [uniqueIndex("email_accounts_user_id_id_idx").on(table.userId, table.id), index("email_accounts_user_id_idx").on(table.userId), index("email_accounts_email_address_idx").on(table.emailAddress)],
 );
 
 export const emailSyncStates = pgTable(
@@ -290,6 +296,7 @@ export const emailSyncStates = pgTable(
       .notNull(),
   },
   (table) => [
+    foreignKey({ columns: [table.userId, table.emailAccountId], foreignColumns: [emailAccounts.userId, emailAccounts.id], name: "email_sync_states_user_email_account_fk" }).onDelete("cascade"),
     index("email_sync_states_user_id_idx").on(table.userId),
     uniqueIndex("email_sync_states_account_mailbox_idx").on(table.emailAccountId, table.mailbox),
   ],
@@ -323,6 +330,7 @@ export const unmatchedEmailMessages = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    foreignKey({ columns: [table.userId, table.emailAccountId], foreignColumns: [emailAccounts.userId, emailAccounts.id], name: "unmatched_email_messages_user_email_account_fk" }).onDelete("cascade"),
     index("unmatched_email_messages_user_id_idx").on(table.userId),
     index("unmatched_email_messages_from_email_idx").on(table.fromEmail),
     uniqueIndex("unmatched_email_messages_account_message_idx").on(table.emailAccountId, table.messageId),

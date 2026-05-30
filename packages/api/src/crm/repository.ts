@@ -112,7 +112,9 @@ export type CrmRepository = {
   };
 };
 
-export function createInMemoryCrmRepository(): CrmRepository {
+export type ActiveEmailAccountLookup = (input: { readonly userId: string; readonly emailAccountId: string }) => boolean | Promise<boolean>;
+
+export function createInMemoryCrmRepository(options: { readonly isActiveEmailAccount?: ActiveEmailAccountLookup } = {}): CrmRepository {
   const clients: ClientRecord[] = [];
   const clientAuthorizedEmails: ClientAuthorizedEmailRecord[] = [];
   const leads: LeadRecord[] = [];
@@ -328,6 +330,7 @@ export function createInMemoryCrmRepository(): CrmRepository {
     },
     projects: {
       async create(input) {
+        requireActiveClient(clients, input.userId, input.fields.clientId);
         const record: ProjectRecord = {
           id: input.id,
           userId: input.userId,
@@ -382,6 +385,9 @@ export function createInMemoryCrmRepository(): CrmRepository {
         });
       },
       async update(input) {
+        if (input.fields.clientId !== undefined) {
+          requireActiveClient(clients, input.userId, input.fields.clientId);
+        }
         return updateById(projects, input.userId, input.id, (project) => ({
           ...project,
           ...input.fields,
@@ -402,6 +408,7 @@ export function createInMemoryCrmRepository(): CrmRepository {
     },
     tickets: {
       async create(input) {
+        requireActiveProject(projects, clients, input.userId, input.fields.projectId);
         const record: TicketRecord = {
           id: input.id,
           userId: input.userId,
@@ -459,6 +466,9 @@ export function createInMemoryCrmRepository(): CrmRepository {
         });
       },
       async update(input) {
+        if (input.fields.projectId !== undefined) {
+          requireActiveProject(projects, clients, input.userId, input.fields.projectId);
+        }
         return updateById(tickets, input.userId, input.id, (ticket) => ({
           ...ticket,
           ...input.fields,
@@ -474,6 +484,10 @@ export function createInMemoryCrmRepository(): CrmRepository {
     },
     exchanges: {
       async create(input) {
+        validateActiveExchangeParents({ clients, projects, tickets, userId: input.userId, clientId: input.fields.clientId ?? null, projectId: input.fields.projectId ?? null, ticketId: input.fields.ticketId ?? null });
+        if (input.fields.syncedEmailAccountId) {
+          await requireActiveEmailAccount(options.isActiveEmailAccount, input.userId, input.fields.syncedEmailAccountId);
+        }
         const record: ExchangeRecord = {
           id: input.id,
           userId: input.userId,
@@ -556,6 +570,24 @@ export function createInMemoryCrmRepository(): CrmRepository {
           .sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime());
       },
       async update(input) {
+        const current = exchanges.find((exchange) => exchange.userId === input.userId && exchange.id === input.id);
+        if (!current) {
+          return undefined;
+        }
+        if (input.fields.clientId !== undefined || input.fields.projectId !== undefined || input.fields.ticketId !== undefined) {
+          validateActiveExchangeParents({
+            clients,
+            projects,
+            tickets,
+            userId: input.userId,
+            clientId: input.fields.clientId === undefined ? current.clientId : input.fields.clientId,
+            projectId: input.fields.projectId === undefined ? current.projectId : input.fields.projectId,
+            ticketId: input.fields.ticketId === undefined ? current.ticketId : input.fields.ticketId,
+          });
+        }
+        if (input.fields.syncedEmailAccountId) {
+          await requireActiveEmailAccount(options.isActiveEmailAccount, input.userId, input.fields.syncedEmailAccountId);
+        }
         return updateById(exchanges, input.userId, input.id, (exchange) => ({
           ...exchange,
           ...input.fields,
@@ -771,6 +803,73 @@ function updateById<TRecord extends { readonly id: string; readonly userId: stri
 
 function matchesEntityTag(record: EntityTagRecord, input: EntityTagInput): boolean {
   return record.userId === input.userId && record.tagId === input.tagId && record.entityType === input.entityType && record.entityId === input.entityId;
+}
+
+function requireActiveClient(records: readonly ClientRecord[], userId: string, clientId: string): ClientRecord {
+  const client = records.find((candidate) => candidate.userId === userId && candidate.id === clientId && !candidate.deletedAt);
+  if (!client) {
+    throw new Error("Client not found.");
+  }
+  return client;
+}
+
+function requireActiveProject(records: readonly ProjectRecord[], clientRecords: readonly ClientRecord[], userId: string, projectId: string): ProjectRecord {
+  const project = records.find((candidate) => candidate.userId === userId && candidate.id === projectId && !candidate.deletedAt);
+  if (!project) {
+    throw new Error("Project not found.");
+  }
+  requireActiveClient(clientRecords, userId, project.clientId);
+  return project;
+}
+
+function requireActiveTicket(records: readonly TicketRecord[], projectRecords: readonly ProjectRecord[], clientRecords: readonly ClientRecord[], userId: string, ticketId: string): TicketRecord {
+  const ticket = records.find((candidate) => candidate.userId === userId && candidate.id === ticketId && !candidate.deletedAt);
+  if (!ticket) {
+    throw new Error("Ticket not found.");
+  }
+  requireActiveProject(projectRecords, clientRecords, userId, ticket.projectId);
+  return ticket;
+}
+
+function validateActiveExchangeParents(input: {
+  readonly clients: readonly ClientRecord[];
+  readonly projects: readonly ProjectRecord[];
+  readonly tickets: readonly TicketRecord[];
+  readonly userId: string;
+  readonly clientId: string | null | undefined;
+  readonly projectId: string | null | undefined;
+  readonly ticketId: string | null | undefined;
+}): void {
+  if (input.ticketId) {
+    const ticket = requireActiveTicket(input.tickets, input.projects, input.clients, input.userId, input.ticketId);
+    const project = requireActiveProject(input.projects, input.clients, input.userId, ticket.projectId);
+    const client = requireActiveClient(input.clients, input.userId, project.clientId);
+    if (input.projectId && input.projectId !== project.id) {
+      throw new Error("Exchange project does not match ticket project.");
+    }
+    if (input.clientId && input.clientId !== client.id) {
+      throw new Error("Exchange client does not match project client.");
+    }
+    return;
+  }
+  if (input.projectId) {
+    const project = requireActiveProject(input.projects, input.clients, input.userId, input.projectId);
+    const client = requireActiveClient(input.clients, input.userId, project.clientId);
+    if (input.clientId && input.clientId !== client.id) {
+      throw new Error("Exchange client does not match project client.");
+    }
+    return;
+  }
+  if (input.clientId) {
+    requireActiveClient(input.clients, input.userId, input.clientId);
+  }
+}
+
+async function requireActiveEmailAccount(lookup: ActiveEmailAccountLookup | undefined, userId: string, emailAccountId: string): Promise<void> {
+  const exists = lookup ? await lookup({ userId, emailAccountId }) : false;
+  if (!exists) {
+    throw new Error("Email account not found.");
+  }
 }
 
 function matchesTagFilter(records: readonly EntityTagRecord[], userId: string, entityType: EntityTagRecord["entityType"], entityId: string, tagIds: readonly string[] | undefined): boolean {

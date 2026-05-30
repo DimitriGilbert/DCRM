@@ -89,11 +89,38 @@ describe("core CRM schema public exports", () => {
     assert.equal(syncedEmailIdentity.config.unique, true);
     assert.deepEqual(syncedEmailIdentity.config.columns.map(columnName), ["user_id", "synced_email_account_id", "synced_email_mailbox", "synced_email_uid"]);
   });
+
+  it("declares user-owned foreign keys for CRM parent references", () => {
+    const projectForeignKeys = getTableConfig(projects).foreignKeys.map(foreignKeyName);
+    const ticketForeignKeys = getTableConfig(tickets).foreignKeys.map(foreignKeyName);
+    const exchangeForeignKeys = getTableConfig(exchanges).foreignKeys.map(foreignKeyName);
+    const exchangeParticipantForeignKeys = getTableConfig(exchangeParticipants).foreignKeys.map(foreignKeyName);
+
+    assert.ok(getTableConfig(clients).indexes.some((indexDefinition) => indexDefinition.config.name === "clients_user_id_id_idx" && indexDefinition.config.unique));
+    assert.ok(getTableConfig(exchanges).indexes.some((indexDefinition) => indexDefinition.config.name === "exchanges_user_id_id_idx" && indexDefinition.config.unique));
+    assert.ok(projectForeignKeys.includes("projects_user_client_fk"));
+    assert.ok(ticketForeignKeys.includes("tickets_user_project_fk"));
+    assert.ok(exchangeForeignKeys.includes("exchanges_user_client_fk"));
+    assert.ok(exchangeForeignKeys.includes("exchanges_user_project_fk"));
+    assert.ok(exchangeForeignKeys.includes("exchanges_user_ticket_fk"));
+    assert.ok(exchangeForeignKeys.includes("exchanges_user_synced_email_account_fk"));
+    assert.ok(exchangeParticipantForeignKeys.includes("exchange_participants_user_exchange_fk"));
+  });
 });
 
 function columnName(column: object): string {
   if ("name" in column && typeof column.name === "string") {
     return column.name;
+  }
+  return "";
+}
+
+function foreignKeyName(foreignKey: object): string {
+  if ("getName" in foreignKey && typeof foreignKey.getName === "function") {
+    return foreignKey.getName();
+  }
+  if ("name" in foreignKey && typeof foreignKey.name === "string") {
+    return foreignKey.name;
   }
   return "";
 }

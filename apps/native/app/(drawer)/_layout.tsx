@@ -1,9 +1,8 @@
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { Drawer } from "expo-router/drawer";
 import { useThemeColor } from "heroui-native";
 import React, { useCallback } from "react";
-import { Pressable, Text } from "react-native";
+import { Text } from "react-native";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -29,9 +28,9 @@ function DrawerLayout() {
       <Drawer.Screen
         name="index"
         options={{
-          headerTitle: "Home",
+          headerTitle: "Dashboard",
           drawerLabel: ({ color, focused }) => (
-            <Text style={{ color: focused ? color : themeColorForeground }}>Home</Text>
+            <Text style={{ color: focused ? color : themeColorForeground }}>Dashboard</Text>
           ),
           drawerIcon: ({ size, color, focused }) => (
             <Ionicons
@@ -43,28 +42,70 @@ function DrawerLayout() {
         }}
       />
       <Drawer.Screen
-        name="(tabs)"
+        name="clients"
         options={{
-          headerTitle: "Tabs",
+          headerTitle: "Clients",
           drawerLabel: ({ color, focused }) => (
-            <Text style={{ color: focused ? color : themeColorForeground }}>Tabs</Text>
+            <Text style={{ color: focused ? color : themeColorForeground }}>Clients</Text>
           ),
           drawerIcon: ({ size, color, focused }) => (
-            <MaterialIcons
-              name="border-bottom"
+            <Ionicons
+              name="people-outline"
               size={size}
               color={focused ? color : themeColorForeground}
             />
           ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable className="mr-4">
-                <Ionicons name="add-outline" size={24} color={themeColorForeground} />
-              </Pressable>
-            </Link>
+        }}
+      />
+      <Drawer.Screen
+        name="projects"
+        options={{
+          headerTitle: "Projects",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>Projects</Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="briefcase-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
           ),
         }}
       />
+      <Drawer.Screen
+        name="tickets"
+        options={{
+          headerTitle: "Tickets",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>Tickets</Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="ticket-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="exchanges"
+        options={{
+          headerTitle: "Exchanges",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>Exchanges</Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="chatbubbles-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen name="(tabs)" options={{ drawerItemStyle: { display: "none" } }} />
     </Drawer>
   );
 }

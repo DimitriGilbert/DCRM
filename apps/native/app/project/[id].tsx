@@ -5,6 +5,7 @@ import { Card, Spinner, Surface, useThemeColor, useToast } from "heroui-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { StatusBadge } from "@/components/status-badge";
+import { DetailRow } from "@/components/detail-row";
 import { queryClient, trpc, trpcClient } from "@/utils/trpc";
 
 export default function ProjectDetail() {
@@ -12,9 +13,10 @@ export default function ProjectDetail() {
   const muted = useThemeColor("muted");
   const { toast } = useToast();
 
-  const { data: project, isLoading } = useQuery(
-    trpc.project.read.queryOptions({ id: id ?? "" }),
-  );
+  const { data: project, isLoading } = useQuery({
+    ...trpc.project.read.queryOptions({ id: id ?? "" }),
+    enabled: !!id,
+  });
 
   if (!id) {
     return (
@@ -44,7 +46,7 @@ export default function ProjectDetail() {
     if (!project) return;
     try {
       await trpcClient.project.softDelete.mutate({ id: project.id });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["project"] });
       router.back();
       toast.show({ variant: "success", label: "Project deleted" });
     } catch (error) {
@@ -112,7 +114,7 @@ export default function ProjectDetail() {
             onPress={() =>
               router.push({
                 pathname: "/create-ticket",
-                params: { projectId: project.id },
+                params: { projectId: project.id, projectName: project.name },
               })
             }
           >
@@ -149,28 +151,6 @@ export default function ProjectDetail() {
 
         <ProjectTickets projectId={project.id} />
       </ScrollView>
-    </View>
-  );
-}
-
-function DetailRow({
-  icon,
-  label,
-  value,
-  muted,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  muted: string;
-}) {
-  return (
-    <View className="flex-row items-center py-1">
-      <Ionicons name={icon as "cash-outline"} size={16} color={muted} />
-      <View className="ml-2.5 flex-1">
-        <Text className="text-muted text-xs">{label}</Text>
-        <Text className="text-foreground text-sm">{value}</Text>
-      </View>
     </View>
   );
 }

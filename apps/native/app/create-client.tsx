@@ -40,7 +40,7 @@ export default function CreateClient() {
           website: value.website.trim() || undefined,
           notes: value.notes.trim() || undefined,
         });
-        queryClient.invalidateQueries();
+        queryClient.invalidateQueries({ queryKey: ["client"] });
         router.back();
         toast.show({ variant: "success", label: "Client created" });
       } catch (error) {

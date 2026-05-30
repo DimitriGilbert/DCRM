@@ -142,6 +142,10 @@ export type SyncProcessorDeps = {
   readonly createExchange: (
     input: CreateExchangeInput,
   ) => Promise<ExchangeRecord>;
+  readonly findExchangeByMessageId: (
+    userId: string,
+    messageId: string,
+  ) => Promise<ExchangeRecord | null>;
   readonly emitEvent: (input: SyncEventInput) => Promise<SyncEvent>;
   readonly storeUnmatchedEmail: (
     input: UnmatchedEmailInput,
@@ -273,6 +277,16 @@ export async function processSyncMessages(
     const matchResult = matchSender(message.from, patterns);
 
     if (matchResult.matched) {
+      if (message.messageId !== null) {
+        const existing = await deps.findExchangeByMessageId(userId, message.messageId);
+        if (existing !== null) {
+          skipped++;
+          lastUid = message.uid;
+          await deps.updateSyncState(emailAccountId, folder, lastUid);
+          continue;
+        }
+      }
+
       const exchangeInput = buildExchangeInput(message, matchResult, userId);
       const exchange = await deps.createExchange(exchangeInput);
 

@@ -58,12 +58,12 @@ export type LinkUnmatchedDeps = {
     readonly entity?: { readonly type: string; readonly id: string };
     readonly payload: Readonly<Record<string, unknown>>;
   }) => Promise<void>;
-  /** Mark the unmatched email as linked. */
+  /** Mark the unmatched email as linked. Returns number of rows affected. */
   readonly markAsLinked: (
     id: string,
     entityType: string,
     entityId: string,
-  ) => Promise<void>;
+  ) => Promise<number>;
 };
 
 /** Result of a successful link operation. */
@@ -71,6 +71,15 @@ export type LinkResult = {
   readonly exchangeId: string;
   readonly clientId: string;
 };
+
+/** Result when the record was already linked by a concurrent request. */
+export type AlreadyLinkedResult = {
+  readonly alreadyLinked: true;
+  readonly linkedEntityId: string;
+};
+
+/** Union result of a link attempt. */
+export type LinkAttemptResult = LinkResult | AlreadyLinkedResult;
 
 // ── Pure helpers ─────────────────────────────────────────────────────────
 
@@ -118,21 +127,27 @@ export async function linkUnmatchedEmail(
   clientId: string,
   userId: string,
   deps: LinkUnmatchedDeps,
-): Promise<LinkResult> {
+): Promise<LinkAttemptResult> {
   const record = await deps.getUnmatchedEmail(unmatchedEmailId);
 
   if (record === null) {
     throw new Error(`Unmatched email not found: ${unmatchedEmailId}`);
   }
 
-  if (record.linkedEntityId !== null) {
-    throw new Error(
-      `Unmatched email already linked: ${unmatchedEmailId}`,
-    );
-  }
-
   if (record.userId !== userId) {
     throw new Error("Unmatched email does not belong to user");
+  }
+
+  // Atomic conditional update: only mark as linked if not already linked.
+  // This eliminates the TOCTOU race between the check and the update.
+  const rowsAffected = await deps.markAsLinked(unmatchedEmailId, "client", clientId);
+
+  if (rowsAffected === 0) {
+    const fresh = await deps.getUnmatchedEmail(unmatchedEmailId);
+    return {
+      alreadyLinked: true,
+      linkedEntityId: fresh?.linkedEntityId ?? clientId,
+    };
   }
 
   const exchange = await deps.createExchange({
@@ -167,8 +182,6 @@ export async function linkUnmatchedEmail(
       linkedFromUnmatched: true,
     },
   });
-
-  await deps.markAsLinked(unmatchedEmailId, "client", clientId);
 
   return { exchangeId: exchange.id, clientId };
 }

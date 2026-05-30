@@ -53,7 +53,7 @@ export default function CreateExchange() {
         ticketId: params.ticketId,
         isInternal: exchangeType === "note",
       });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["exchange"] });
       router.back();
       toast.show({ variant: "success", label: "Exchange created" });
     } catch (error) {

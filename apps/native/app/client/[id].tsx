@@ -6,14 +6,17 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { queryClient, trpc, trpcClient } from "@/utils/trpc";
 
+import { DetailRow } from "@/components/detail-row";
+
 export default function ClientDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const muted = useThemeColor("muted");
   const { toast } = useToast();
 
-  const { data: client, isLoading } = useQuery(
-    trpc.client.read.queryOptions({ id: id ?? "" }),
-  );
+  const { data: client, isLoading } = useQuery({
+    ...trpc.client.read.queryOptions({ id: id ?? "" }),
+    enabled: !!id,
+  });
 
   if (!id) {
     return (
@@ -43,7 +46,7 @@ export default function ClientDetail() {
     if (!client) return;
     try {
       await trpcClient.client.softDelete.mutate({ id: client.id });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["client"] });
       router.back();
       toast.show({ variant: "success", label: "Client deleted" });
     } catch (error) {
@@ -56,7 +59,7 @@ export default function ClientDetail() {
     if (!client) return;
     try {
       await trpcClient.client.restore.mutate({ id: client.id });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["client"] });
       toast.show({ variant: "success", label: "Client restored" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to restore";
@@ -134,29 +137,6 @@ export default function ClientDetail() {
         <ClientProjects clientId={client.id} />
         <ClientExchanges clientId={client.id} />
       </ScrollView>
-    </View>
-  );
-}
-
-function DetailRow({
-  icon,
-  label,
-  value,
-  muted,
-}: {
-  icon: string;
-  label: string;
-  value: string | null;
-  muted: string;
-}) {
-  if (!value) return null;
-  return (
-    <View className="flex-row items-center py-1.5">
-      <Ionicons name={icon as "mail-outline"} size={16} color={muted} />
-      <View className="ml-2.5 flex-1">
-        <Text className="text-muted text-xs">{label}</Text>
-        <Text className="text-foreground text-sm">{value}</Text>
-      </View>
     </View>
   );
 }

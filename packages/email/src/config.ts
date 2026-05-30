@@ -96,47 +96,44 @@ function decryptField(crypto: CryptoService, encrypted: EncryptedField): string 
 export function createEmailCredentialConfig(masterKey: string): EmailCredentialConfig {
   const crypto = createCrypto(masterKey);
 
+  const encryptImap = (credentials: ImapCredentials): EncryptedImapFields => ({
+    encryptedImapHost: encryptField(crypto, credentials.host),
+    encryptedImapPort: encryptField(crypto, String(credentials.port)),
+    encryptedImapUser: encryptField(crypto, credentials.user),
+    encryptedImapPassword: encryptField(crypto, credentials.password),
+  });
+
+  const decryptImap = (fields: EncryptedImapFields): ImapCredentials => ({
+    host: decryptField(crypto, fields.encryptedImapHost),
+    port: Number(decryptField(crypto, fields.encryptedImapPort)),
+    user: decryptField(crypto, fields.encryptedImapUser),
+    password: decryptField(crypto, fields.encryptedImapPassword),
+  });
+
+  const encryptSmtp = (credentials: SmtpCredentials): EncryptedSmtpFields => ({
+    encryptedSmtpHost: encryptField(crypto, credentials.host),
+    encryptedSmtpPort: encryptField(crypto, String(credentials.port)),
+    encryptedSmtpUser: encryptField(crypto, credentials.user),
+    encryptedSmtpPassword: encryptField(crypto, credentials.password),
+  });
+
+  const decryptSmtp = (fields: EncryptedSmtpFields): SmtpCredentials => ({
+    host: decryptField(crypto, fields.encryptedSmtpHost),
+    port: Number(decryptField(crypto, fields.encryptedSmtpPort)),
+    user: decryptField(crypto, fields.encryptedSmtpUser),
+    password: decryptField(crypto, fields.encryptedSmtpPassword),
+  });
+
   return {
-    encryptImap(credentials: ImapCredentials): EncryptedImapFields {
-      return {
-        encryptedImapHost: encryptField(crypto, credentials.host),
-        encryptedImapPort: encryptField(crypto, String(credentials.port)),
-        encryptedImapUser: encryptField(crypto, credentials.user),
-        encryptedImapPassword: encryptField(crypto, credentials.password),
-      };
-    },
-
-    decryptImap(fields: EncryptedImapFields): ImapCredentials {
-      return {
-        host: decryptField(crypto, fields.encryptedImapHost),
-        port: Number(decryptField(crypto, fields.encryptedImapPort)),
-        user: decryptField(crypto, fields.encryptedImapUser),
-        password: decryptField(crypto, fields.encryptedImapPassword),
-      };
-    },
-
-    encryptSmtp(credentials: SmtpCredentials): EncryptedSmtpFields {
-      return {
-        encryptedSmtpHost: encryptField(crypto, credentials.host),
-        encryptedSmtpPort: encryptField(crypto, String(credentials.port)),
-        encryptedSmtpUser: encryptField(crypto, credentials.user),
-        encryptedSmtpPassword: encryptField(crypto, credentials.password),
-      };
-    },
-
-    decryptSmtp(fields: EncryptedSmtpFields): SmtpCredentials {
-      return {
-        host: decryptField(crypto, fields.encryptedSmtpHost),
-        port: Number(decryptField(crypto, fields.encryptedSmtpPort)),
-        user: decryptField(crypto, fields.encryptedSmtpUser),
-        password: decryptField(crypto, fields.encryptedSmtpPassword),
-      };
-    },
+    encryptImap,
+    decryptImap,
+    encryptSmtp,
+    decryptSmtp,
 
     encryptAccount(credentials: EmailAccountCredentials): EncryptedEmailAccountFields {
       return {
-        ...this.encryptImap(credentials.imap),
-        ...this.encryptSmtp(credentials.smtp),
+        ...encryptImap(credentials.imap),
+        ...encryptSmtp(credentials.smtp),
       };
     },
 
@@ -146,8 +143,8 @@ export function createEmailCredentialConfig(masterKey: string): EmailCredentialC
     ): EmailAccountCredentials {
       return {
         email,
-        imap: this.decryptImap(fields),
-        smtp: this.decryptSmtp(fields),
+        imap: decryptImap(fields),
+        smtp: decryptSmtp(fields),
       };
     },
   };

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import { Spinner, Surface, useThemeColor } from "heroui-native";
+import { Spinner, Surface } from "heroui-native";
 import { ScrollView, Text, View } from "react-native";
 
 import { StatusBadge } from "@/components/status-badge";
@@ -9,9 +9,10 @@ import { trpc } from "@/utils/trpc";
 export default function ExchangeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { data: exchange, isLoading } = useQuery(
-    trpc.exchange.read.queryOptions({ id: id ?? "" }),
-  );
+  const { data: exchange, isLoading } = useQuery({
+    ...trpc.exchange.read.queryOptions({ id: id ?? "" }),
+    enabled: !!id,
+  });
 
   if (!id) {
     return (

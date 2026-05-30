@@ -250,6 +250,11 @@ export async function handleIncomingWebhook(
     },
   };
 
+  // Known non-atomicity gap: if the process crashes between emitEvent and
+  // updateLastReceived, the event is emitted but lastReceivedAt is not updated.
+  // On retry, the same webhook payload could produce a duplicate event.
+  // Full fix (idempotent event emission keyed on webhookId+request hash)
+  // is deferred to a future iteration.
   const event = await emitEvent(deps.persister, eventInput);
 
   await deps.updateLastReceived(webhook.id);

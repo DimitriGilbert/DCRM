@@ -42,6 +42,13 @@ vi.mock("@DCRM/db", () => ({
         insertedRows.push(row);
       }),
     })),
+    transaction: vi.fn((fn) => fn({
+      insert: vi.fn(() => ({
+        values: vi.fn(async (row: unknown) => {
+          insertedRows.push(row);
+        }),
+      })),
+    })),
   },
 }));
 

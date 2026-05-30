@@ -73,9 +73,12 @@ function getLocale(): Locale {
  */
 export function createI18n(locale: Locale = DEFAULT_LOCALE): I18nInstance {
   let instanceLocale: Locale = locale;
+  const instanceDictionaries = new Map<Locale, TranslationDict>([
+    [DEFAULT_LOCALE, en],
+  ]);
 
   const instanceT: TranslateFn = (key, params): string => {
-    const dict = getDict(instanceLocale);
+    const dict = instanceDictionaries.get(instanceLocale) ?? instanceDictionaries.get(DEFAULT_LOCALE) ?? en;
     const template = dict[key] ?? key;
     return interpolate(template, params);
   };
@@ -93,7 +96,14 @@ export function createI18n(locale: Locale = DEFAULT_LOCALE): I18nInstance {
       }
       instanceLocale = newLocale;
     },
-    registerTranslations,
+    registerTranslations: (locale: Locale, dict: TranslationDict): void => {
+      if (!SUPPORTED_LOCALES.includes(locale)) {
+        throw new RangeError(
+          `Unsupported locale "${locale}". Supported: ${SUPPORTED_LOCALES.join(", ")}`,
+        );
+      }
+      instanceDictionaries.set(locale, dict);
+    },
   };
 }
 

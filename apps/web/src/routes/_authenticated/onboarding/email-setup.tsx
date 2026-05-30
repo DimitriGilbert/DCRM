@@ -71,7 +71,7 @@ export default function OnboardingEmailSetupPage() {
         <Link to="/onboarding/ai-setup">
           <Button variant="outline" size="sm">Back</Button>
         </Link>
-        <Link to="/onboarding">
+        <Link to="/dashboard">
           <Button size="sm">Continue</Button>
         </Link>
       </div>

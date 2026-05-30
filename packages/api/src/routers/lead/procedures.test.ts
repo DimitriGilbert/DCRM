@@ -118,6 +118,59 @@ vi.mock("@DCRM/db", () => ({
         return vi.fn(() => new Proxy({}, {}));
       },
     })),
+    transaction: vi.fn((fn) => fn({
+      insert: vi.fn(() => ({
+        values: vi.fn(async () => mockDbState.insertResult),
+      })),
+      select: vi.fn(() => new Proxy({}, {
+        get(_target, prop: string) {
+          if (prop === "from") {
+            return vi.fn(() => new Proxy({}, {
+              get(_t, p: string) {
+                if (p === "where") {
+                  return vi.fn(() => new Proxy({}, {
+                    get(_t2, p2: string) {
+                      if (p2 === "limit") {
+                        return vi.fn(() => new Proxy({}, {
+                          get(_t3, p3: string) {
+                            if (p3 === "for") return vi.fn(async () => mockDbState.selectResult);
+                            return vi.fn(() => new Proxy({}, {}));
+                          },
+                        }));
+                      }
+                      return vi.fn(() => new Proxy({}, {}));
+                    },
+                  }));
+                }
+                return vi.fn(() => new Proxy({}, {}));
+              },
+            }));
+          }
+          return vi.fn();
+        },
+      })),
+      update: vi.fn(() => new Proxy({}, {
+        get(_target, prop: string) {
+          if (prop === "set") {
+            return vi.fn(() => new Proxy({}, {
+              get(_t, p: string) {
+                if (p === "where") {
+                  return vi.fn(() => new Proxy({}, {
+                    get(_t2, p2: string) {
+                      if (p2 === "returning") return vi.fn(async () => mockDbState.updateReturning);
+                      if (p2 === "then") return undefined;
+                      return vi.fn(async () => undefined);
+                    },
+                  }));
+                }
+                return vi.fn(() => new Proxy({}, {}));
+              },
+            }));
+          }
+          return vi.fn(() => new Proxy({}, {}));
+        },
+      })),
+    })),
   },
 }));
 

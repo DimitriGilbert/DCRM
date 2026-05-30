@@ -12,9 +12,10 @@ export default function TicketDetail() {
   const muted = useThemeColor("muted");
   const { toast } = useToast();
 
-  const { data: ticket, isLoading } = useQuery(
-    trpc.ticket.read.queryOptions({ id: id ?? "" }),
-  );
+  const { data: ticket, isLoading } = useQuery({
+    ...trpc.ticket.read.queryOptions({ id: id ?? "" }),
+    enabled: !!id,
+  });
 
   if (!id) {
     return (
@@ -44,7 +45,7 @@ export default function TicketDetail() {
     if (!ticket) return;
     try {
       await trpcClient.ticket.softDelete.mutate({ id: ticket.id });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["ticket"] });
       router.back();
       toast.show({ variant: "success", label: "Ticket deleted" });
     } catch (error) {

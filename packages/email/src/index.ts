@@ -53,6 +53,8 @@ export {
   type LinkedExchange,
   type LinkUnmatchedDeps,
   type LinkResult,
+  type AlreadyLinkedResult,
+  type LinkAttemptResult,
 } from "./unmatched";
 
 export {

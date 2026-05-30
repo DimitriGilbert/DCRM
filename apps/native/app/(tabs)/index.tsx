@@ -15,15 +15,15 @@ export default function Dashboard() {
   const muted = useThemeColor("muted");
 
   const clients = useQuery({
-    ...trpc.client.list.queryOptions({ limit: 1 }),
+    ...trpc.client.list.queryOptions({ limit: 100 }),
     enabled: !!session?.user,
   });
   const projects = useQuery({
-    ...trpc.project.list.queryOptions({ limit: 1, status: "active" }),
+    ...trpc.project.list.queryOptions({ limit: 100, status: "active" }),
     enabled: !!session?.user,
   });
   const tickets = useQuery({
-    ...trpc.ticket.list.queryOptions({ limit: 1, status: "open" }),
+    ...trpc.ticket.list.queryOptions({ limit: 100, status: "open" }),
     enabled: !!session?.user,
   });
   const exchanges = useQuery({

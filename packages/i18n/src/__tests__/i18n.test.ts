@@ -8,6 +8,7 @@ import {
   t,
 } from "../index";
 
+import { en } from "../locales/en";
 import type { Locale, TranslationDict } from "../types";
 
 describe("i18n types", () => {
@@ -106,10 +107,7 @@ describe("registerTranslations", () => {
     expect(i18n.t("common.cancel")).toBe("CustomCancel");
     // Key not in custom falls back to key itself
     expect(i18n.t("common.edit")).toBe("common.edit");
-    // Restore original
-    i18n.registerTranslations("en", {
-      Save: "Save",
-      Cancel: "Cancel",
-    });
+    // Restore original dictionary
+    i18n.registerTranslations("en", en);
   });
 });

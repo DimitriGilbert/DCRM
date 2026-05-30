@@ -20,7 +20,7 @@ const TICKET_TYPES = ["task", "bug", "feature", "question"] as const;
 const TICKET_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 
 export default function CreateTicket() {
-  const params = useLocalSearchParams<{ projectId?: string }>();
+  const params = useLocalSearchParams<{ projectId?: string; projectName?: string }>();
   const { toast } = useToast();
   const muted = useThemeColor("muted");
 
@@ -49,7 +49,7 @@ export default function CreateTicket() {
         type: ticketType as (typeof TICKET_TYPES)[number],
         priority: priority as (typeof TICKET_PRIORITIES)[number],
       });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["ticket"] });
       router.back();
       toast.show({ variant: "success", label: "Ticket created" });
     } catch (error) {
@@ -90,7 +90,7 @@ export default function CreateTicket() {
             <Text className="text-muted text-sm">Project:</Text>
             <Pressable onPress={() => setSelectedProjectId(null)}>
               <Text className="text-primary text-sm font-medium">
-                {projects.find((p) => p.id === selectedProjectId)?.name ?? "Change"}
+                {projects.find((p) => p.id === selectedProjectId)?.name ?? params.projectName ?? "Unknown Project"}
               </Text>
             </Pressable>
           </View>

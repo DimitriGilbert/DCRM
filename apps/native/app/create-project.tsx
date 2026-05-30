@@ -38,7 +38,7 @@ export default function CreateProject() {
         clientId: selectedClientId,
         description: description.trim() || undefined,
       });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["project"] });
       router.back();
       toast.show({ variant: "success", label: "Project created" });
     } catch (error) {

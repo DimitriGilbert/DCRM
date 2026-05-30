@@ -95,9 +95,11 @@ describe("core CRM schema public exports", () => {
     const ticketForeignKeys = getTableConfig(tickets).foreignKeys.map(foreignKeyName);
     const exchangeForeignKeys = getTableConfig(exchanges).foreignKeys.map(foreignKeyName);
     const exchangeParticipantForeignKeys = getTableConfig(exchangeParticipants).foreignKeys.map(foreignKeyName);
+    const leadForeignKeys = getTableConfig(leads).foreignKeys.map(foreignKeyName);
 
     assert.ok(getTableConfig(clients).indexes.some((indexDefinition) => indexDefinition.config.name === "clients_user_id_id_idx" && indexDefinition.config.unique));
     assert.ok(getTableConfig(exchanges).indexes.some((indexDefinition) => indexDefinition.config.name === "exchanges_user_id_id_idx" && indexDefinition.config.unique));
+    assert.ok(leadForeignKeys.includes("leads_user_converted_client_fk"));
     assert.ok(projectForeignKeys.includes("projects_user_client_fk"));
     assert.ok(ticketForeignKeys.includes("tickets_user_project_fk"));
     assert.ok(exchangeForeignKeys.includes("exchanges_user_client_fk"));

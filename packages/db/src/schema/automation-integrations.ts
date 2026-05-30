@@ -14,6 +14,7 @@ import { relations } from "drizzle-orm";
 import { boolean, foreignKey, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { user } from "./auth.js";
+import { exchanges } from "./core-crm.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -65,6 +66,7 @@ export const events = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
+    uniqueIndex("events_user_id_id_idx").on(table.userId, table.id),
     index("events_user_id_idx").on(table.userId),
     index("events_type_idx").on(table.type),
     index("events_entity_idx").on(table.entityType, table.entityId),
@@ -97,6 +99,7 @@ export const hooks = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    uniqueIndex("hooks_user_id_id_idx").on(table.userId, table.id),
     index("hooks_user_id_idx").on(table.userId),
     index("hooks_event_type_idx").on(table.eventType),
     index("hooks_enabled_idx").on(table.enabled),
@@ -134,6 +137,9 @@ export const hookExecutions = pgTable(
       .notNull(),
   },
   (table) => [
+    uniqueIndex("hook_executions_user_id_id_idx").on(table.userId, table.id),
+    foreignKey({ columns: [table.userId, table.hookId], foreignColumns: [hooks.userId, hooks.id], name: "hook_executions_user_hook_fk" }).onDelete("cascade"),
+    foreignKey({ columns: [table.userId, table.eventId], foreignColumns: [events.userId, events.id], name: "hook_executions_user_event_fk" }).onDelete("cascade"),
     index("hook_executions_user_id_idx").on(table.userId),
     index("hook_executions_hook_id_idx").on(table.hookId),
     index("hook_executions_event_id_idx").on(table.eventId),
@@ -194,7 +200,7 @@ export const aiProviders = pgTable(
       .notNull(),
     deletedAt: timestamp("deleted_at"),
   },
-  (table) => [index("ai_providers_user_id_idx").on(table.userId), index("ai_providers_type_idx").on(table.type)],
+  (table) => [uniqueIndex("ai_providers_user_id_id_idx").on(table.userId, table.id), index("ai_providers_user_id_idx").on(table.userId), index("ai_providers_type_idx").on(table.type)],
 );
 
 export const aiInsights = pgTable(
@@ -218,7 +224,12 @@ export const aiInsights = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("ai_insights_user_id_idx").on(table.userId), index("ai_insights_entity_idx").on(table.entityType, table.entityId)],
+  (table) => [
+    foreignKey({ columns: [table.userId, table.providerId], foreignColumns: [aiProviders.userId, aiProviders.id], name: "ai_insights_user_provider_fk" }),
+    foreignKey({ columns: [table.userId, table.hookExecutionId], foreignColumns: [hookExecutions.userId, hookExecutions.id], name: "ai_insights_user_hook_execution_fk" }),
+    index("ai_insights_user_id_idx").on(table.userId),
+    index("ai_insights_entity_idx").on(table.entityType, table.entityId),
+  ],
 );
 
 export const aiMessages = pgTable(
@@ -240,7 +251,11 @@ export const aiMessages = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("ai_messages_user_id_idx").on(table.userId), index("ai_messages_conversation_id_idx").on(table.conversationId)],
+  (table) => [
+    foreignKey({ columns: [table.userId, table.providerId], foreignColumns: [aiProviders.userId, aiProviders.id], name: "ai_messages_user_provider_fk" }),
+    index("ai_messages_user_id_idx").on(table.userId),
+    index("ai_messages_conversation_id_idx").on(table.conversationId),
+  ],
 );
 
 export const emailAccounts = pgTable(
@@ -331,8 +346,10 @@ export const unmatchedEmailMessages = pgTable(
   },
   (table) => [
     foreignKey({ columns: [table.userId, table.emailAccountId], foreignColumns: [emailAccounts.userId, emailAccounts.id], name: "unmatched_email_messages_user_email_account_fk" }).onDelete("cascade"),
+    foreignKey({ columns: [table.userId, table.linkedExchangeId], foreignColumns: [exchanges.userId, exchanges.id], name: "unmatched_email_messages_user_linked_exchange_fk" }),
     index("unmatched_email_messages_user_id_idx").on(table.userId),
     index("unmatched_email_messages_from_email_idx").on(table.fromEmail),
+    index("unmatched_email_messages_linked_exchange_id_idx").on(table.linkedExchangeId),
     uniqueIndex("unmatched_email_messages_account_message_idx").on(table.emailAccountId, table.messageId),
   ],
 );

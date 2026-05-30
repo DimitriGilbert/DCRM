@@ -132,6 +132,7 @@ export const leads = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (table) => [
+    foreignKey({ columns: [table.userId, table.convertedClientId], foreignColumns: [clients.userId, clients.id], name: "leads_user_converted_client_fk" }),
     index("leads_user_id_idx").on(table.userId),
     index("leads_stage_idx").on(table.stage),
     index("leads_converted_client_id_idx").on(table.convertedClientId),

@@ -95,16 +95,29 @@ describe("automation and integration schema public exports", () => {
   it("declares event definition and email account ownership integrity constraints", () => {
     const eventForeignKeys = getTableConfig(events).foreignKeys.map(foreignKeyName);
     const hookForeignKeys = getTableConfig(hooks).foreignKeys.map(foreignKeyName);
+    const hookExecutionForeignKeys = getTableConfig(hookExecutions).foreignKeys.map(foreignKeyName);
+    const insightForeignKeys = getTableConfig(aiInsights).foreignKeys.map(foreignKeyName);
+    const messageForeignKeys = getTableConfig(aiMessages).foreignKeys.map(foreignKeyName);
     const incomingWebhookForeignKeys = getTableConfig(incomingWebhooks).foreignKeys.map(foreignKeyName);
     const syncStateForeignKeys = getTableConfig(emailSyncStates).foreignKeys.map(foreignKeyName);
     const unmatchedMessageForeignKeys = getTableConfig(unmatchedEmailMessages).foreignKeys.map(foreignKeyName);
 
+    assert.ok(getTableConfig(events).indexes.some((indexDefinition) => indexDefinition.config.name === "events_user_id_id_idx" && indexDefinition.config.unique));
+    assert.ok(getTableConfig(hooks).indexes.some((indexDefinition) => indexDefinition.config.name === "hooks_user_id_id_idx" && indexDefinition.config.unique));
+    assert.ok(getTableConfig(hookExecutions).indexes.some((indexDefinition) => indexDefinition.config.name === "hook_executions_user_id_id_idx" && indexDefinition.config.unique));
+    assert.ok(getTableConfig(aiProviders).indexes.some((indexDefinition) => indexDefinition.config.name === "ai_providers_user_id_id_idx" && indexDefinition.config.unique));
     assert.ok(getTableConfig(emailAccounts).indexes.some((indexDefinition) => indexDefinition.config.name === "email_accounts_user_id_id_idx" && indexDefinition.config.unique));
     assert.ok(eventForeignKeys.includes("events_type_event_definitions_type_fk"));
     assert.ok(hookForeignKeys.includes("hooks_event_type_event_definitions_type_fk"));
+    assert.ok(hookExecutionForeignKeys.includes("hook_executions_user_hook_fk"));
+    assert.ok(hookExecutionForeignKeys.includes("hook_executions_user_event_fk"));
+    assert.ok(insightForeignKeys.includes("ai_insights_user_provider_fk"));
+    assert.ok(insightForeignKeys.includes("ai_insights_user_hook_execution_fk"));
+    assert.ok(messageForeignKeys.includes("ai_messages_user_provider_fk"));
     assert.ok(incomingWebhookForeignKeys.includes("incoming_webhooks_target_event_type_event_definitions_type_fk"));
     assert.ok(syncStateForeignKeys.includes("email_sync_states_user_email_account_fk"));
     assert.ok(unmatchedMessageForeignKeys.includes("unmatched_email_messages_user_email_account_fk"));
+    assert.ok(unmatchedMessageForeignKeys.includes("unmatched_email_messages_user_linked_exchange_fk"));
   });
 });
 

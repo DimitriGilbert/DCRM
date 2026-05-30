@@ -1,0 +1,26 @@
+{
+  "name": "@DCRM/webhooks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@DCRM/crypto": "workspace:*",
+    "@DCRM/domain": "workspace:*",
+    "@DCRM/events": "workspace:*"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  }
+}

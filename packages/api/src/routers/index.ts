@@ -16,6 +16,8 @@ import { searchRouter } from "./search";
 import { settingsRouter } from "./settings";
 import { tagRouter } from "./tag";
 import { ticketRouter } from "./ticket";
+import { incomingWebhookRouter } from "./incoming-webhook";
+import { webhookRouter } from "./webhook";
 
 export const appRouter = router({
   healthCheck: publicProcedure.query(() => {
@@ -43,5 +45,7 @@ export const appRouter = router({
   export: exportRouter,
   notification: notificationRouter,
   settings: settingsRouter,
+  webhook: webhookRouter,
+  incomingWebhook: incomingWebhookRouter,
 });
 export type AppRouter = typeof appRouter;

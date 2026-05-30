@@ -20,8 +20,10 @@ import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedOnboardingIndexRouteImport } from './routes/_authenticated/onboarding/index'
 import { Route as AuthenticatedLeadsIndexRouteImport } from './routes/_authenticated/leads/index'
 import { Route as AuthenticatedClientsIndexRouteImport } from './routes/_authenticated/clients/index'
+import { Route as ApiWebhookTokenRouteImport } from './routes/api/webhook/$token'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AuthenticatedSettingsIncomingWebhooksRouteImport } from './routes/_authenticated/settings/incoming-webhooks'
 import { Route as AuthenticatedProjectsCreateRouteImport } from './routes/_authenticated/projects/create'
 import { Route as AuthenticatedProjectsProjectIdRouteImport } from './routes/_authenticated/projects/$projectId'
 import { Route as AuthenticatedLeadsCreateRouteImport } from './routes/_authenticated/leads/create'
@@ -95,6 +97,11 @@ const AuthenticatedClientsIndexRoute =
     path: '/clients/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiWebhookTokenRoute = ApiWebhookTokenRouteImport.update({
+  id: '/api/webhook/$token',
+  path: '/api/webhook/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: '/api/trpc/$',
   path: '/api/trpc/$',
@@ -105,6 +112,12 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedSettingsIncomingWebhooksRoute =
+  AuthenticatedSettingsIncomingWebhooksRouteImport.update({
+    id: '/incoming-webhooks',
+    path: '/incoming-webhooks',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
 const AuthenticatedProjectsCreateRoute =
   AuthenticatedProjectsCreateRouteImport.update({
     id: '/projects/create',
@@ -195,15 +208,17 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/ai-chat': typeof AuthenticatedAiChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/settings': typeof AuthenticatedSettingsRoute
+  '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/clients/$clientId': typeof AuthenticatedClientsClientIdRouteWithChildren
   '/clients/create': typeof AuthenticatedClientsCreateRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRouteWithChildren
   '/leads/create': typeof AuthenticatedLeadsCreateRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/api/webhook/$token': typeof ApiWebhookTokenRoute
   '/clients/': typeof AuthenticatedClientsIndexRoute
   '/leads/': typeof AuthenticatedLeadsIndexRoute
   '/onboarding/': typeof AuthenticatedOnboardingIndexRoute
@@ -223,15 +238,17 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/ai-chat': typeof AuthenticatedAiChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/settings': typeof AuthenticatedSettingsRoute
+  '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/clients/$clientId': typeof AuthenticatedClientsClientIdRouteWithChildren
   '/clients/create': typeof AuthenticatedClientsCreateRoute
   '/leads/$leadId': typeof AuthenticatedLeadsLeadIdRouteWithChildren
   '/leads/create': typeof AuthenticatedLeadsCreateRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/api/webhook/$token': typeof ApiWebhookTokenRoute
   '/clients': typeof AuthenticatedClientsIndexRoute
   '/leads': typeof AuthenticatedLeadsIndexRoute
   '/onboarding': typeof AuthenticatedOnboardingIndexRoute
@@ -253,15 +270,17 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/ai-chat': typeof AuthenticatedAiChatRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/_authenticated/clients/$clientId': typeof AuthenticatedClientsClientIdRouteWithChildren
   '/_authenticated/clients/create': typeof AuthenticatedClientsCreateRoute
   '/_authenticated/leads/$leadId': typeof AuthenticatedLeadsLeadIdRouteWithChildren
   '/_authenticated/leads/create': typeof AuthenticatedLeadsCreateRoute
   '/_authenticated/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/_authenticated/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/_authenticated/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/api/webhook/$token': typeof ApiWebhookTokenRoute
   '/_authenticated/clients/': typeof AuthenticatedClientsIndexRoute
   '/_authenticated/leads/': typeof AuthenticatedLeadsIndexRoute
   '/_authenticated/onboarding/': typeof AuthenticatedOnboardingIndexRoute
@@ -290,8 +309,10 @@ export interface FileRouteTypes {
     | '/leads/create'
     | '/projects/$projectId'
     | '/projects/create'
+    | '/settings/incoming-webhooks'
     | '/api/auth/$'
     | '/api/trpc/$'
+    | '/api/webhook/$token'
     | '/clients/'
     | '/leads/'
     | '/onboarding/'
@@ -318,8 +339,10 @@ export interface FileRouteTypes {
     | '/leads/create'
     | '/projects/$projectId'
     | '/projects/create'
+    | '/settings/incoming-webhooks'
     | '/api/auth/$'
     | '/api/trpc/$'
+    | '/api/webhook/$token'
     | '/clients'
     | '/leads'
     | '/onboarding'
@@ -347,8 +370,10 @@ export interface FileRouteTypes {
     | '/_authenticated/leads/create'
     | '/_authenticated/projects/$projectId'
     | '/_authenticated/projects/create'
+    | '/_authenticated/settings/incoming-webhooks'
     | '/api/auth/$'
     | '/api/trpc/$'
+    | '/api/webhook/$token'
     | '/_authenticated/clients/'
     | '/_authenticated/leads/'
     | '/_authenticated/onboarding/'
@@ -370,6 +395,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
+  ApiWebhookTokenRoute: typeof ApiWebhookTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -451,6 +477,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClientsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/webhook/$token': {
+      id: '/api/webhook/$token'
+      path: '/api/webhook/$token'
+      fullPath: '/api/webhook/$token'
+      preLoaderRoute: typeof ApiWebhookTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/trpc/$': {
       id: '/api/trpc/$'
       path: '/api/trpc/$'
@@ -464,6 +497,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/settings/incoming-webhooks': {
+      id: '/_authenticated/settings/incoming-webhooks'
+      path: '/incoming-webhooks'
+      fullPath: '/settings/incoming-webhooks'
+      preLoaderRoute: typeof AuthenticatedSettingsIncomingWebhooksRouteImport
+      parentRoute: typeof AuthenticatedSettingsRoute
     }
     '/_authenticated/projects/create': {
       id: '/_authenticated/projects/create'
@@ -566,6 +606,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedSettingsRouteChildren {
+  AuthenticatedSettingsIncomingWebhooksRoute: typeof AuthenticatedSettingsIncomingWebhooksRoute
+}
+
+const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
+  AuthenticatedSettingsIncomingWebhooksRoute:
+    AuthenticatedSettingsIncomingWebhooksRoute,
+}
+
+const AuthenticatedSettingsRouteWithChildren =
+  AuthenticatedSettingsRoute._addFileChildren(
+    AuthenticatedSettingsRouteChildren,
+  )
+
 interface AuthenticatedClientsClientIdRouteChildren {
   AuthenticatedClientsClientIdEditRoute: typeof AuthenticatedClientsClientIdEditRoute
 }
@@ -639,7 +693,7 @@ const AuthenticatedProjectsProjectIdRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedAiChatRoute: typeof AuthenticatedAiChatRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRouteWithChildren
   AuthenticatedClientsClientIdRoute: typeof AuthenticatedClientsClientIdRouteWithChildren
   AuthenticatedClientsCreateRoute: typeof AuthenticatedClientsCreateRoute
   AuthenticatedLeadsLeadIdRoute: typeof AuthenticatedLeadsLeadIdRouteWithChildren
@@ -656,7 +710,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAiChatRoute: AuthenticatedAiChatRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRouteWithChildren,
   AuthenticatedClientsClientIdRoute:
     AuthenticatedClientsClientIdRouteWithChildren,
   AuthenticatedClientsCreateRoute: AuthenticatedClientsCreateRoute,
@@ -682,6 +736,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
+  ApiWebhookTokenRoute: ApiWebhookTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

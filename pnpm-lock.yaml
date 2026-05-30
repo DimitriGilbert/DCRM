@@ -388,6 +388,9 @@ importers:
       '@DCRM/storage':
         specifier: workspace:*
         version: link:../storage
+      '@DCRM/webhooks':
+        specifier: workspace:*
+        version: link:../webhooks
       '@trpc/client':
         specifier: 'catalog:'
         version: 11.17.0(@trpc/server@11.17.0(typescript@6.0.3))(typescript@6.0.3)
@@ -656,6 +659,28 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+
+  packages/webhooks:
+    dependencies:
+      '@DCRM/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@DCRM/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@DCRM/events':
+        specifier: workspace:*
+        version: link:../events
+    devDependencies:
+      '@DCRM/config':
+        specifier: workspace:*
+        version: link:../config
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@25.9.1)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.2.0))(lightningcss@1.32.0)(msw@2.14.6(@types/node@25.9.1)(typescript@6.0.3))(terser@5.48.0)(tsx@4.22.3)(yaml@2.9.0)
 
 packages:
 

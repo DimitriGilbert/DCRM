@@ -96,6 +96,7 @@ export const clientAuthorizedEmails = pgTable(
     foreignKey({ columns: [table.userId, table.clientId], foreignColumns: [clients.userId, clients.id], name: "client_authorized_emails_user_client_fk" }).onDelete("cascade"),
     index("client_authorized_emails_user_id_idx").on(table.userId),
     index("client_authorized_emails_client_id_idx").on(table.clientId),
+    uniqueIndex("client_authorized_emails_user_pattern_idx").on(table.userId, table.pattern),
     uniqueIndex("client_authorized_emails_client_pattern_idx").on(table.clientId, table.pattern),
   ],
 );

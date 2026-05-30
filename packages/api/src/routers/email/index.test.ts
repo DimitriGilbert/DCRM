@@ -72,6 +72,37 @@ describe("email account and authorized sender API", () => {
     assert.deepEqual(unmatched, { status: "unmatched", sender: "stranger@example.test" });
     assert.deepEqual(otherUser, { status: "unmatched", sender: "ops@acme.test" });
   });
+
+  it("rejects IMAP credentials on ports without implicit TLS or STARTTLS", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository()));
+
+    await assert.rejects(
+      caller.email.upsertAccount({
+        name: "Work inbox",
+        emailAddress: "me@example.com",
+        imapHost: "imap.example.com",
+        imapPort: 110,
+        imapUsername: "me@example.com",
+        imapPassword: "imap-secret",
+        smtpHost: "smtp.example.com",
+        smtpPort: 465,
+        smtpUsername: "me@example.com",
+        smtpPassword: "smtp-secret",
+        enabled: true,
+      }),
+      /TLS or STARTTLS is required/u,
+    );
+  });
+
+  it("rejects authorized sender patterns that overlap another client", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository));
+    const acme = await caller.clients.create({ name: "Acme" });
+    const beta = await caller.clients.create({ name: "Beta" });
+    await caller.email.addClientAuthorizedEmail({ clientId: acme.id, pattern: "*@acme.test" });
+
+    await assert.rejects(caller.email.addClientAuthorizedEmail({ clientId: beta.id, pattern: "owner@acme.test" }), /overlaps another client/u);
+  });
 });
 
 function createTestContext(userId: string, crmRepository: CrmRepository, automationRepository: AutomationRepository = createInMemoryAutomationRepository(), secretCrypto: SecretCrypto = createTaggingSecretCrypto()): Context {

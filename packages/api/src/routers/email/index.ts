@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { SecretCrypto } from "@DCRM/crypto";
 
-import { normalizeAuthorizedEmailPattern, matchAuthorizedEmailSender, normalizeEmailAddress } from "../../email/matching.js";
+import { authorizedEmailPatternsOverlap, normalizeAuthorizedEmailPattern, matchAuthorizedEmailSender, normalizeEmailAddress } from "../../email/matching.js";
 import { protectedProcedure, router } from "../../index.js";
 
 import type { AutomationRepository } from "../../automation/repository.js";
@@ -37,6 +37,7 @@ export const emailRouter = router({
   }),
   upsertAccount: protectedProcedure.input(emailAccountInputSchema).mutation(async ({ ctx, input }) => {
     const secretCrypto = requireSecretCrypto(ctx.secretCrypto);
+    assertSafeImapAccountConfiguration(input.imapPort, input.imapUsername, input.imapPassword);
     return requireAutomationRepository(ctx.automationRepository).emailAccounts.upsertEncrypted({
       ...(input.id ? { id: input.id } : {}),
       userId: ctx.auth.user.id,
@@ -58,11 +59,17 @@ export const emailRouter = router({
     return ctx.crmRepository.clientAuthorizedEmails.listForClient({ userId: ctx.auth.user.id, clientId: input.clientId });
   }),
   addClientAuthorizedEmail: protectedProcedure.input(z.object({ clientId: z.string().trim().min(1), pattern: authorizedEmailPatternSchema })).mutation(async ({ ctx, input }) => {
+    const normalizedPattern = normalizeAuthorizedEmailPattern(input.pattern);
+    const existingPatterns = await ctx.crmRepository.clientAuthorizedEmails.listForUser({ userId: ctx.auth.user.id });
+    const overlap = existingPatterns.find((record) => authorizedEmailPatternsOverlap(record.pattern, normalizedPattern) && record.clientId !== input.clientId);
+    if (overlap) {
+      throw new Error("Authorized sender pattern overlaps another client.");
+    }
     return ctx.crmRepository.clientAuthorizedEmails.add({
       id: crypto.randomUUID(),
       userId: ctx.auth.user.id,
       clientId: input.clientId,
-      pattern: normalizeAuthorizedEmailPattern(input.pattern),
+      pattern: normalizedPattern,
       now: new Date(),
     });
   }),
@@ -80,6 +87,21 @@ function requireAutomationRepository(automationRepository: AutomationRepository 
     throw new Error("Automation repository is required for email account configuration.");
   }
   return automationRepository;
+}
+
+function assertSafeImapAccountConfiguration(port: number, username: string, password: string): void {
+  const credentialsPresent = username.trim().length > 0 || password.trim().length > 0;
+  if (credentialsPresent && !isImplicitTlsImapPort(port) && !isStartTlsImapPort(port)) {
+    throw new Error("TLS or STARTTLS is required before IMAP authentication.");
+  }
+}
+
+function isImplicitTlsImapPort(port: number): boolean {
+  return port === 993;
+}
+
+function isStartTlsImapPort(port: number): boolean {
+  return port === 143;
 }
 
 function requireSecretCrypto(secretCrypto: SecretCrypto | undefined): SecretCrypto {

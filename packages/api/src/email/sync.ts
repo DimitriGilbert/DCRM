@@ -4,7 +4,7 @@ import { Queue, Worker } from "bullmq";
 
 import type { JobsOptions, QueueOptions, WorkerOptions } from "bullmq";
 import type { SecretCrypto } from "@DCRM/crypto";
-import type { EventService } from "@DCRM/events";
+import type { DcrmEvent, EventService } from "@DCRM/events";
 import type { AddressObject as ParsedAddressObject, EmailAddress as ParsedEmailAddress } from "mailparser";
 
 import { matchAuthorizedEmailSender, normalizeEmailAddress } from "./matching.js";
@@ -319,10 +319,14 @@ export function createEmailSyncWorker({ connection, processor, queueName = EMAIL
 }
 
 function createDefaultImapNetworkClient({ account }: { readonly account: DecryptedImapAccount }): ImapNetworkClient {
+  assertSafeImapAuthenticationBoundary(account);
+  const secure = account.imapPort === 993;
   return new ImapFlow({
     host: account.imapHost,
     port: account.imapPort,
-    secure: account.imapPort === 993,
+    secure,
+    doSTARTTLS: !secure,
+    tls: { rejectUnauthorized: true, servername: account.imapHost },
     auth: { user: account.imapUsername, pass: account.imapPassword },
     clientInfo: { name: "DCRM" },
     logger: false,
@@ -519,6 +523,7 @@ async function processIncomingEmail(input: { readonly account: EmailAccountEncry
   if (match.status === "matched") {
     const existingExchange = await findExistingSyncedEmailExchange({ crmRepository: input.crmRepository, userId: input.account.userId, emailAccountId: input.account.id, mailbox: input.mailbox, message: input.message });
     if (existingExchange) {
+      await emitExchangeReceivedIfMissing(input.eventService, existingExchange, fromEmail, input.message, match.pattern);
       return "existing-exchange";
     }
     const threadedExchange = await findThreadedTicketExchange({ crmRepository: input.crmRepository, userId: input.account.userId, message: input.message });
@@ -559,9 +564,10 @@ async function processIncomingEmail(input: { readonly account: EmailAccountEncry
       return duplicate;
     });
     if (!createdByThisAttempt) {
+      await emitExchangeReceivedIfMissing(input.eventService, exchange, fromEmail, input.message, match.pattern);
       return "existing-exchange";
     }
-    await emitExchangeReceived(input.eventService, exchange, fromEmail, input.message, match.pattern);
+    await emitExchangeReceivedIfMissing(input.eventService, exchange, fromEmail, input.message, match.pattern);
     return "exchange";
   }
 
@@ -590,6 +596,13 @@ function threadingMessageIds(message: ImapEmailMessage): readonly string[] {
 
 function decryptImapAccount(account: EmailAccountEncryptedRecord, secretCrypto: SecretCrypto): DecryptedImapAccount {
   return { id: account.id, userId: account.userId, emailAddress: account.emailAddress, imapHost: account.imapHost, imapPort: account.imapPort, imapUsername: account.imapUsername, imapPassword: secretCrypto.decrypt(account.encryptedImapPassword) };
+}
+
+function assertSafeImapAuthenticationBoundary(account: DecryptedImapAccount): void {
+  const credentialsPresent = account.imapUsername.trim().length > 0 || account.imapPassword.trim().length > 0;
+  if (credentialsPresent && account.imapPort !== 993 && account.imapPort !== 143) {
+    throw new Error("TLS or STARTTLS is required before IMAP authentication.");
+  }
 }
 
 function hasLoopPreventionHeader(message: ImapEmailMessage): boolean {
@@ -632,6 +645,18 @@ function addressMetadata(address: EmailAddress): JsonObject {
 
 async function emitExchangeReceived(eventService: EventService, exchange: ExchangeRecord, fromEmail: string, message: ImapEmailMessage, matchedPattern: string): Promise<void> {
   await eventService.emitEmail({ type: "exchange.exchange_received", userId: exchange.userId, entity: { type: "exchange", id: exchange.id }, payload: { exchangeId: exchange.id, clientId: exchange.clientId, fromEmail, subject: message.subject ?? null, messageId: message.messageId, matchedPattern } });
+}
+
+async function emitExchangeReceivedIfMissing(eventService: EventService, exchange: ExchangeRecord, fromEmail: string, message: ImapEmailMessage, matchedPattern: string): Promise<void> {
+  const events = await eventService.listForUser(exchange.userId);
+  if (events.some((event) => isExchangeReceivedEventForExchange(event, exchange.id))) {
+    return;
+  }
+  await emitExchangeReceived(eventService, exchange, fromEmail, message, matchedPattern);
+}
+
+function isExchangeReceivedEventForExchange(event: DcrmEvent, exchangeId: string): boolean {
+  return event.type === "exchange.exchange_received" && event.entity?.type === "exchange" && event.entity.id === exchangeId;
 }
 
 function preview(value: string): string {

@@ -53,7 +53,6 @@ export function createTicketCommentEmailSender(input: {
   readonly smtpClient?: SmtpPlainTextClient;
   readonly idGenerator?: () => string;
 }): TicketCommentEmailSender {
-  const idGenerator = input.idGenerator ?? (() => crypto.randomUUID());
   const smtpClient = input.smtpClient ?? createNodeSmtpPlainTextClient();
   return async function sendTicketCommentEmail(sendInput) {
     const exchange = await input.crmRepository.exchanges.getById({ userId: sendInput.userId, id: sendInput.exchangeId });
@@ -75,7 +74,7 @@ export function createTicketCommentEmailSender(input: {
     }
     const account = await selectEmailAccount(input.automationRepository, sendInput.userId, sendInput.emailAccountId);
     const previousHeaders = await findPreviousTicketThreadHeaders(input.crmRepository, exchange);
-    const generatedMessageId = `<dcrm-${idGenerator()}@dcrm.local>`;
+    const generatedMessageId = deterministicMessageId(exchange.id);
     const references = [...previousHeaders.references, ...(previousHeaders.inReplyTo ? [previousHeaders.inReplyTo] : [])];
     const headers = {
       [DCRM_LOOP_PREVENTION_HEADER]: "true",
@@ -91,6 +90,7 @@ export function createTicketCommentEmailSender(input: {
       messageId: generatedMessageId,
     } satisfies SmtpPlainTextMessage;
 
+    const preparedExchange = await markSmtpSendPrepared(input.crmRepository, exchange, account.id, headers, generatedMessageId, sendInput.now);
     const result = await smtpClient.sendPlainText({ account: decryptSmtpAccount(account, input.secretCrypto), message });
     const messageId = result.messageId?.trim() || generatedMessageId;
     const updated = await input.crmRepository.exchanges.update({
@@ -99,7 +99,7 @@ export function createTicketCommentEmailSender(input: {
       fields: {
         externalMessageId: messageId,
         threadId: previousHeaders.threadId ?? previousHeaders.inReplyTo ?? messageId,
-        metadata: { ...exchange.metadata, smtp: { emailAccountId: account.id, sentAt: sendInput.now.toISOString(), headers, messageId } } satisfies JsonObject,
+        metadata: { ...preparedExchange.metadata, smtp: { emailAccountId: account.id, preparedAt: sendInput.now.toISOString(), sentAt: sendInput.now.toISOString(), status: "accepted", headers, messageId } } satisfies JsonObject,
       },
       now: sendInput.now,
     });
@@ -115,10 +115,39 @@ function existingSentEmail(exchange: ExchangeRecord): SendTicketCommentEmailResu
     return { exchange, messageId: exchange.externalMessageId, headers: extractSentHeaders(exchange.metadata) };
   }
   const smtp = exchange.metadata.smtp;
-  if (!isJsonObject(smtp) || typeof smtp.sentAt !== "string" || typeof smtp.messageId !== "string") {
+  if (!isJsonObject(smtp) || typeof smtp.messageId !== "string") {
+    return null;
+  }
+  if (smtp.status === "prepared" || smtp.status === "in_flight") {
+    return { exchange, messageId: smtp.messageId, headers: extractSentHeaders(exchange.metadata) };
+  }
+  if (typeof smtp.sentAt !== "string") {
     return null;
   }
   return { exchange, messageId: smtp.messageId, headers: extractSentHeaders(exchange.metadata) };
+}
+
+async function markSmtpSendPrepared(crmRepository: CrmRepository, exchange: ExchangeRecord, emailAccountId: string, headers: Readonly<Record<string, string>>, messageId: string, now: Date): Promise<ExchangeRecord> {
+  const updated = await crmRepository.exchanges.update({
+    userId: exchange.userId,
+    id: exchange.id,
+    fields: {
+      metadata: { ...exchange.metadata, smtp: { emailAccountId, preparedAt: now.toISOString(), status: "in_flight", headers, messageId } } satisfies JsonObject,
+    },
+    now,
+  });
+  if (!updated) {
+    throw new Error("Ticket comment email idempotency state was not saved.");
+  }
+  return updated;
+}
+
+function deterministicMessageId(exchangeId: string): string {
+  return `<dcrm-${sanitizeMessageIdToken(exchangeId)}@dcrm.local>`;
+}
+
+function sanitizeMessageIdToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9._-]+/gu, "-").replace(/^-+|-+$/gu, "") || "exchange";
 }
 
 function extractSentHeaders(metadata: JsonObject): Readonly<Record<string, string>> {

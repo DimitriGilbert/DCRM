@@ -39,6 +39,8 @@ import type {
   UserSettingsRecord,
 } from "./types.js";
 
+import { authorizedEmailPatternsOverlap, normalizeAuthorizedEmailPattern } from "../email/matching.js";
+
 export type CrmRepository = {
   readonly clients: {
     readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: ClientMutationFields; readonly now: Date }) => Promise<ClientRecord>;
@@ -204,6 +206,7 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         if (!existingClient) {
           throw new Error("Client not found.");
         }
+        assertAuthorizedEmailPatternAvailable(clientAuthorizedEmails, input.userId, input.clientId, input.pattern);
         const record: ClientAuthorizedEmailRecord = {
           id: input.id,
           userId: input.userId,
@@ -219,7 +222,7 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         return clientAuthorizedEmails.filter((record) => record.userId === input.userId && record.clientId === input.clientId);
       },
       async listForUser(input) {
-        return clientAuthorizedEmails.filter((record) => record.userId === input.userId);
+        return clientAuthorizedEmails.filter((record) => record.userId === input.userId).toSorted(compareClientAuthorizedEmails);
       },
       async remove(input) {
         const index = clientAuthorizedEmails.findIndex((record) => record.userId === input.userId && record.id === input.id);
@@ -899,6 +902,26 @@ function matchesTagFilter(records: readonly EntityTagRecord[], userId: string, e
     return true;
   }
   return tagIds.every((tagId) => records.some((record) => record.userId === userId && record.entityType === entityType && record.entityId === entityId && record.tagId === tagId));
+}
+
+function assertAuthorizedEmailPatternAvailable(records: readonly ClientAuthorizedEmailRecord[], userId: string, clientId: string, pattern: string): void {
+  const normalizedPattern = normalizeAuthorizedEmailPattern(pattern);
+  const overlap = records.find((record) => record.userId === userId && record.clientId !== clientId && authorizedEmailPatternsOverlap(record.pattern, normalizedPattern));
+  if (overlap) {
+    throw new Error("Authorized sender pattern overlaps another client.");
+  }
+}
+
+function compareClientAuthorizedEmails(left: ClientAuthorizedEmailRecord, right: ClientAuthorizedEmailRecord): number {
+  const patternOrder = left.pattern.localeCompare(right.pattern);
+  if (patternOrder !== 0) {
+    return patternOrder;
+  }
+  const createdOrder = left.createdAt.getTime() - right.createdAt.getTime();
+  if (createdOrder !== 0) {
+    return createdOrder;
+  }
+  return left.id.localeCompare(right.id);
 }
 
 class UniqueConstraintError extends Error {

@@ -6,6 +6,7 @@ import type { AttachmentTargetType } from "@DCRM/domain";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql, sum } from "drizzle-orm";
 
 import { DuplicateTagNameError } from "./repository.js";
+import { authorizedEmailPatternsOverlap, normalizeAuthorizedEmailPattern } from "../email/matching.js";
 import type { CrmRepository } from "./repository.js";
 import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
 
@@ -65,6 +66,12 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         if (!clientRows[0]) {
           throw new Error("Client not found.");
         }
+        const existingRows = await database.select().from(clientAuthorizedEmails).where(eq(clientAuthorizedEmails.userId, input.userId));
+        const normalizedPattern = normalizeAuthorizedEmailPattern(input.pattern);
+        const overlap = existingRows.find((record) => record.clientId !== input.clientId && authorizedEmailPatternsOverlap(record.pattern, normalizedPattern));
+        if (overlap) {
+          throw new Error("Authorized sender pattern overlaps another client.");
+        }
         const rows = await database.insert(clientAuthorizedEmails).values({ id: input.id, userId: input.userId, clientId: input.clientId, pattern: input.pattern, createdAt: input.now, updatedAt: input.now }).returning();
         return requireClientAuthorizedEmail(rows[0], input.id);
       },
@@ -73,7 +80,7 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         return rows.map(rowToClientAuthorizedEmail);
       },
       async listForUser(input) {
-        const rows = await database.select().from(clientAuthorizedEmails).where(eq(clientAuthorizedEmails.userId, input.userId));
+        const rows = await database.select().from(clientAuthorizedEmails).where(eq(clientAuthorizedEmails.userId, input.userId)).orderBy(asc(clientAuthorizedEmails.pattern), asc(clientAuthorizedEmails.createdAt), asc(clientAuthorizedEmails.id));
         return rows.map(rowToClientAuthorizedEmail);
       },
       async remove(input) {

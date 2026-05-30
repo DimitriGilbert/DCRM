@@ -9,6 +9,7 @@ import { createInMemoryCrmRepository } from "../crm/repository.js";
 import { createNodeSmtpPlainTextClient } from "./smtp.js";
 import { createTicketCommentEmailSender } from "./send.js";
 
+import type { CrmRepository } from "../crm/repository.js";
 import type { SmtpPlainTextClient, SmtpPlainTextMessage } from "./send.js";
 
 describe("SMTP ticket comment email sender", () => {
@@ -108,6 +109,28 @@ describe("SMTP ticket comment email sender", () => {
     assert.equal(result.exchange.externalMessageId, null);
   });
 
+  it("does not send again after SMTP acceptance when post-send persistence fails", async () => {
+    const now = new Date("2026-01-01T12:00:00.000Z");
+    const baseCrmRepository = createInMemoryCrmRepository();
+    const crmRepository = failAcceptedSmtpPersistence(baseCrmRepository);
+    const automationRepository = createInMemoryAutomationRepository();
+    const secretCrypto = createTaggingSecretCrypto();
+    const sentMessages: SmtpPlainTextMessage[] = [];
+    await automationRepository.emailAccounts.upsertEncrypted(createAccountInput(secretCrypto, now));
+    const client = await crmRepository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Acme", email: "client@acme.test" }, now });
+    const project = await crmRepository.projects.create({ id: "project_1", userId: "user_1", fields: { clientId: client.id, name: "Support" }, now });
+    const ticket = await crmRepository.tickets.create({ id: "ticket_1", userId: "user_1", fields: { projectId: project.id, title: "Broken form" }, now });
+    const comment = await crmRepository.exchanges.create({ id: "exchange_1", userId: "user_1", fields: { clientId: client.id, projectId: project.id, ticketId: ticket.id, type: "comment", visibility: "external", body: "I shipped a fix." }, now });
+    const sender = createTicketCommentEmailSender({ automationRepository, crmRepository, secretCrypto, smtpClient: createRecordingSmtpClient(sentMessages, "<smtp-1@example.test>") });
+
+    await assert.rejects(sender({ userId: "user_1", exchangeId: comment.id, now }), /simulated persistence failure/u);
+    const retryResult = await sender({ userId: "user_1", exchangeId: comment.id, now });
+
+    assert.equal(sentMessages.length, 1);
+    assert.equal(sentMessages[0]?.messageId, "<dcrm-exchange_1@dcrm.local>");
+    assert.equal(retryResult.messageId, "<dcrm-exchange_1@dcrm.local>");
+  });
+
   it("sends through the production SMTP client using decrypted saved account settings without an injected test client", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
     const smtpServer = await createLocalSmtpServer({ advertiseAuth: false });
@@ -185,6 +208,21 @@ function createRecordingSmtpClient(messages: SmtpPlainTextMessage[], messageId: 
     async sendPlainText(input) {
       messages.push(input.message);
       return { messageId };
+    },
+  };
+}
+
+function failAcceptedSmtpPersistence(repository: CrmRepository): CrmRepository {
+  return {
+    ...repository,
+    exchanges: {
+      ...repository.exchanges,
+      async update(input) {
+        if (input.fields.externalMessageId !== undefined) {
+          throw new Error("simulated persistence failure");
+        }
+        return repository.exchanges.update(input);
+      },
     },
   };
 }

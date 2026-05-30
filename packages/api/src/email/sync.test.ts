@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { createEventService, createInMemoryEventRepository } from "@DCRM/events";
 import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
+import type { EventService, SourceSpecificEmitEventInput } from "@DCRM/events";
 
 import { createInMemoryAutomationRepository } from "../automation/repository.js";
 import { createInMemoryCrmRepository } from "../crm/repository.js";
@@ -104,6 +105,30 @@ describe("IMAP email sync", () => {
     assert.equal(exchanges[0]?.externalMessageId, "<retry@acme.test>");
   });
 
+  it("retries a missing exchange received event for an existing synced exchange", async () => {
+    const now = new Date("2026-01-01T12:00:00.000Z");
+    const { automationRepository, crmRepository } = createSyncedTestRepositories();
+    const eventRepository = createInMemoryEventRepository();
+    const emailSyncRepository = createInMemoryEmailSyncRepository();
+    const secretCrypto = createTaggingSecretCrypto();
+    await automationRepository.emailAccounts.upsertEncrypted(createAccountInput(secretCrypto, now));
+    const client = await crmRepository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Acme" }, now });
+    await crmRepository.clientAuthorizedEmails.add({ id: "auth_1", userId: "user_1", clientId: client.id, pattern: "*@acme.test", now });
+    const message = mockMessage({ from: "owner@acme.test", messageId: "<event-retry@acme.test>", uid: "102" });
+    const failingProcessor = createEmailSyncProcessor({ automationRepository, clock: () => now, crmRepository, emailSyncRepository, eventService: createFailingEmailEventService(), idGenerator: nextId("record"), imapClient: createMockImapClient([message]), secretCrypto });
+
+    await assert.rejects(failingProcessor({ userId: "user_1" }), /simulated event failure/u);
+    const processor = createEmailSyncProcessor({ automationRepository, clock: () => now, crmRepository, emailSyncRepository, eventService: createEventService({ repository: eventRepository, clock: () => now, idGenerator: nextId("event") }), idGenerator: nextId("record"), imapClient: createMockImapClient([message]), secretCrypto });
+    const retryResult = await processor({ userId: "user_1" });
+    const exchanges = await crmRepository.exchanges.list({ userId: "user_1", type: "email" });
+    const events = await eventRepository.listForUser("user_1");
+
+    assert.equal(retryResult.exchangesCreated, 0);
+    assert.equal(exchanges.length, 1);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.entity?.id, exchanges[0]?.id);
+  });
+
   it("links client replies back to ticket threads using In-Reply-To headers", async () => {
     const now = new Date("2026-01-01T12:00:00.000Z");
     const { automationRepository, crmRepository } = createSyncedTestRepositories();
@@ -189,6 +214,19 @@ describe("IMAP email sync", () => {
     assert.deepEqual(connections[0]?.fetchRange, "1:*");
     assert.equal(connections[0]?.loggedOut, true);
     assert.equal(account.emailAddress, "me@example.com");
+  });
+
+  it("rejects authenticated IMAP on ports without an implicit TLS or STARTTLS boundary before connecting", async () => {
+    const imapClient = createNodeImapMailboxClient();
+
+    await assert.rejects(
+      imapClient.fetchNewMessages({
+        account: { id: "account_1", userId: "user_1", emailAddress: "me@example.com", imapHost: "127.0.0.1", imapPort: 1143, imapUsername: "me@example.com", imapPassword: "imap-secret" },
+        mailbox: "INBOX",
+        state: null,
+      }),
+      /TLS or STARTTLS is required/u,
+    );
   });
 
   it("resets the IMAP UID cursor when UIDVALIDITY changes", async () => {
@@ -305,6 +343,35 @@ function createMockImapClient(messages: readonly ImapEmailMessage[]): ImapMailbo
   return {
     async fetchNewMessages() {
       return { messages, uidValidity: null };
+    },
+  };
+}
+
+function createFailingEmailEventService(): EventService {
+  return {
+    async emit() {
+      throw new Error("simulated event failure");
+    },
+    async emitApp(input) {
+      return this.emit({ ...input, source: "app" });
+    },
+    async emitApi(input) {
+      return this.emit({ ...input, source: "api" });
+    },
+    async emitEmail(input: SourceSpecificEmitEventInput) {
+      return this.emit({ ...input, source: "email" });
+    },
+    async emitWebhook(input) {
+      return this.emit({ ...input, source: "webhook" });
+    },
+    async emitHook(input) {
+      return this.emit({ ...input, source: "hook" });
+    },
+    async emitSystem(input) {
+      return this.emit({ ...input, source: "system" });
+    },
+    async listForUser() {
+      return [];
     },
   };
 }

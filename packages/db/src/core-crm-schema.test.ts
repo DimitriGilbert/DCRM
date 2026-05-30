@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { getTableColumns, getTableName } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 
 import {
   attachmentTargetTypeEnum,
+  clientAuthorizedEmails,
   attachments,
   clients,
   coreCrmTables,
@@ -24,6 +26,7 @@ import {
 describe("core CRM schema public exports", () => {
   it("exposes user-scoped CRM tables and fixed domain enums through the schema barrel", () => {
     assert.equal(getTableName(clients), "clients");
+    assert.equal(getTableName(clientAuthorizedEmails), "client_authorized_emails");
     assert.equal(getTableName(leads), "leads");
     assert.equal(getTableName(projects), "projects");
     assert.equal(getTableName(tickets), "tickets");
@@ -45,6 +48,9 @@ describe("core CRM schema public exports", () => {
     assert.ok(clientColumns.updatedAt);
     assert.ok(clientColumns.deletedAt);
     assert.ok(exchangeColumns.ticketId);
+    assert.ok(exchangeColumns.syncedEmailAccountId);
+    assert.ok(exchangeColumns.syncedEmailMailbox);
+    assert.ok(exchangeColumns.syncedEmailUid);
     assert.ok(settingsColumns.userId);
     assert.ok(notificationColumns.userId);
     assert.ok(notificationColumns.readAt);
@@ -60,6 +66,7 @@ describe("core CRM schema public exports", () => {
       coreCrmTables.map((table) => getTableName(table)),
       [
         "clients",
+        "client_authorized_emails",
         "leads",
         "projects",
         "tickets",
@@ -73,4 +80,20 @@ describe("core CRM schema public exports", () => {
       ],
     );
   });
+
+  it("enforces a database-level identity for synced email exchanges", () => {
+    const exchangeConfig = getTableConfig(exchanges);
+    const syncedEmailIdentity = exchangeConfig.indexes.find((indexDefinition) => indexDefinition.config.name === "exchanges_synced_email_identity_idx");
+
+    assert.ok(syncedEmailIdentity);
+    assert.equal(syncedEmailIdentity.config.unique, true);
+    assert.deepEqual(syncedEmailIdentity.config.columns.map(columnName), ["user_id", "synced_email_account_id", "synced_email_mailbox", "synced_email_uid"]);
+  });
 });
+
+function columnName(column: object): string {
+  if ("name" in column && typeof column.name === "string") {
+    return column.name;
+  }
+  return "";
+}

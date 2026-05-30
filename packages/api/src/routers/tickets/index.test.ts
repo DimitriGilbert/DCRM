@@ -4,11 +4,15 @@ import { describe, it } from "node:test";
 import { createEventService, createInMemoryEventRepository } from "@DCRM/events";
 import type { EventService } from "@DCRM/events";
 
+import { createInMemoryAutomationRepository } from "../../automation/repository.js";
 import { createInMemoryCrmRepository } from "../../crm/repository.js";
 import { appRouter } from "../index.js";
 
+import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
+import type { AutomationRepository } from "../../automation/repository.js";
 import type { Context } from "../../context.js";
 import type { CrmRepository } from "../../crm/repository.js";
+import type { SmtpPlainTextClient, SmtpPlainTextMessage } from "../../email/send.js";
 
 describe("tickets and exchanges tRPC API", () => {
   it("creates a user-scoped ticket inside an owned project with due date and emits a ticket.created event", async () => {
@@ -100,14 +104,47 @@ describe("tickets and exchanges tRPC API", () => {
     assert.equal(note.type, "note");
     assert.equal(note.visibility, "internal");
   });
+
+  it("emails external ticket comments to the client through SMTP and records threading headers", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const automationRepository = createInMemoryAutomationRepository();
+    const eventService = createTestEventService();
+    const secretCrypto = createTaggingSecretCrypto();
+    const sentMessages: SmtpPlainTextMessage[] = [];
+    await automationRepository.emailAccounts.upsertEncrypted(createAccountInput(secretCrypto, new Date("2026-01-01T12:00:00.000Z")));
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService, { automationRepository, secretCrypto, smtpClient: createRecordingSmtpClient(sentMessages, "<sent@example.test>") }));
+    const client = await caller.clients.create({ name: "Ada Lovelace", email: "ada@example.test" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
+
+    const comment = await caller.exchanges.addTicketComment({ ticketId: ticket.id, body: "Please try the form again.", visibility: "external", emailToClient: true });
+
+    assert.equal(sentMessages.length, 1);
+    assert.equal(sentMessages[0]?.headers["x-dcrm-sent"], "true");
+    assert.equal(comment.externalMessageId, "<sent@example.test>");
+  });
+
+  it("does not email internal ticket comments from the ticket comment API", async () => {
+    const sentMessages: SmtpPlainTextMessage[] = [];
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService(), { smtpClient: createRecordingSmtpClient(sentMessages, "<sent@example.test>") }));
+    const client = await caller.clients.create({ name: "Ada Lovelace", email: "ada@example.test" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
+
+    await assert.rejects(caller.exchanges.addTicketComment({ ticketId: ticket.id, body: "Private diagnosis.", visibility: "internal", emailToClient: true }), /Only external ticket comments can be emailed to clients/u);
+    assert.equal(sentMessages.length, 0);
+  });
 });
 
-function createTestContext(userId: string, crmRepository: CrmRepository, eventService: EventService): Context {
+function createTestContext(userId: string, crmRepository: CrmRepository, eventService: EventService, options: { readonly automationRepository?: AutomationRepository; readonly secretCrypto?: SecretCrypto; readonly smtpClient?: SmtpPlainTextClient } = {}): Context {
   return {
     auth: { kind: "session", user: { id: userId, email: `${userId}@example.com`, name: userId, image: null } },
+    automationRepository: options.automationRepository,
     crmRepository,
     eventService,
+    secretCrypto: options.secretCrypto,
     session: null,
+    smtpClient: options.smtpClient,
   };
 }
 
@@ -120,4 +157,38 @@ function createTestEventService(): EventService {
       return `event_${nextId}`;
     },
   });
+}
+
+function createRecordingSmtpClient(messages: SmtpPlainTextMessage[], messageId: string): SmtpPlainTextClient {
+  return {
+    async sendPlainText(input) {
+      messages.push(input.message);
+      return { messageId };
+    },
+  };
+}
+
+function createAccountInput(secretCrypto: SecretCrypto, now: Date) {
+  return {
+    userId: "user_1",
+    name: "Work inbox",
+    emailAddress: "me@example.com",
+    imapHost: "imap.example.com",
+    imapPort: 993,
+    imapUsername: "me@example.com",
+    encryptedImapPassword: secretCrypto.encrypt("imap-secret"),
+    smtpHost: "smtp.example.com",
+    smtpPort: 465,
+    smtpUsername: "me@example.com",
+    encryptedSmtpPassword: secretCrypto.encrypt("smtp-secret"),
+    enabled: true,
+    now,
+  };
+}
+
+function createTaggingSecretCrypto(): SecretCrypto {
+  return {
+    encrypt: (plaintext) => ({ version: "dcrm.secret.v1", algorithm: "aes-256-gcm", encoding: "base64", ciphertext: Buffer.from(plaintext, "utf8").toString("base64"), iv: "test-iv", authTag: "test-tag" }) satisfies EncryptedSecretV1,
+    decrypt: (encrypted) => Buffer.from(encrypted.ciphertext, "base64").toString("utf8"),
+  };
 }

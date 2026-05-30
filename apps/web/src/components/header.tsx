@@ -16,6 +16,7 @@ const primaryLinks = [
   { to: "/data", label: t("appShell.navigation.data") },
   { to: "/ai/chat", label: "AI chat" },
   { to: "/settings/ai", label: "AI settings" },
+  { to: "/settings/email", label: "Email settings" },
   { to: "/onboarding/language", label: t("appShell.navigation.onboarding") },
 ] as const;
 

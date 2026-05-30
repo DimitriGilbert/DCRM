@@ -16,11 +16,13 @@ import type { HookExecutionQueue, HookExecutionRepository } from "@DCRM/events/h
 import { createDrizzleAutomationRepository } from "./automation/drizzle.js";
 import { createHookAwareAiEventService, createProductionHookExecutionQueue } from "./automation/runtime.js";
 import { createDrizzleCrmRepository } from "./crm/drizzle.js";
+import { createNodeSmtpPlainTextClient } from "./email/smtp.js";
 import { createStorageService } from "./storage/index.js";
 
 import type { AutomationRepository } from "./automation/repository.js";
 import type { CrmRepository } from "./crm/repository.js";
 import type { StorageService } from "./storage/index.js";
+import type { SmtpPlainTextClient } from "./email/send.js";
 
 type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 export type AuthUser = {
@@ -51,6 +53,7 @@ type CreateContextOptions = {
   hookExecutionRepository?: HookExecutionRepository;
   req: Request;
   secretCrypto?: SecretCrypto;
+  smtpClient?: SmtpPlainTextClient;
   storage?: ContextStorage;
 };
 
@@ -67,11 +70,12 @@ export type Context = {
   readonly crmRepository: CrmRepository;
   readonly eventService: EventService;
   readonly secretCrypto?: SecretCrypto;
+  readonly smtpClient?: SmtpPlainTextClient;
   readonly session: Session | null;
   readonly storage?: ContextStorage;
 };
 
-export async function createContext({ apiKeyService, aiChatRunner, automationRepository, crmRepository, eventService, hookExecutionQueue, hookExecutionRepository, req, secretCrypto, storage }: CreateContextOptions): Promise<Context> {
+export async function createContext({ apiKeyService, aiChatRunner, automationRepository, crmRepository, eventService, hookExecutionQueue, hookExecutionRepository, req, secretCrypto, smtpClient, storage }: CreateContextOptions): Promise<Context> {
   const database = crmRepository || eventService || automationRepository ? undefined : createDb();
   const env = createServerEnv(process.env);
   const resolvedAutomationRepository = automationRepository ?? createDrizzleAutomationRepository(database ?? createDb());
@@ -79,6 +83,7 @@ export async function createContext({ apiKeyService, aiChatRunner, automationRep
   const baseEventService = eventService ?? createEventService({ repository: createDrizzleEventRepository(database ?? createDb()) });
   const resolvedStorage = storage ?? createDefaultStorage();
   const resolvedSecretCrypto = secretCrypto ?? createSecretCrypto(env);
+  const resolvedSmtpClient = smtpClient ?? createNodeSmtpPlainTextClient();
   const resolvedHookExecutionRepository = hookExecutionRepository ?? (await import("@DCRM/events/hooks.drizzle")).createDrizzleHookExecutionRepository(database ?? createDb());
   const resolvedEventService = createHookAwareAiEventService({
     eventService: baseEventService,
@@ -101,6 +106,7 @@ export async function createContext({ apiKeyService, aiChatRunner, automationRep
       crmRepository: resolvedCrmRepository,
       eventService: resolvedEventService,
       secretCrypto: resolvedSecretCrypto,
+      smtpClient: resolvedSmtpClient,
       session,
       storage: resolvedStorage,
     };
@@ -123,6 +129,7 @@ export async function createContext({ apiKeyService, aiChatRunner, automationRep
     crmRepository: resolvedCrmRepository,
     eventService: resolvedEventService,
     secretCrypto: resolvedSecretCrypto,
+    smtpClient: resolvedSmtpClient,
     session,
     storage: resolvedStorage,
   };

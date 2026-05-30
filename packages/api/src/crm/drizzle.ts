@@ -1,11 +1,11 @@
 import { createDb } from "@DCRM/db";
-import { attachments, clients, entityTags, exchanges, leads, notifications, projects, tags, tickets, userSettings } from "@DCRM/db/schema/core-crm";
+import { attachments, clientAuthorizedEmails, clients, entityTags, exchanges, leads, notifications, projects, tags, tickets, userSettings } from "@DCRM/db/schema/core-crm";
 import { resolveLocale } from "@DCRM/i18n";
 import type { AttachmentTargetType } from "@DCRM/domain";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sum } from "drizzle-orm";
 
 import type { CrmRepository } from "./repository.js";
-import type { AttachmentRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
+import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
 
 type CrmDatabase = ReturnType<typeof createDb>;
 
@@ -54,6 +54,28 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           .where(and(eq(clients.userId, input.userId), eq(clients.id, input.id)))
           .returning();
         return rows[0] ? rowToClient(rows[0]) : undefined;
+      },
+    },
+    clientAuthorizedEmails: {
+      async add(input) {
+        const clientRows = await database.select({ id: clients.id }).from(clients).where(and(eq(clients.userId, input.userId), eq(clients.id, input.clientId), isNull(clients.deletedAt))).limit(1);
+        if (!clientRows[0]) {
+          throw new Error("Client not found.");
+        }
+        const rows = await database.insert(clientAuthorizedEmails).values({ id: input.id, userId: input.userId, clientId: input.clientId, pattern: input.pattern, createdAt: input.now, updatedAt: input.now }).returning();
+        return requireClientAuthorizedEmail(rows[0], input.id);
+      },
+      async listForClient(input) {
+        const rows = await database.select().from(clientAuthorizedEmails).where(and(eq(clientAuthorizedEmails.userId, input.userId), eq(clientAuthorizedEmails.clientId, input.clientId)));
+        return rows.map(rowToClientAuthorizedEmail);
+      },
+      async listForUser(input) {
+        const rows = await database.select().from(clientAuthorizedEmails).where(eq(clientAuthorizedEmails.userId, input.userId));
+        return rows.map(rowToClientAuthorizedEmail);
+      },
+      async remove(input) {
+        const rows = await database.delete(clientAuthorizedEmails).where(and(eq(clientAuthorizedEmails.userId, input.userId), eq(clientAuthorizedEmails.id, input.id))).returning({ id: clientAuthorizedEmails.id });
+        return Boolean(rows[0]);
       },
     },
     leads: {
@@ -435,6 +457,10 @@ function rowToClient(row: typeof clients.$inferSelect): ClientRecord {
   return row;
 }
 
+function rowToClientAuthorizedEmail(row: typeof clientAuthorizedEmails.$inferSelect): ClientAuthorizedEmailRecord {
+  return row;
+}
+
 function rowToTag(row: typeof tags.$inferSelect): TagRecord {
   return row;
 }
@@ -476,6 +502,13 @@ function requireClient(row: typeof clients.$inferSelect | undefined, id: string)
     throw new Error(`Client could not be persisted: ${id}`);
   }
   return rowToClient(row);
+}
+
+function requireClientAuthorizedEmail(row: typeof clientAuthorizedEmails.$inferSelect | undefined, id: string): ClientAuthorizedEmailRecord {
+  if (!row) {
+    throw new Error(`Client authorized email could not be persisted: ${id}`);
+  }
+  return rowToClientAuthorizedEmail(row);
 }
 
 function requireTag(row: typeof tags.$inferSelect | undefined, id: string): TagRecord {

@@ -25,12 +25,16 @@
     "@DCRM/i18n": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
+    "bullmq": "^5.77.6",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
+    "imapflow": "^1.1.0",
+    "mailparser": "^3.9.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@DCRM/config": "workspace:*",
+    "@types/mailparser": "^3.4.6",
     "typescript": "catalog:"
   }
 }

@@ -31,6 +31,15 @@ export type ClientRecord = {
   readonly deletedAt: Date | null;
 };
 
+export type ClientAuthorizedEmailRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly clientId: string;
+  readonly pattern: string;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
 export type TagRecord = {
   readonly id: string;
   readonly userId: string;
@@ -117,6 +126,9 @@ export type ExchangeRecord = {
   readonly body: string;
   readonly occurredAt: Date;
   readonly externalMessageId: string | null;
+  readonly syncedEmailAccountId: string | null;
+  readonly syncedEmailMailbox: string | null;
+  readonly syncedEmailUid: string | null;
   readonly threadId: string | null;
   readonly metadata: JsonObject;
   readonly createdAt: Date;
@@ -259,6 +271,9 @@ export type ExchangeMutationFields = {
   readonly body: string;
   readonly occurredAt?: Date;
   readonly externalMessageId?: string | null;
+  readonly syncedEmailAccountId?: string | null;
+  readonly syncedEmailMailbox?: string | null;
+  readonly syncedEmailUid?: string | null;
   readonly threadId?: string | null;
   readonly metadata?: JsonObject;
 };

@@ -34,6 +34,8 @@ export const ticketCommentSchema = z.object({
   ticketId: z.string().trim().min(1),
   body: z.string().trim().min(1),
   visibility: z.enum(EXCHANGE_VISIBILITIES).optional(),
+  emailToClient: z.boolean().optional(),
+  emailAccountId: z.string().trim().min(1).optional(),
   occurredAt: z.coerce.date().optional(),
   metadata: jsonObjectSchema.optional(),
 });

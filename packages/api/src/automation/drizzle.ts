@@ -1,11 +1,11 @@
 import { createDb } from "@DCRM/db";
-import { aiInsights, aiMessages, aiProviders, events, hookExecutions, hooks, incomingWebhooks } from "@DCRM/db/schema/automation-integrations";
+import { aiInsights, aiMessages, aiProviders, emailAccounts, events, hookExecutions, hooks, incomingWebhooks } from "@DCRM/db/schema/automation-integrations";
 import { isCoreEventType } from "@DCRM/events";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
 
-import type { AiHookConfigRecord, AiInsightRecord, AiMessageRecord, AiProviderEncryptedRecord, AiProviderSafeRecord, AutomationRepository, HookExecutionStatusRecord, IncomingWebhookSafeRecord, IncomingWebhookStoredRecord, OutgoingWebhookHookSafeRecord } from "./repository.js";
+import type { AiHookConfigRecord, AiInsightRecord, AiMessageRecord, AiProviderEncryptedRecord, AiProviderSafeRecord, AutomationRepository, EmailAccountEncryptedRecord, EmailAccountSafeRecord, HookExecutionStatusRecord, IncomingWebhookSafeRecord, IncomingWebhookStoredRecord, OutgoingWebhookHookSafeRecord } from "./repository.js";
 
 type AutomationDatabase = ReturnType<typeof createDb>;
 
@@ -19,6 +19,22 @@ const aiProviderSafeSelection = {
   enabled: aiProviders.enabled,
   createdAt: aiProviders.createdAt,
   updatedAt: aiProviders.updatedAt,
+};
+
+const emailAccountSafeSelection = {
+  id: emailAccounts.id,
+  userId: emailAccounts.userId,
+  name: emailAccounts.name,
+  emailAddress: emailAccounts.emailAddress,
+  imapHost: emailAccounts.imapHost,
+  imapPort: emailAccounts.imapPort,
+  imapUsername: emailAccounts.imapUsername,
+  smtpHost: emailAccounts.smtpHost,
+  smtpPort: emailAccounts.smtpPort,
+  smtpUsername: emailAccounts.smtpUsername,
+  enabled: emailAccounts.enabled,
+  createdAt: emailAccounts.createdAt,
+  updatedAt: emailAccounts.updatedAt,
 };
 
 export function createDrizzleAutomationRepository(database: AutomationDatabase = createDb()): AutomationRepository {
@@ -470,6 +486,70 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
       },
       async recordTestPayload(input) {
         await database.update(incomingWebhooks).set({ lastTestPayload: input.payload, updatedAt: input.now }).where(eq(incomingWebhooks.id, input.id));
+      },
+    },
+    emailAccounts: {
+      async listSafe(input) {
+        const rows = await database.select(emailAccountSafeSelection).from(emailAccounts).where(and(eq(emailAccounts.userId, input.userId), isNull(emailAccounts.deletedAt))).orderBy(desc(emailAccounts.createdAt));
+        return rows.map((row): EmailAccountSafeRecord => ({ ...row, hasImapPassword: true, hasSmtpPassword: true }));
+      },
+      async upsertEncrypted(input) {
+        const rows = input.id
+          ? await database
+              .update(emailAccounts)
+              .set({
+                name: input.name,
+                emailAddress: input.emailAddress,
+                imapHost: input.imapHost,
+                imapPort: input.imapPort,
+                imapUsername: input.imapUsername,
+                encryptedImapPassword: input.encryptedImapPassword,
+                smtpHost: input.smtpHost,
+                smtpPort: input.smtpPort,
+                smtpUsername: input.smtpUsername,
+                encryptedSmtpPassword: input.encryptedSmtpPassword,
+                enabled: input.enabled,
+                updatedAt: input.now,
+                deletedAt: null,
+              })
+              .where(and(eq(emailAccounts.id, input.id), eq(emailAccounts.userId, input.userId)))
+              .returning(emailAccountSafeSelection)
+          : await database
+              .insert(emailAccounts)
+              .values({
+                id: crypto.randomUUID(),
+                userId: input.userId,
+                name: input.name,
+                emailAddress: input.emailAddress,
+                imapHost: input.imapHost,
+                imapPort: input.imapPort,
+                imapUsername: input.imapUsername,
+                encryptedImapPassword: input.encryptedImapPassword,
+                smtpHost: input.smtpHost,
+                smtpPort: input.smtpPort,
+                smtpUsername: input.smtpUsername,
+                encryptedSmtpPassword: input.encryptedSmtpPassword,
+                enabled: input.enabled,
+                createdAt: input.now,
+                updatedAt: input.now,
+              })
+              .returning(emailAccountSafeSelection);
+        const row = rows[0];
+        if (!row) {
+          throw new Error("Email account was not saved.");
+        }
+        return { ...row, hasImapPassword: true, hasSmtpPassword: true };
+      },
+      async listEncrypted(input) {
+        const rows = await database
+          .select({
+            ...emailAccountSafeSelection,
+            encryptedImapPassword: emailAccounts.encryptedImapPassword,
+            encryptedSmtpPassword: emailAccounts.encryptedSmtpPassword,
+          })
+          .from(emailAccounts)
+          .where(and(eq(emailAccounts.userId, input.userId), isNull(emailAccounts.deletedAt)));
+        return rows.map((row): EmailAccountEncryptedRecord => ({ ...row, hasImapPassword: true, hasSmtpPassword: true }));
       },
     },
   };

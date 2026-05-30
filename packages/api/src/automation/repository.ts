@@ -59,6 +59,11 @@ export type AutomationRepository = {
     readonly updateMode: (input: { readonly userId: string; readonly id: string; readonly mode: WebhookMode; readonly now: Date }) => Promise<IncomingWebhookSafeRecord>;
     readonly recordTestPayload: (input: { readonly id: string; readonly payload: JsonObject; readonly now: Date }) => Promise<void>;
   };
+  readonly emailAccounts: {
+    readonly listSafe: (input: { readonly userId: string }) => Promise<readonly EmailAccountSafeRecord[]>;
+    readonly upsertEncrypted: (input: UpsertEmailAccountEncryptedInput) => Promise<EmailAccountSafeRecord>;
+    readonly listEncrypted: (input: { readonly userId: string }) => Promise<readonly EmailAccountEncryptedRecord[]>;
+  };
 };
 
 export type AiHookConfigRecord = {
@@ -227,6 +232,46 @@ export type UpsertAiProviderEncryptedInput = {
   readonly now: Date;
 };
 
+export type EmailAccountSafeRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly emailAddress: string;
+  readonly imapHost: string;
+  readonly imapPort: number;
+  readonly imapUsername: string;
+  readonly smtpHost: string;
+  readonly smtpPort: number;
+  readonly smtpUsername: string;
+  readonly enabled: boolean;
+  readonly hasImapPassword: boolean;
+  readonly hasSmtpPassword: boolean;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+export type EmailAccountEncryptedRecord = EmailAccountSafeRecord & {
+  readonly encryptedImapPassword: EncryptedSecretV1;
+  readonly encryptedSmtpPassword: EncryptedSecretV1;
+};
+
+export type UpsertEmailAccountEncryptedInput = {
+  readonly id?: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly emailAddress: string;
+  readonly imapHost: string;
+  readonly imapPort: number;
+  readonly imapUsername: string;
+  readonly encryptedImapPassword: EncryptedSecretV1;
+  readonly smtpHost: string;
+  readonly smtpPort: number;
+  readonly smtpUsername: string;
+  readonly encryptedSmtpPassword: EncryptedSecretV1;
+  readonly enabled: boolean;
+  readonly now: Date;
+};
+
 export function createInMemoryAutomationRepository(records: readonly HookExecutionStatusRecord[] = []) {
   const hookExecutionRecords = [...records];
   const aiProviderRecords: AiProviderEncryptedRecord[] = [];
@@ -234,6 +279,7 @@ export function createInMemoryAutomationRepository(records: readonly HookExecuti
   const insightRecords: AiInsightRecord[] = [];
   const messageRecords: AiMessageRecord[] = [];
   const incomingWebhookRecords: IncomingWebhookStoredRecord[] = [];
+  const emailAccountRecords: EmailAccountEncryptedRecord[] = [];
   return {
     aiProviders: {
       async listSafe(input) {
@@ -376,6 +422,46 @@ export function createInMemoryAutomationRepository(records: readonly HookExecuti
         }
       },
     },
+    emailAccounts: {
+      async listSafe(input) {
+        return emailAccountRecords.filter((record) => record.userId === input.userId).map(toSafeEmailAccount);
+      },
+      async upsertEncrypted(input) {
+        const existingIndex = input.id ? emailAccountRecords.findIndex((record) => record.id === input.id && record.userId === input.userId) : -1;
+        const existing = existingIndex >= 0 ? emailAccountRecords[existingIndex] : undefined;
+        if (input.id && !existing) {
+          throw new Error("Email account was not found.");
+        }
+        const record: EmailAccountEncryptedRecord = {
+          id: input.id ?? crypto.randomUUID(),
+          userId: input.userId,
+          name: input.name,
+          emailAddress: input.emailAddress,
+          imapHost: input.imapHost,
+          imapPort: input.imapPort,
+          imapUsername: input.imapUsername,
+          encryptedImapPassword: input.encryptedImapPassword,
+          smtpHost: input.smtpHost,
+          smtpPort: input.smtpPort,
+          smtpUsername: input.smtpUsername,
+          encryptedSmtpPassword: input.encryptedSmtpPassword,
+          enabled: input.enabled,
+          hasImapPassword: true,
+          hasSmtpPassword: true,
+          createdAt: existing?.createdAt ?? input.now,
+          updatedAt: input.now,
+        };
+        if (existingIndex >= 0) {
+          emailAccountRecords[existingIndex] = record;
+        } else {
+          emailAccountRecords.push(record);
+        }
+        return toSafeEmailAccount(record);
+      },
+      async listEncrypted(input) {
+        return emailAccountRecords.filter((record) => record.userId === input.userId);
+      },
+    },
   } satisfies AutomationRepository;
 }
 
@@ -487,6 +573,26 @@ function toSafeAiProvider(record: AiProviderEncryptedRecord): AiProviderSafeReco
     defaultModel: record.defaultModel,
     enabled: record.enabled,
     hasApiKey: true,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function toSafeEmailAccount(record: EmailAccountEncryptedRecord): EmailAccountSafeRecord {
+  return {
+    id: record.id,
+    userId: record.userId,
+    name: record.name,
+    emailAddress: record.emailAddress,
+    imapHost: record.imapHost,
+    imapPort: record.imapPort,
+    imapUsername: record.imapUsername,
+    smtpHost: record.smtpHost,
+    smtpPort: record.smtpPort,
+    smtpUsername: record.smtpUsername,
+    enabled: record.enabled,
+    hasImapPassword: true,
+    hasSmtpPassword: true,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

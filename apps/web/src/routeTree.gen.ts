@@ -21,6 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TicketsNewRouteImport } from './routes/tickets.new'
 import { Route as TicketsKanbanRouteImport } from './routes/tickets.kanban'
 import { Route as TicketsTicketIdRouteImport } from './routes/tickets.$ticketId'
+import { Route as SettingsEmailRouteImport } from './routes/settings.email'
 import { Route as SettingsAiRouteImport } from './routes/settings.ai'
 import { Route as ProjectsNewRouteImport } from './routes/projects.new'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
@@ -99,6 +100,11 @@ const TicketsTicketIdRoute = TicketsTicketIdRouteImport.update({
   id: '/$ticketId',
   path: '/$ticketId',
   getParentRoute: () => TicketsRoute,
+} as any)
+const SettingsEmailRoute = SettingsEmailRouteImport.update({
+  id: '/settings/email',
+  path: '/settings/email',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsAiRoute = SettingsAiRouteImport.update({
   id: '/settings/ai',
@@ -211,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/email': typeof SettingsEmailRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
@@ -243,6 +250,7 @@ export interface FileRoutesByTo {
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/email': typeof SettingsEmailRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
@@ -276,6 +284,7 @@ export interface FileRoutesById {
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/email': typeof SettingsEmailRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
@@ -310,6 +319,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/settings/ai'
+    | '/settings/email'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/settings/ai'
+    | '/settings/email'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/settings/ai'
+    | '/settings/email'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
@@ -400,6 +412,7 @@ export interface RootRouteChildren {
   AiChatRoute: typeof AiChatRoute
   OnboardingLanguageRoute: typeof OnboardingLanguageRoute
   SettingsAiRoute: typeof SettingsAiRoute
+  SettingsEmailRoute: typeof SettingsEmailRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiIncomingWebhooksSlugRoute: typeof ApiIncomingWebhooksSlugRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
@@ -490,6 +503,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/tickets/$ticketId'
       preLoaderRoute: typeof TicketsTicketIdRouteImport
       parentRoute: typeof TicketsRoute
+    }
+    '/settings/email': {
+      id: '/settings/email'
+      path: '/settings/email'
+      fullPath: '/settings/email'
+      preLoaderRoute: typeof SettingsEmailRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/settings/ai': {
       id: '/settings/ai'
@@ -738,6 +758,7 @@ const rootRouteChildren: RootRouteChildren = {
   AiChatRoute: AiChatRoute,
   OnboardingLanguageRoute: OnboardingLanguageRoute,
   SettingsAiRoute: SettingsAiRoute,
+  SettingsEmailRoute: SettingsEmailRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiIncomingWebhooksSlugRoute: ApiIncomingWebhooksSlugRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,

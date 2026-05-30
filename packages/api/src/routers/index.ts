@@ -5,6 +5,7 @@ import { automationRouter } from "./automation/index.js";
 import { attachmentsRouter } from "./attachments/index.js";
 import { clientsRouter } from "./clients/index.js";
 import { dashboardRouter } from "./dashboard/index.js";
+import { emailRouter } from "./email/index.js";
 import { exchangesRouter } from "./exchanges/index.js";
 import { importExportRouter } from "./import-export/index.js";
 import { leadsRouter } from "./leads/index.js";
@@ -35,6 +36,7 @@ export const appRouter = router({
   exchanges: exchangesRouter,
   attachments: attachmentsRouter,
   dashboard: dashboardRouter,
+  email: emailRouter,
   search: searchRouter,
   importExport: importExportRouter,
   notifications: notificationsRouter,

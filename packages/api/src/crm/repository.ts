@@ -3,6 +3,7 @@ import type {
   AttachmentRecord,
   AttachmentTargetInput,
   ClientIdInput,
+  ClientAuthorizedEmailRecord,
   ClientListInput,
   ClientMutationFields,
   ClientRecord,
@@ -45,6 +46,12 @@ export type CrmRepository = {
     readonly list: (input: ClientListInput) => Promise<readonly ClientRecord[]>;
     readonly update: (input: { readonly userId: string; readonly id: string; readonly fields: ClientUpdateFields; readonly now: Date }) => Promise<ClientRecord | undefined>;
     readonly setDeletedAt: (input: { readonly userId: string; readonly id: string; readonly deletedAt: Date | null; readonly now: Date }) => Promise<ClientRecord | undefined>;
+  };
+  readonly clientAuthorizedEmails: {
+    readonly add: (input: { readonly id: string; readonly userId: string; readonly clientId: string; readonly pattern: string; readonly now: Date }) => Promise<ClientAuthorizedEmailRecord>;
+    readonly listForClient: (input: { readonly userId: string; readonly clientId: string }) => Promise<readonly ClientAuthorizedEmailRecord[]>;
+    readonly listForUser: (input: { readonly userId: string }) => Promise<readonly ClientAuthorizedEmailRecord[]>;
+    readonly remove: (input: { readonly userId: string; readonly id: string }) => Promise<boolean>;
   };
   readonly leads: {
     readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: LeadMutationFields; readonly now: Date }) => Promise<LeadRecord>;
@@ -106,6 +113,7 @@ export type CrmRepository = {
 
 export function createInMemoryCrmRepository(): CrmRepository {
   const clients: ClientRecord[] = [];
+  const clientAuthorizedEmails: ClientAuthorizedEmailRecord[] = [];
   const leads: LeadRecord[] = [];
   const projects: ProjectRecord[] = [];
   const tickets: TicketRecord[] = [];
@@ -177,6 +185,38 @@ export function createInMemoryCrmRepository(): CrmRepository {
       },
       async setDeletedAt(input) {
         return updateById(clients, input.userId, input.id, (client) => ({ ...client, deletedAt: input.deletedAt, updatedAt: input.now }));
+      },
+    },
+    clientAuthorizedEmails: {
+      async add(input) {
+        const existingClient = clients.find((client) => client.userId === input.userId && client.id === input.clientId && !client.deletedAt);
+        if (!existingClient) {
+          throw new Error("Client not found.");
+        }
+        const record: ClientAuthorizedEmailRecord = {
+          id: input.id,
+          userId: input.userId,
+          clientId: input.clientId,
+          pattern: input.pattern,
+          createdAt: input.now,
+          updatedAt: input.now,
+        };
+        clientAuthorizedEmails.push(record);
+        return record;
+      },
+      async listForClient(input) {
+        return clientAuthorizedEmails.filter((record) => record.userId === input.userId && record.clientId === input.clientId);
+      },
+      async listForUser(input) {
+        return clientAuthorizedEmails.filter((record) => record.userId === input.userId);
+      },
+      async remove(input) {
+        const index = clientAuthorizedEmails.findIndex((record) => record.userId === input.userId && record.id === input.id);
+        if (index === -1) {
+          return false;
+        }
+        clientAuthorizedEmails.splice(index, 1);
+        return true;
       },
     },
     leads: {
@@ -445,12 +485,21 @@ export function createInMemoryCrmRepository(): CrmRepository {
           body: input.fields.body,
           occurredAt: input.fields.occurredAt ?? input.now,
           externalMessageId: input.fields.externalMessageId ?? null,
+          syncedEmailAccountId: input.fields.syncedEmailAccountId ?? null,
+          syncedEmailMailbox: input.fields.syncedEmailMailbox ?? null,
+          syncedEmailUid: input.fields.syncedEmailUid ?? null,
           threadId: input.fields.threadId ?? null,
           metadata: input.fields.metadata ?? {},
           createdAt: input.now,
           updatedAt: input.now,
           deletedAt: null,
         };
+        if (record.syncedEmailAccountId && record.syncedEmailMailbox && record.syncedEmailUid) {
+          const duplicate = exchanges.find((exchange) => exchange.userId === record.userId && exchange.syncedEmailAccountId === record.syncedEmailAccountId && exchange.syncedEmailMailbox === record.syncedEmailMailbox && exchange.syncedEmailUid === record.syncedEmailUid);
+          if (duplicate) {
+            throw new UniqueConstraintError("exchanges_synced_email_identity_idx");
+          }
+        }
         exchanges.push(record);
         return record;
       },
@@ -516,6 +565,9 @@ export function createInMemoryCrmRepository(): CrmRepository {
           subject: input.fields.subject === undefined ? exchange.subject : input.fields.subject,
           occurredAt: input.fields.occurredAt === undefined ? exchange.occurredAt : input.fields.occurredAt,
           externalMessageId: input.fields.externalMessageId === undefined ? exchange.externalMessageId : input.fields.externalMessageId,
+          syncedEmailAccountId: input.fields.syncedEmailAccountId === undefined ? exchange.syncedEmailAccountId : input.fields.syncedEmailAccountId,
+          syncedEmailMailbox: input.fields.syncedEmailMailbox === undefined ? exchange.syncedEmailMailbox : input.fields.syncedEmailMailbox,
+          syncedEmailUid: input.fields.syncedEmailUid === undefined ? exchange.syncedEmailUid : input.fields.syncedEmailUid,
           threadId: input.fields.threadId === undefined ? exchange.threadId : input.fields.threadId,
         }));
       },
@@ -701,6 +753,14 @@ function matchesTagFilter(records: readonly EntityTagRecord[], userId: string, e
     return true;
   }
   return tagIds.every((tagId) => records.some((record) => record.userId === userId && record.entityType === entityType && record.entityId === entityId && record.tagId === tagId));
+}
+
+class UniqueConstraintError extends Error {
+  readonly code = "23505";
+
+  constructor(readonly constraint: string) {
+    super(`Unique constraint failed: ${constraint}`);
+  }
 }
 
 function matchesDateRange(value: Date, from: Date | undefined, to: Date | undefined): boolean {

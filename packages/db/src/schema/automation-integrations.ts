@@ -295,6 +295,40 @@ export const emailSyncStates = pgTable(
   ],
 );
 
+export const unmatchedEmailMessages = pgTable(
+  "unmatched_email_messages",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    emailAccountId: text("email_account_id")
+      .notNull()
+      .references(() => emailAccounts.id, { onDelete: "cascade" }),
+    mailbox: text("mailbox").notNull(),
+    uid: text("uid").notNull(),
+    messageId: text("message_id").notNull(),
+    fromEmail: text("from_email").notNull(),
+    fromName: text("from_name"),
+    subject: text("subject"),
+    bodyPreview: text("body_preview").notNull(),
+    receivedAt: timestamp("received_at").notNull(),
+    metadata: jsonb("metadata").$type<JsonObject>().default({}).notNull(),
+    linkedExchangeId: text("linked_exchange_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (table) => [
+    index("unmatched_email_messages_user_id_idx").on(table.userId),
+    index("unmatched_email_messages_from_email_idx").on(table.fromEmail),
+    uniqueIndex("unmatched_email_messages_account_message_idx").on(table.emailAccountId, table.messageId),
+  ],
+);
+
 export const apiKeys = pgTable(
   "api_keys",
   {
@@ -359,6 +393,7 @@ export const automationIntegrationTables = [
   aiMessages,
   emailAccounts,
   emailSyncStates,
+  unmatchedEmailMessages,
   apiKeys,
   billingSubscriptions,
 ] as const;
@@ -374,6 +409,7 @@ export const automationIntegrationTableNames = [
   "ai_messages",
   "email_accounts",
   "email_sync_states",
+  "unmatched_email_messages",
   "api_keys",
   "billing_subscriptions",
 ] as const;

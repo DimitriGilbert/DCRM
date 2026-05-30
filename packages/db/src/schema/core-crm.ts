@@ -72,6 +72,30 @@ export const clients = pgTable(
   ],
 );
 
+export const clientAuthorizedEmails = pgTable(
+  "client_authorized_emails",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    pattern: text("pattern").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("client_authorized_emails_user_id_idx").on(table.userId),
+    index("client_authorized_emails_client_id_idx").on(table.clientId),
+    uniqueIndex("client_authorized_emails_client_pattern_idx").on(table.clientId, table.pattern),
+  ],
+);
+
 export const leads = pgTable(
   "leads",
   {
@@ -195,6 +219,9 @@ export const exchanges = pgTable(
     body: text("body").notNull(),
     occurredAt: timestamp("occurred_at").defaultNow().notNull(),
     externalMessageId: text("external_message_id"),
+    syncedEmailAccountId: text("synced_email_account_id"),
+    syncedEmailMailbox: text("synced_email_mailbox"),
+    syncedEmailUid: text("synced_email_uid"),
     threadId: text("thread_id"),
     metadata: jsonb("metadata").$type<JsonObject>().default({}).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -210,6 +237,7 @@ export const exchanges = pgTable(
     index("exchanges_project_id_idx").on(table.projectId),
     index("exchanges_ticket_id_idx").on(table.ticketId),
     index("exchanges_type_idx").on(table.type),
+    uniqueIndex("exchanges_synced_email_identity_idx").on(table.userId, table.syncedEmailAccountId, table.syncedEmailMailbox, table.syncedEmailUid),
   ],
 );
 
@@ -361,6 +389,7 @@ export const notifications = pgTable(
 
 export const coreCrmTables = [
   clients,
+  clientAuthorizedEmails,
   leads,
   projects,
   tickets,
@@ -374,11 +403,23 @@ export const coreCrmTables = [
 ] as const;
 
 export const clientRelations = relations(clients, ({ many, one }) => ({
+  authorizedEmails: many(clientAuthorizedEmails),
   exchanges: many(exchanges),
   leadsConvertedToClient: many(leads),
   projects: many(projects),
   user: one(user, {
     fields: [clients.userId],
+    references: [user.id],
+  }),
+}));
+
+export const clientAuthorizedEmailRelations = relations(clientAuthorizedEmails, ({ one }) => ({
+  client: one(clients, {
+    fields: [clientAuthorizedEmails.clientId],
+    references: [clients.id],
+  }),
+  user: one(user, {
+    fields: [clientAuthorizedEmails.userId],
     references: [user.id],
   }),
 }));

@@ -22,6 +22,7 @@ import {
   hooks,
   hookTypeEnum,
   incomingWebhooks,
+  unmatchedEmailMessages,
   webhookModeEnum,
 } from "./schema/index.js";
 
@@ -36,6 +37,7 @@ describe("automation and integration schema public exports", () => {
     assert.equal(getTableName(aiMessages), "ai_messages");
     assert.equal(getTableName(emailAccounts), "email_accounts");
     assert.equal(getTableName(emailSyncStates), "email_sync_states");
+    assert.equal(getTableName(unmatchedEmailMessages), "unmatched_email_messages");
     assert.equal(getTableName(apiKeys), "api_keys");
     assert.equal(getTableName(billingSubscriptions), "billing_subscriptions");
 
@@ -82,6 +84,7 @@ describe("automation and integration schema public exports", () => {
         "ai_messages",
         "email_accounts",
         "email_sync_states",
+        "unmatched_email_messages",
         "api_keys",
         "billing_subscriptions",
       ],

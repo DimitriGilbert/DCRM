@@ -295,6 +295,7 @@ export const emailAccounts = pgTable(
   },
   (table) => [
     index("email_accounts_user_id_idx").on(table.userId),
+    uniqueIndex("email_accounts_user_email_idx").on(table.userId, table.email),
   ],
 );
 
@@ -316,6 +317,7 @@ export const emailSyncState = pgTable(
   (table) => [
     index("email_sync_state_user_id_idx").on(table.userId),
     index("email_sync_state_email_account_id_idx").on(table.emailAccountId),
+    uniqueIndex("email_sync_state_account_folder_idx").on(table.emailAccountId, table.folder),
   ],
 );
 
@@ -385,6 +387,7 @@ export const subscriptions = pgTable(
   (table) => [
     index("subscriptions_user_id_idx").on(table.userId),
     index("subscriptions_status_idx").on(table.status),
+    uniqueIndex("subscriptions_stripe_sub_id_idx").on(table.stripeSubscriptionId),
   ],
 );
 

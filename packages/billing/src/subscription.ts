@@ -98,25 +98,9 @@ export function createSubscriptionService(): SubscriptionService {
       const periodEnd = extractPeriodEnd(stripeSub);
       const periodStart = extractPeriodStart(stripeSub);
 
-      const existing = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.stripeSubscriptionId, stripeSub.id))
-        .limit(1);
-
-      if (existing.length > 0) {
-        await db
-          .update(subscriptions)
-          .set({
-            status,
-            currentPeriodStart: periodStart,
-            currentPeriodEnd: periodEnd,
-            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-            updatedAt: new Date(),
-          })
-          .where(eq(subscriptions.stripeSubscriptionId, stripeSub.id));
-      } else {
-        await db.insert(subscriptions).values({
+      await db
+        .insert(subscriptions)
+        .values({
           id: nanoid(),
           userId,
           stripeCustomerId: customerId,
@@ -125,8 +109,18 @@ export function createSubscriptionService(): SubscriptionService {
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
           cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+        })
+        .onConflictDoUpdate({
+          target: subscriptions.stripeSubscriptionId,
+          set: {
+            status,
+            stripeCustomerId: customerId,
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            updatedAt: new Date(),
+          },
         });
-      }
     },
 
     async deactivateByCustomerId(customerId) {

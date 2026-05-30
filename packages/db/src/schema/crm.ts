@@ -299,8 +299,8 @@ export const attachments = pgTable(
     entityId: text("entity_id").notNull(),
     fileName: text("file_name").notNull(),
     filePath: text("file_path").notNull(),
-    fileSize: integer("file_size"),
-    mimeType: text("mime_type"),
+    fileSize: integer("file_size").notNull(),
+    mimeType: text("mime_type").notNull(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

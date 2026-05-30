@@ -41,6 +41,7 @@ export type ExecutionStore = {
     details?: {
       output?: Record<string, unknown>;
       error?: string;
+      retryCount?: number;
     },
   ) => Promise<void>;
 };
@@ -107,7 +108,14 @@ export async function dispatchHooks(
       maxRetries: hook.maxRetries,
     };
 
-    await queue.addJob(jobData);
+    try {
+      await queue.addJob(jobData);
+    } catch (err) {
+      const queueError = err instanceof Error ? err.message : String(err);
+      await store.updateStatus(record.id, "failed", {
+        error: `Queue dispatch failed: ${queueError}`,
+      });
+    }
   }
 
   return records;
@@ -167,6 +175,7 @@ export async function processJob(
 
     await store.updateStatus(jobData.executionId, "failed", {
       error: errorMessage,
+      retryCount: jobData.retryCount + 1,
     });
 
     return {

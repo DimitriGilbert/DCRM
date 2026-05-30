@@ -122,7 +122,8 @@ async function resolveApiKeyAuth(rawKey: string): Promise<AuthResult> {
   void db
     .update(apiKeys)
     .set({ lastUsedAt: new Date() })
-    .where(eq(apiKeys.id, matchedKey.id));
+    .where(eq(apiKeys.id, matchedKey.id))
+    .catch(() => {});
 
   const resolvedUser: UserRecord = {
     id: matchedUser.id,

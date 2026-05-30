@@ -57,6 +57,12 @@ interface InternalHead {
   readonly key: string;
 }
 
+interface InternalList {
+  readonly __cmd: "ListObjectsV2";
+  readonly prefix: string;
+  readonly continuationToken?: string;
+}
+
 /**
  * S3-compatible storage backend.
  *
@@ -88,6 +94,16 @@ export class S3StorageBackend implements StorageBackend {
         `File size ${data.byteLength} exceeds maximum ${this.limits.maxFileSize}`,
         "FILE_TOO_LARGE",
       );
+    }
+
+    if (this.limits.userQuota !== null) {
+      const currentUsage = await this.calculateUsage(userId);
+      if (currentUsage + data.byteLength > this.limits.userQuota) {
+        throw new StorageError(
+          `Upload would exceed user quota of ${this.limits.userQuota} bytes`,
+          "QUOTA_EXCEEDED",
+        );
+      }
     }
 
     const s3Key = this.s3Key(userId, key);
@@ -153,6 +169,28 @@ export class S3StorageBackend implements StorageBackend {
     }
   }
 
+  private async calculateUsage(userId: string): Promise<number> {
+    const prefix = `${userId}/`;
+    let total = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      const response = (await this.client.send({
+        __cmd: "ListObjectsV2",
+        prefix,
+        continuationToken,
+      } satisfies InternalList)) as { objects: Array<{ size: number }>; isTruncated: boolean; nextContinuationToken?: string };
+
+      for (const obj of response.objects) {
+        total += obj.size;
+      }
+
+      continuationToken = response.isTruncated ? response.nextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return total;
+  }
+
   private s3Key(userId: string, key: string): string {
     return `${userId}/${key}`;
   }
@@ -203,6 +241,7 @@ interface S3SdkModule {
   GetObjectCommand: S3CommandConstructor;
   DeleteObjectCommand: S3CommandConstructor;
   HeadObjectCommand: S3CommandConstructor;
+  ListObjectsV2Command: S3CommandConstructor;
 }
 
 async function buildRealClient(options: S3StorageOptions): Promise<S3ClientLike> {
@@ -228,7 +267,8 @@ async function buildRealClient(options: S3StorageOptions): Promise<S3ClientLike>
         | InternalPut
         | InternalGet
         | InternalDelete
-        | InternalHead;
+        | InternalHead
+        | InternalList;
 
       switch (internal.__cmd) {
         case "PutObject": {
@@ -262,6 +302,27 @@ async function buildRealClient(options: S3StorageOptions): Promise<S3ClientLike>
             Key: internal.key,
           });
           return await s3Client.send(headCmd);
+        }
+        case "ListObjectsV2": {
+          const listInternal = internal as InternalList;
+          const listCmd = new mod.ListObjectsV2Command({
+            Bucket: options.bucket,
+            Prefix: listInternal.prefix,
+            ContinuationToken: listInternal.continuationToken,
+          });
+          const listResp = (await s3Client.send(listCmd)) as {
+            Contents?: Array<{ Key?: string; Size?: number }>;
+            IsTruncated?: boolean;
+            NextContinuationToken?: string;
+          };
+          return {
+            objects: (listResp.Contents ?? []).map((obj) => ({
+              key: obj.Key ?? "",
+              size: obj.Size ?? 0,
+            })),
+            isTruncated: listResp.IsTruncated ?? false,
+            nextContinuationToken: listResp.NextContinuationToken,
+          };
         }
         default:
           throw new StorageError("Unknown S3 command", "PUT_FAILED");

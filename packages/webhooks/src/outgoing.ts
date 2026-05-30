@@ -79,13 +79,16 @@ function parseConfig(raw: Record<string, unknown>): OutgoingWebhookHookConfig {
   const timeoutMs = raw["timeoutMs"] as OutgoingWebhookHookConfig["timeoutMs"];
   const maxRetries = raw["maxRetries"] as OutgoingWebhookHookConfig["maxRetries"];
 
+  const validatedMaxRetries =
+    typeof maxRetries === "number" && maxRetries >= 0 ? maxRetries : 3;
+
   return {
     url,
     auth: auth as OutgoingWebhookHookConfig["auth"],
     method: method ?? "POST",
     headers: headers ?? {},
     timeoutMs: timeoutMs ?? 10_000,
-    maxRetries: maxRetries ?? 3,
+    maxRetries: validatedMaxRetries,
   };
 }
 
@@ -163,17 +166,16 @@ async function sendRequest(
 ): Promise<WebhookExecutionResult> {
   const start = performance.now();
 
-  // Resolve auth headers (decrypt secrets)
-  const resolvedAuth = resolveAuthHeaders(config.auth, deps.crypto, body);
-
-  // Merge headers: custom headers first, then auth headers (auth wins on collision)
   const allHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...(config.headers ?? {}),
-    ...resolvedAuth.headers,
   };
 
   try {
+    const resolvedAuth = resolveAuthHeaders(config.auth, deps.crypto, body);
+
+    Object.assign(allHeaders, resolvedAuth.headers);
+
     const response = await deps.httpClient.fetch(config.url, {
       method: config.method ?? "POST",
       headers: allHeaders,

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 /** The expected prefix for all DCRM API keys. */
 export const API_KEY_PREFIX = "dcrm_";
@@ -51,7 +51,11 @@ export function hashApiKey(key: string): string {
  * @returns `true` when the key matches, `false` otherwise.
  */
 export function verifyApiKey(rawKey: string, storedHash: string): boolean {
-  return hashApiKey(rawKey) === storedHash;
+  const computedHash = hashApiKey(rawKey);
+  const a = Buffer.from(computedHash, "utf8");
+  const b = Buffer.from(storedHash, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 /**

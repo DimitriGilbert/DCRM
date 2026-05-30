@@ -266,6 +266,7 @@ export async function processSyncMessages(
     if (hasLoopPreventionHeader(message)) {
       skipped++;
       lastUid = message.uid;
+      await deps.updateSyncState(emailAccountId, folder, lastUid);
       continue;
     }
 
@@ -305,10 +306,10 @@ export async function processSyncMessages(
     }
 
     lastUid = message.uid;
+    await deps.updateSyncState(emailAccountId, folder, lastUid);
   }
 
   if (lastUid !== null) {
-    await deps.updateSyncState(emailAccountId, folder, lastUid);
     await deps.updateLastSyncAt(emailAccountId);
   }
 

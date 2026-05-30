@@ -57,7 +57,7 @@ export function createSubscriptionService(): SubscriptionService {
         };
       }
 
-      const activeStatuses: BillingStatus[] = ["active", "trialing"];
+      const activeStatuses: BillingStatus[] = ["active", "trialing", "past_due"];
       const isActive = activeStatuses.includes(sub.status as BillingStatus);
 
       return {
@@ -84,7 +84,10 @@ export function createSubscriptionService(): SubscriptionService {
 
     async upsertFromStripe(stripeSub) {
       const userId = stripeSub.metadata?.userId;
-      if (!userId) return;
+      if (!userId) {
+        console.warn("Subscription event received without userId in metadata", stripeSub.id);
+        return;
+      }
 
       const status = this.mapStripeStatus(stripeSub.status);
       const customerId =

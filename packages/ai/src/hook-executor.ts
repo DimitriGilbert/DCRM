@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { chat } from "@tanstack/ai";
-import type { AnyTextAdapter } from "@tanstack/ai";
+import type { AnyTextAdapter, SchemaInput } from "@tanstack/ai";
+import type { ZodType } from "zod";
 
 import type { ProviderManager, ProviderRecord } from "./provider-manager";
 import { buildStructuredOutputConfig } from "./structured-output";
@@ -137,7 +138,7 @@ export type EntityFetchFn = (
 function resolveTemplateOverrides(config: AIHookConfig): {
   systemPrompt: string;
   userPromptTemplate: string;
-  outputSchema: Record<string, unknown> | undefined;
+  outputSchema: ZodType<Record<string, unknown>> | undefined;
   fieldMapping: FieldMapping;
 } {
   const template: HookTemplate | undefined = config.templateId
@@ -150,7 +151,7 @@ function resolveTemplateOverrides(config: AIHookConfig): {
       config.userPromptTemplate ??
       template?.userPromptTemplate ??
       "Analyze the following data and return structured output:\n\n{payload}",
-    outputSchema: config.outputSchema ?? (template ? (template.outputSchema as unknown as Record<string, unknown>) : undefined),
+    outputSchema: template?.outputSchema,
     fieldMapping: config.fieldMapping ?? template?.defaultFieldMapping ?? {},
   };
 }
@@ -245,13 +246,13 @@ export async function executeAIHook(
 
   if (resolved.outputSchema) {
     const structuredConfig = buildStructuredOutputConfig(
-      resolved as unknown as import("zod").ZodType<Record<string, unknown>>,
+      resolved.outputSchema,
     );
 
     // Use TanStack AI chat with outputSchema for structured generation
     const result = await chat({
       ...chatOptions,
-      outputSchema: structuredConfig.schema as import("@tanstack/ai").SchemaInput,
+      outputSchema: structuredConfig.schema as SchemaInput,
     });
 
     structuredOutput = result as Record<string, unknown>;
@@ -291,28 +292,9 @@ export async function executeAIHook(
       existingFields: existing ?? undefined,
       overwrite: input.writeBehavior === "direct_write",
     });
-
-    // 7. Direct write: apply mapped fields immediately
-    if (
-      input.writeBehavior === "direct_write" &&
-      fieldMappingResult.mappedCount > 0
-    ) {
-      await deps.entityUpdateFn(
-        input.entityType!,
-        input.entityId!,
-        input.userId,
-        fieldMappingResult.fields,
-        {
-          hookExecutionId: input.executionId,
-          eventId: input.eventId,
-          emitDownstreamEvents: input.emitDownstreamEvents,
-        },
-      );
-      applied = true;
-    }
   }
 
-  // 8. Store insight
+  // 7. Store insight before entity update to prevent data loss
   const insightId = randomUUID();
   const insightRecord: AIInsightRecord = {
     id: insightId,
@@ -332,11 +314,36 @@ export async function executeAIHook(
           mappedCount: fieldMappingResult.mappedCount,
         }
       : null,
-    applied,
+    applied: false,
     createdAt: new Date(),
   };
 
   await deps.insightStore.insert(insightRecord);
+
+  // 8. Direct write: apply mapped fields after storing insight
+  if (
+    hasEntityTarget &&
+    input.writeBehavior === "direct_write" &&
+    fieldMappingResult &&
+    fieldMappingResult.mappedCount > 0
+  ) {
+    try {
+      await deps.entityUpdateFn(
+        input.entityType!,
+        input.entityId!,
+        input.userId,
+        fieldMappingResult.fields,
+        {
+          hookExecutionId: input.executionId,
+          eventId: input.eventId,
+          emitDownstreamEvents: input.emitDownstreamEvents,
+        },
+      );
+      applied = true;
+    } catch {
+      // Entity update failed; insight remains stored with applied: false
+    }
+  }
 
   return {
     insightId,

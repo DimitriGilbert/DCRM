@@ -14,14 +14,22 @@ export default function Dashboard() {
   const fg = useThemeColor("foreground");
   const muted = useThemeColor("muted");
 
-  const clients = useQuery(trpc.client.list.queryOptions({ limit: 1 }));
-  const projects = useQuery(
-    trpc.project.list.queryOptions({ limit: 1, status: "active" }),
-  );
-  const tickets = useQuery(
-    trpc.ticket.list.queryOptions({ limit: 1, status: "open" }),
-  );
-  const exchanges = useQuery(trpc.exchange.list.queryOptions({ limit: 5 }));
+  const clients = useQuery({
+    ...trpc.client.list.queryOptions({ limit: 1 }),
+    enabled: !!session?.user,
+  });
+  const projects = useQuery({
+    ...trpc.project.list.queryOptions({ limit: 1, status: "active" }),
+    enabled: !!session?.user,
+  });
+  const tickets = useQuery({
+    ...trpc.ticket.list.queryOptions({ limit: 1, status: "open" }),
+    enabled: !!session?.user,
+  });
+  const exchanges = useQuery({
+    ...trpc.exchange.list.queryOptions({ limit: 5 }),
+    enabled: !!session?.user,
+  });
 
   if (!session?.user) {
     return (
@@ -109,8 +117,8 @@ export default function Dashboard() {
 
             <Pressable
               className="mt-4 items-center"
-              onPress={() => {
-                authClient.signOut();
+              onPress={async () => {
+                await authClient.signOut();
                 queryClient.invalidateQueries();
               }}
             >

@@ -4,14 +4,21 @@ import { router } from "expo-router";
 import { Card, Spinner, useThemeColor } from "heroui-native";
 import { FlatList, Pressable, Text, View } from "react-native";
 
+import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
+
+function ItemSeparator() {
+  return <View className="h-2" />;
+}
 
 export default function ClientList() {
   const muted = useThemeColor("muted");
+  const { data: session } = authClient.useSession();
 
-  const { data, isLoading } = useQuery(
-    trpc.client.list.queryOptions({ limit: 50 }),
-  );
+  const { data, isLoading, error } = useQuery({
+    ...trpc.client.list.queryOptions({ limit: 50 }),
+    enabled: !!session?.user,
+  });
 
   const items = data?.items ?? [];
 
@@ -35,6 +42,11 @@ export default function ClientList() {
             <View className="items-center py-8">
               <Spinner size="lg" />
             </View>
+          ) : error ? (
+            <View className="items-center py-8">
+              <Ionicons name="alert-circle-outline" size={48} color={muted} />
+              <Text className="text-muted mt-2">Failed to load clients</Text>
+            </View>
           ) : (
             <View className="items-center py-8">
               <Ionicons name="people-outline" size={48} color={muted} />
@@ -42,7 +54,7 @@ export default function ClientList() {
             </View>
           )
         }
-        ItemSeparatorComponent={() => <View className="h-2" />}
+        ItemSeparatorComponent={ItemSeparator}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => router.push(`/client/${item.id}`)}

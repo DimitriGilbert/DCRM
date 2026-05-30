@@ -75,7 +75,10 @@ export function ProjectGrid({ projects }: { readonly projects: readonly ProjectL
           <CardHeader>
             <CardTitle className="flex items-start justify-between gap-3">
               <span>{project.name}</span>
-              <Badge variant="outline">{formatLabel(project.status)}</Badge>
+              <span className="flex flex-wrap justify-end gap-2">
+                <Badge variant="outline">{formatLabel(project.status)}</Badge>
+                {project.deletedAt ? <Badge variant="secondary">Deleted</Badge> : null}
+              </span>
             </CardTitle>
             <CardDescription>{project.description ?? "Client project"}</CardDescription>
           </CardHeader>
@@ -85,9 +88,11 @@ export function ProjectGrid({ projects }: { readonly projects: readonly ProjectL
               <Row label="Hours" value={formatHours(project.estimatedHours, project.actualHours)} />
               <Row label="Due" value={project.dueAt ? formatDate(project.dueAt) : "—"} />
             </dl>
-            <Button variant="outline" size="sm" render={<Link to="/projects/$projectId" params={{ projectId: project.id }} />}>
-              View project <ArrowRight />
-            </Button>
+            {project.deletedAt ? <UnavailableDetailAction label="Deleted project" /> : (
+              <Button variant="outline" size="sm" render={<Link to="/projects/$projectId" params={{ projectId: project.id }} />}>
+                View project <ArrowRight />
+              </Button>
+            )}
           </CardContent>
         </Card>
       ))}
@@ -113,7 +118,10 @@ export function TicketCard({ ticket }: { readonly ticket: TicketListRecord | Tic
       <CardHeader>
         <CardTitle className="flex items-start justify-between gap-3">
           <span>{ticket.title}</span>
-          <Badge variant={ticket.status === "closed" ? "secondary" : "outline"}>{formatLabel(ticket.status)}</Badge>
+          <span className="flex flex-wrap justify-end gap-2">
+            <Badge variant={ticket.status === "closed" ? "secondary" : "outline"}>{formatLabel(ticket.status)}</Badge>
+            {ticket.deletedAt ? <Badge variant="secondary">Deleted</Badge> : null}
+          </span>
         </CardTitle>
         <CardDescription>{ticket.description ?? formatLabel(ticket.type)}</CardDescription>
       </CardHeader>
@@ -123,9 +131,11 @@ export function TicketCard({ ticket }: { readonly ticket: TicketListRecord | Tic
           <Row label="Priority" value={formatLabel(ticket.priority)} />
           <Row label="Due" value={ticket.dueAt ? formatDate(ticket.dueAt) : "—"} />
         </dl>
-        <Button variant="outline" size="sm" render={<Link to="/tickets/$ticketId" params={{ ticketId: ticket.id }} />}>
-          View ticket <ArrowRight />
-        </Button>
+        {ticket.deletedAt ? <UnavailableDetailAction label="Deleted ticket" /> : (
+          <Button variant="outline" size="sm" render={<Link to="/tickets/$ticketId" params={{ ticketId: ticket.id }} />}>
+            View ticket <ArrowRight />
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -270,6 +280,10 @@ function Row({ label, value, wide = false }: { readonly label: string; readonly 
       <dd className="mt-1 whitespace-pre-wrap text-sm">{value}</dd>
     </div>
   );
+}
+
+function UnavailableDetailAction({ label }: { readonly label: string }) {
+  return <Button variant="outline" size="sm" disabled>{label}</Button>;
 }
 
 function formatMoney(amount: string | null | undefined, currency: string | null | undefined): string {

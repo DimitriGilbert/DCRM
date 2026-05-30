@@ -1,3 +1,5 @@
+import { TRPCError } from "@trpc/server";
+
 import { protectedProcedure } from "../../index.js";
 import { isStatusChange, notFound } from "./helpers.js";
 import { updateProjectStatusSchema } from "./schemas.js";
@@ -10,9 +12,13 @@ export const updateProjectStatus = protectedProcedure.input(updateProjectStatusS
   if (before.status === input.status) {
     return before;
   }
-  const project = await ctx.crmRepository.projects.update({ userId: ctx.auth.user.id, id: input.id, fields: { status: input.status }, now: new Date() });
+  const project = await ctx.crmRepository.projects.update({ userId: ctx.auth.user.id, id: input.id, fields: { status: input.status }, now: new Date(), expectedStatus: before.status });
   if (!project) {
-    throw notFound("Project not found.");
+    const current = await ctx.crmRepository.projects.getById({ userId: ctx.auth.user.id, id: input.id });
+    if (!current || current.deletedAt) {
+      throw notFound("Project not found.");
+    }
+    throw new TRPCError({ code: "CONFLICT", message: "Project status changed before this update could be applied." });
   }
   if (isStatusChange(before.status, project.status)) {
     await ctx.eventService.emitApi({ type: "project.status_changed", userId: ctx.auth.user.id, entity: { type: "project", id: project.id }, payload: { id: project.id, from: before.status, to: project.status }, changes: { before: { status: before.status }, after: { status: project.status } } });

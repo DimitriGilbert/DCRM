@@ -85,4 +85,35 @@ describe("in-memory CRM repository ownership validation", () => {
       /Email account not found\./,
     );
   });
+
+  it("rejects ticket project moves when an active dependent exchange exists", async () => {
+    const repository = createInMemoryCrmRepository();
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    await repository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Ada Lovelace" }, now });
+    await repository.clients.create({ id: "client_2", userId: "user_1", fields: { name: "Charles Babbage" }, now });
+    await repository.projects.create({ id: "project_1", userId: "user_1", fields: { clientId: "client_1", name: "Website rebuild" }, now });
+    await repository.projects.create({ id: "project_2", userId: "user_1", fields: { clientId: "client_2", name: "Research" }, now });
+    await repository.tickets.create({ id: "ticket_1", userId: "user_1", fields: { projectId: "project_1", title: "Fix contact form" }, now });
+    await repository.exchanges.create({ id: "exchange_1", userId: "user_1", fields: { ticketId: "ticket_1", type: "comment", body: "I reproduced this on mobile." }, now });
+
+    await assert.rejects(
+      repository.tickets.update({ id: "ticket_1", userId: "user_1", fields: { projectId: "project_2" }, now: new Date("2026-01-01T00:01:00.000Z") }),
+      /Ticket project cannot be changed/,
+    );
+    assert.equal((await repository.tickets.getById({ userId: "user_1", id: "ticket_1" }))?.projectId, "project_1");
+  });
+
+  it("does not delete tickets hidden by an inactive project parent", async () => {
+    const repository = createInMemoryCrmRepository();
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    await repository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Ada Lovelace" }, now });
+    await repository.projects.create({ id: "project_1", userId: "user_1", fields: { clientId: "client_1", name: "Website rebuild" }, now });
+    await repository.tickets.create({ id: "ticket_1", userId: "user_1", fields: { projectId: "project_1", title: "Fix contact form" }, now });
+    await repository.projects.setDeletedAt({ id: "project_1", userId: "user_1", deletedAt: now, now });
+
+    const deleted = await repository.tickets.setDeletedAt({ id: "ticket_1", userId: "user_1", deletedAt: new Date("2026-01-01T00:01:00.000Z"), now: new Date("2026-01-01T00:01:00.000Z") });
+
+    assert.equal(deleted, undefined);
+    assert.equal((await repository.tickets.getById({ userId: "user_1", id: "ticket_1" }))?.deletedAt, null);
+  });
 });

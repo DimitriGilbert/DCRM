@@ -5,12 +5,14 @@ import { resolveLocale } from "@DCRM/i18n";
 import type { AttachmentTargetType } from "@DCRM/domain";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql, sum } from "drizzle-orm";
 
-import { DuplicateTagNameError } from "./repository.js";
+import { DuplicateTagNameError, TicketProjectMoveBlockedError } from "./repository.js";
 import { authorizedEmailPatternsOverlap, normalizeAuthorizedEmailPattern } from "../email/matching.js";
 import type { CrmRepository } from "./repository.js";
 import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
 
 type CrmDatabase = ReturnType<typeof createDb>;
+type CrmTransaction = Parameters<Parameters<CrmDatabase["transaction"]>[0]>[0];
+type CrmExecutor = CrmDatabase | CrmTransaction;
 const ATTACHMENT_QUOTA_LOCK_NAMESPACE = 22_003;
 
 export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): CrmRepository {
@@ -123,10 +125,17 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         return filterRowsByTags(database, input.userId, "lead", rows, input.tagIds).then((filteredRows) => filteredRows.map(rowToLead));
       },
       async update(input) {
+        const predicates = [eq(leads.userId, input.userId), eq(leads.id, input.id), isNull(leads.deletedAt)];
+        if (input.expectedStage !== undefined) {
+          predicates.push(eq(leads.stage, input.expectedStage));
+        }
+        if (input.fields.stage !== undefined && input.fields.stage !== "won") {
+          predicates.push(isNull(leads.convertedAt));
+        }
         const rows = await database
           .update(leads)
           .set({ ...input.fields, updatedAt: input.now })
-          .where(and(eq(leads.userId, input.userId), eq(leads.id, input.id)))
+          .where(and(...predicates))
           .returning();
         return rows[0] ? rowToLead(rows[0]) : undefined;
       },
@@ -143,7 +152,7 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           const convertedRows = await tx
             .update(leads)
             .set({ stage: "won", convertedClientId: input.clientId, convertedAt: input.now, updatedAt: input.now })
-            .where(and(eq(leads.userId, input.userId), eq(leads.id, input.leadId), isNull(leads.deletedAt), isNull(leads.convertedAt)))
+            .where(and(eq(leads.userId, input.userId), eq(leads.id, input.leadId), isNull(leads.deletedAt), isNull(leads.convertedAt), eq(leads.stage, "won")))
             .returning();
           const convertedLead = convertedRows[0];
           if (!convertedLead) {
@@ -211,10 +220,14 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         if (input.fields.clientId !== undefined) {
           await requireActiveClient(database, input.userId, input.fields.clientId);
         }
+        const predicates = [eq(projects.userId, input.userId), eq(projects.id, input.id), isNull(projects.deletedAt)];
+        if (input.expectedStatus !== undefined) {
+          predicates.push(eq(projects.status, input.expectedStatus));
+        }
         const rows = await database
           .update(projects)
           .set({ ...input.fields, updatedAt: input.now })
-          .where(and(eq(projects.userId, input.userId), eq(projects.id, input.id)))
+          .where(and(...predicates))
           .returning();
         return rows[0] ? rowToProject(rows[0]) : undefined;
       },
@@ -243,6 +256,9 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         if (!input.includeDeleted) {
           predicates.push(isNull(tickets.deletedAt));
         }
+        if (!input.includeInactiveParent) {
+          predicates.push(activeTicketProjectExists(input.userId));
+        }
         if (input.projectId) {
           predicates.push(eq(tickets.projectId, input.projectId));
         }
@@ -269,33 +285,73 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         return filterRowsByTags(database, input.userId, "ticket", rows, input.tagIds).then((filteredRows) => filteredRows.map(rowToTicket));
       },
       async update(input) {
-        if (input.fields.projectId !== undefined) {
-          await requireActiveProject(database, input.userId, input.fields.projectId);
-        }
-        const rows = await database
-          .update(tickets)
-          .set({ ...input.fields, updatedAt: input.now })
-          .where(and(eq(tickets.userId, input.userId), eq(tickets.id, input.id)))
-          .returning();
-        return rows[0] ? rowToTicket(rows[0]) : undefined;
+        return database.transaction(async (tx) => {
+          const currentRows = await tx.select().from(tickets).where(and(eq(tickets.userId, input.userId), eq(tickets.id, input.id), isNull(tickets.deletedAt), activeTicketProjectExists(input.userId))).limit(1).for("update");
+          const current = currentRows[0];
+          if (!current) {
+            return undefined;
+          }
+          const nextProjectId = input.fields.projectId ?? current.projectId;
+          if (input.fields.projectId !== undefined) {
+            const projectRows = await tx.select().from(projects).where(and(eq(projects.userId, input.userId), eq(projects.id, input.fields.projectId), isNull(projects.deletedAt))).limit(1);
+            const project = projectRows[0];
+            if (!project) {
+              throw new Error("Project not found.");
+            }
+            const clientRows = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.userId, input.userId), eq(clients.id, project.clientId), isNull(clients.deletedAt))).limit(1);
+            if (!clientRows[0]) {
+              throw new Error("Client not found.");
+            }
+          }
+          if (nextProjectId !== current.projectId) {
+            const dependencyRows = await tx.select({ id: exchanges.id }).from(exchanges).where(and(eq(exchanges.userId, input.userId), eq(exchanges.ticketId, input.id), isNull(exchanges.deletedAt))).limit(1);
+            if (dependencyRows[0]) {
+              throw new TicketProjectMoveBlockedError(input.id);
+            }
+          }
+          const updatePredicates = [eq(tickets.userId, input.userId), eq(tickets.id, input.id), isNull(tickets.deletedAt), activeTicketProjectExists(input.userId)];
+          if (input.fields.projectId !== undefined) {
+            updatePredicates.push(activeProjectIdExists(input.userId, input.fields.projectId));
+          }
+          if (nextProjectId !== current.projectId) {
+            updatePredicates.push(noActiveTicketExchangesExist(input.userId, input.id));
+          }
+          const rows = await tx
+            .update(tickets)
+            .set({ ...input.fields, updatedAt: input.now })
+            .where(and(...updatePredicates))
+            .returning();
+          if (!rows[0] && nextProjectId !== current.projectId) {
+            const dependencyRows = await tx.select({ id: exchanges.id }).from(exchanges).where(and(eq(exchanges.userId, input.userId), eq(exchanges.ticketId, input.id), isNull(exchanges.deletedAt))).limit(1);
+            if (dependencyRows[0]) {
+              throw new TicketProjectMoveBlockedError(input.id);
+            }
+          }
+          return rows[0] ? rowToTicket(rows[0]) : undefined;
+        });
       },
       async setDeletedAt(input) {
         const rows = await database
           .update(tickets)
           .set({ deletedAt: input.deletedAt, updatedAt: input.now })
-          .where(and(eq(tickets.userId, input.userId), eq(tickets.id, input.id)))
+          .where(and(eq(tickets.userId, input.userId), eq(tickets.id, input.id), isNull(tickets.deletedAt), activeTicketProjectExists(input.userId)))
           .returning();
         return rows[0] ? rowToTicket(rows[0]) : undefined;
       },
     },
     exchanges: {
       async create(input) {
-        await validateActiveExchangeParents(database, input.userId, input.fields.clientId ?? null, input.fields.projectId ?? null, input.fields.ticketId ?? null);
-        if (input.fields.syncedEmailAccountId) {
-          await requireActiveEmailAccount(database, input.userId, input.fields.syncedEmailAccountId);
-        }
-        const rows = await database.insert(exchanges).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
-        return requireExchange(rows[0], input.id);
+        return database.transaction(async (tx) => {
+          if (input.fields.ticketId) {
+            await requireActiveTicketForUpdate(tx, input.userId, input.fields.ticketId);
+          }
+          await validateActiveExchangeParents(tx, input.userId, input.fields.clientId ?? null, input.fields.projectId ?? null, input.fields.ticketId ?? null);
+          if (input.fields.syncedEmailAccountId) {
+            await requireActiveEmailAccount(tx, input.userId, input.fields.syncedEmailAccountId);
+          }
+          const rows = await tx.insert(exchanges).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
+          return requireExchange(rows[0], input.id);
+        });
       },
       async getById(input) {
         const rows = await database.select().from(exchanges).where(and(eq(exchanges.userId, input.userId), eq(exchanges.id, input.id))).limit(1);
@@ -648,7 +704,7 @@ function requireUserSettings(row: typeof userSettings.$inferSelect | undefined, 
   return rowToUserSettings(row);
 }
 
-async function requireActiveClient(database: CrmDatabase, userId: string, clientId: string): Promise<typeof clients.$inferSelect> {
+async function requireActiveClient(database: CrmExecutor, userId: string, clientId: string): Promise<typeof clients.$inferSelect> {
   const rows = await database.select().from(clients).where(and(eq(clients.userId, userId), eq(clients.id, clientId), isNull(clients.deletedAt))).limit(1);
   const client = rows[0];
   if (!client) {
@@ -657,7 +713,7 @@ async function requireActiveClient(database: CrmDatabase, userId: string, client
   return client;
 }
 
-async function requireActiveProject(database: CrmDatabase, userId: string, projectId: string): Promise<typeof projects.$inferSelect> {
+async function requireActiveProject(database: CrmExecutor, userId: string, projectId: string): Promise<typeof projects.$inferSelect> {
   const rows = await database.select().from(projects).where(and(eq(projects.userId, userId), eq(projects.id, projectId), isNull(projects.deletedAt))).limit(1);
   const project = rows[0];
   if (!project) {
@@ -667,7 +723,41 @@ async function requireActiveProject(database: CrmDatabase, userId: string, proje
   return project;
 }
 
-async function requireActiveTicket(database: CrmDatabase, userId: string, ticketId: string): Promise<typeof tickets.$inferSelect> {
+function activeTicketProjectExists(userId: string) {
+  return sql`exists (
+    select 1
+    from ${projects}
+    join ${clients} on ${clients.id} = ${projects.clientId} and ${clients.userId} = ${projects.userId}
+    where ${projects.userId} = ${userId}
+      and ${projects.id} = ${tickets.projectId}
+      and ${projects.deletedAt} is null
+      and ${clients.deletedAt} is null
+  )`;
+}
+
+function activeProjectIdExists(userId: string, projectId: string) {
+  return sql`exists (
+    select 1
+    from ${projects}
+    join ${clients} on ${clients.id} = ${projects.clientId} and ${clients.userId} = ${projects.userId}
+    where ${projects.userId} = ${userId}
+      and ${projects.id} = ${projectId}
+      and ${projects.deletedAt} is null
+      and ${clients.deletedAt} is null
+  )`;
+}
+
+function noActiveTicketExchangesExist(userId: string, ticketId: string) {
+  return sql`not exists (
+    select 1
+    from ${exchanges}
+    where ${exchanges.userId} = ${userId}
+      and ${exchanges.ticketId} = ${ticketId}
+      and ${exchanges.deletedAt} is null
+  )`;
+}
+
+async function requireActiveTicket(database: CrmExecutor, userId: string, ticketId: string): Promise<typeof tickets.$inferSelect> {
   const rows = await database.select().from(tickets).where(and(eq(tickets.userId, userId), eq(tickets.id, ticketId), isNull(tickets.deletedAt))).limit(1);
   const ticket = rows[0];
   if (!ticket) {
@@ -677,7 +767,16 @@ async function requireActiveTicket(database: CrmDatabase, userId: string, ticket
   return ticket;
 }
 
-async function requireActiveEmailAccount(database: CrmDatabase, userId: string, emailAccountId: string): Promise<void> {
+async function requireActiveTicketForUpdate(database: CrmExecutor, userId: string, ticketId: string): Promise<typeof tickets.$inferSelect> {
+  const rows = await database.select().from(tickets).where(and(eq(tickets.userId, userId), eq(tickets.id, ticketId), isNull(tickets.deletedAt), activeTicketProjectExists(userId))).limit(1).for("update");
+  const ticket = rows[0];
+  if (!ticket) {
+    throw new Error("Ticket not found.");
+  }
+  return ticket;
+}
+
+async function requireActiveEmailAccount(database: CrmExecutor, userId: string, emailAccountId: string): Promise<void> {
   const rows = await database.select({ id: emailAccounts.id }).from(emailAccounts).where(and(eq(emailAccounts.userId, userId), eq(emailAccounts.id, emailAccountId), eq(emailAccounts.enabled, true), isNull(emailAccounts.deletedAt))).limit(1);
   if (!rows[0]) {
     throw new Error("Email account not found.");
@@ -710,7 +809,7 @@ function isTagNameUniqueViolation(error: unknown): boolean {
   return maybeError.code === "23505" && maybeError.constraint === "tags_user_id_name_idx";
 }
 
-async function validateActiveExchangeParents(database: CrmDatabase, userId: string, clientId: string | null | undefined, projectId: string | null | undefined, ticketId: string | null | undefined): Promise<void> {
+async function validateActiveExchangeParents(database: CrmExecutor, userId: string, clientId: string | null | undefined, projectId: string | null | undefined, ticketId: string | null | undefined): Promise<void> {
   if (ticketId) {
     const ticket = await requireActiveTicket(database, userId, ticketId);
     const project = await requireActiveProject(database, userId, ticket.projectId);

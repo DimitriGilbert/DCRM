@@ -105,12 +105,12 @@ export interface TicketCommentMutationInput {
   readonly visibility: WebExchangeVisibility;
 }
 
-export function ProjectForm({ project, clients, submitLabel, submitting, onSubmit }: { readonly project?: ProjectRecord; readonly clients: readonly ClientOptionRecord[]; readonly submitLabel: string; readonly submitting: boolean; readonly onSubmit: (input: ProjectMutationInput) => Promise<void> }) {
+export function ProjectForm({ project, clients, clientUnavailable, submitLabel, submitting, onSubmit }: { readonly project?: ProjectRecord; readonly clients: readonly ClientOptionRecord[]; readonly clientUnavailable?: boolean; readonly submitLabel: string; readonly submitting: boolean; readonly onSubmit: (input: ProjectMutationInput) => Promise<void> }) {
   const { Form } = useFormedible<ProjectFormValues>({
     schema: projectFormSchema,
     fields: projectFields(clients),
     formOptions: {
-      defaultValues: projectToFormValues(project),
+      defaultValues: projectToFormValues(project, clientUnavailable ?? false),
       onSubmit: async ({ value }) => onSubmit(projectFormValuesToInput(value)),
     },
     submitLabel,
@@ -120,12 +120,12 @@ export function ProjectForm({ project, clients, submitLabel, submitting, onSubmi
   return <Form className="space-y-4" />;
 }
 
-export function TicketForm({ ticket, projects, submitLabel, submitting, onSubmit }: { readonly ticket?: TicketRecord; readonly projects: readonly ProjectListRecord[]; readonly submitLabel: string; readonly submitting: boolean; readonly onSubmit: (input: TicketMutationInput) => Promise<void> }) {
+export function TicketForm({ ticket, projects, projectUnavailable, submitLabel, submitting, onSubmit }: { readonly ticket?: TicketRecord; readonly projects: readonly ProjectListRecord[]; readonly projectUnavailable?: boolean; readonly submitLabel: string; readonly submitting: boolean; readonly onSubmit: (input: TicketMutationInput) => Promise<void> }) {
   const { Form } = useFormedible<TicketFormValues>({
     schema: ticketFormSchema,
     fields: ticketFields(projects),
     formOptions: {
-      defaultValues: ticketToFormValues(ticket),
+      defaultValues: ticketToFormValues(ticket, projectUnavailable ?? false),
       onSubmit: async ({ value }) => onSubmit(ticketFormValuesToInput(value)),
     },
     submitLabel,
@@ -220,6 +220,18 @@ export function FormShell({ title, description, children }: { readonly title: st
   );
 }
 
+export function DeletedParentNotice({ title, description, children }: { readonly title: string; readonly description: string; readonly children?: ReactNode }) {
+  return (
+    <Card className="border-amber-300/50 bg-amber-500/10">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      {children ? <CardContent>{children}</CardContent> : null}
+    </Card>
+  );
+}
+
 export function BackButton({ href, label }: { readonly href: string; readonly label: string }) {
   return (
     <Button variant="outline" size="sm" render={<a href={href} />}>
@@ -257,9 +269,9 @@ function ticketFields(projects: readonly ProjectListRecord[]): readonly Formedib
   ];
 }
 
-function projectToFormValues(project?: ProjectRecord): ProjectFormValues {
+function projectToFormValues(project: ProjectRecord | undefined, clientUnavailable: boolean): ProjectFormValues {
   return {
-    clientId: project?.clientId ?? "",
+    clientId: clientUnavailable ? "" : project?.clientId ?? "",
     name: project?.name ?? "",
     description: project?.description ?? "",
     status: project?.status ?? "planning",
@@ -273,9 +285,9 @@ function projectToFormValues(project?: ProjectRecord): ProjectFormValues {
   };
 }
 
-function ticketToFormValues(ticket?: TicketRecord): TicketFormValues {
+function ticketToFormValues(ticket: TicketRecord | undefined, projectUnavailable: boolean): TicketFormValues {
   return {
-    projectId: ticket?.projectId ?? "",
+    projectId: projectUnavailable ? "" : ticket?.projectId ?? "",
     title: ticket?.title ?? "",
     description: ticket?.description ?? "",
     type: ticket?.type ?? "task",

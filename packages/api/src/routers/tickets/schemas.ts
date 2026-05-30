@@ -23,6 +23,8 @@ export const ticketUpdateFieldsSchema = ticketFieldsSchema.partial().extend({
 
 export const ticketIdSchema = z.object({ id: z.string().trim().min(1) });
 
+export const getTicketSchema = ticketIdSchema.extend({ includeInactiveParent: z.boolean().optional() });
+
 export const listTicketsSchema = z.object({
   projectId: z.string().trim().min(1).optional(),
   search: z.string().trim().optional(),
@@ -33,6 +35,7 @@ export const listTicketsSchema = z.object({
   createdFrom: z.coerce.date().optional(),
   createdTo: z.coerce.date().optional(),
   includeDeleted: z.boolean().optional(),
+  includeInactiveParent: z.boolean().optional(),
 });
 
 export const updateTicketStatusSchema = z.object({

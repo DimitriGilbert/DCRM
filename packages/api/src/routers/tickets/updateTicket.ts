@@ -1,20 +1,23 @@
+import { TRPCError } from "@trpc/server";
+
+import { TicketProjectMoveBlockedError } from "../../crm/repository.js";
 import { protectedProcedure } from "../../index.js";
-import { isStatusChange, normalizeUpdateTicketFields, notFound } from "./helpers.js";
+import { assertActiveTicketParent, isStatusChange, normalizeUpdateTicketFields, notFound } from "./helpers.js";
 import { ticketUpdateFieldsSchema } from "./schemas.js";
+
+import type { TicketRecord } from "../../crm/types.js";
 
 export const updateTicket = protectedProcedure.input(ticketUpdateFieldsSchema).mutation(async ({ ctx, input }) => {
   const before = await ctx.crmRepository.tickets.getById({ userId: ctx.auth.user.id, id: input.id });
   if (!before || before.deletedAt) {
     throw notFound("Ticket not found.");
   }
+  await assertActiveTicketParent({ repository: ctx.crmRepository, userId: ctx.auth.user.id, projectId: before.projectId, notFoundMessage: "Ticket not found." });
   if (input.projectId !== undefined) {
-    const project = await ctx.crmRepository.projects.getById({ userId: ctx.auth.user.id, id: input.projectId });
-    if (!project || project.deletedAt) {
-      throw notFound("Project not found.");
-    }
+    await assertActiveTicketParent({ repository: ctx.crmRepository, userId: ctx.auth.user.id, projectId: input.projectId, notFoundMessage: "Project not found." });
   }
   const now = new Date();
-  const ticket = await ctx.crmRepository.tickets.update({ userId: ctx.auth.user.id, id: input.id, fields: normalizeUpdateTicketFields(input, before, now), now });
+  const ticket = await updateTicketRecord(() => ctx.crmRepository.tickets.update({ userId: ctx.auth.user.id, id: input.id, fields: normalizeUpdateTicketFields(input, before, now), now }));
   if (!ticket) {
     throw notFound("Ticket not found.");
   }
@@ -33,3 +36,14 @@ export const updateTicket = protectedProcedure.input(ticketUpdateFieldsSchema).m
   }
   return ticket;
 });
+
+async function updateTicketRecord(operation: () => Promise<TicketRecord | undefined>): Promise<TicketRecord | undefined> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof TicketProjectMoveBlockedError) {
+      throw new TRPCError({ code: "CONFLICT", message: error.message });
+    }
+    throw error;
+  }
+}

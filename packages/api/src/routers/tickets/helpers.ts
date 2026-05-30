@@ -4,6 +4,7 @@ import type { z } from "zod";
 
 import { validateCustomFieldValues } from "../../crm/custom-fields.js";
 
+import type { CrmRepository } from "../../crm/repository.js";
 import type { CustomFieldDefinition, TicketRecord } from "../../crm/types.js";
 import type { ticketFieldsSchema, ticketUpdateFieldsSchema } from "./schemas.js";
 
@@ -55,6 +56,17 @@ export function badRequest(message: string): TRPCError {
 
 export function isStatusChange(before: TicketStatus, after: TicketStatus): boolean {
   return before !== after;
+}
+
+export async function assertActiveTicketParent(input: { readonly repository: CrmRepository; readonly userId: string; readonly projectId: string; readonly notFoundMessage: string }): Promise<void> {
+  const project = await input.repository.projects.getById({ userId: input.userId, id: input.projectId });
+  if (!project || project.deletedAt) {
+    throw notFound(input.notFoundMessage);
+  }
+  const client = await input.repository.clients.getById({ userId: input.userId, id: project.clientId });
+  if (!client || client.deletedAt) {
+    throw notFound(input.notFoundMessage);
+  }
 }
 
 function parseCustomFields(definitions: readonly CustomFieldDefinition[], values: Record<string, unknown> | undefined) {

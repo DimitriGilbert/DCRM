@@ -3,8 +3,9 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { getUser } from "@/functions/get-user";
-import { BackButton, FormShell, ProjectForm } from "@/features/project-ticket/forms";
+import { BackButton, DeletedParentNotice, FormShell, ProjectForm } from "@/features/project-ticket/forms";
 import type { ProjectMutationInput } from "@/features/project-ticket/forms";
+import type { ClientOptionRecord, ProjectRecord } from "@/features/project-ticket/types";
 import { ErrorState, LoadingCards, PageFrame, PageHeader } from "@/features/project-ticket/views";
 import { useTRPC } from "@/utils/trpc";
 
@@ -37,11 +38,20 @@ function RouteComponent() {
   return (
     <PageFrame>
       <PageHeader eyebrow="Edit project" title={project.data?.name ?? "Edit project"} description="Update project details using the shared Formedible project schema." actions={<BackButton href={`/projects/${projectId}`} label="Back to project" />} />
-      {project.isError || clients.isError ? <ErrorState title="Project could not load" /> : project.data && clients.data ? (
-        <FormShell title="Project details" description="Changes stay scoped to your single-user CRM account.">
-          <ProjectForm project={project.data} clients={clients.data} submitLabel="Save project" submitting={updateProject.isPending} onSubmit={handleSubmit} />
-        </FormShell>
-      ) : <LoadingCards />}
+      {project.isError || clients.isError ? <ErrorState title="Project could not load" /> : project.data && clients.data ? <ProjectEditContent project={project.data} clients={clients.data} submitting={updateProject.isPending} onSubmit={handleSubmit} /> : <LoadingCards />}
     </PageFrame>
+  );
+}
+
+function ProjectEditContent({ project, clients, submitting, onSubmit }: { readonly project: ProjectRecord; readonly clients: readonly ClientOptionRecord[]; readonly submitting: boolean; readonly onSubmit: (input: ProjectMutationInput) => Promise<void> }) {
+  const clientUnavailable = !clients.some((client) => client.id === project.clientId);
+
+  return (
+    <div className="space-y-4">
+      {clientUnavailable ? <DeletedParentNotice title="Client needs attention" description="This project is attached to a deleted client. Choose an active client before saving so the project is not resubmitted with a deleted parent." /> : null}
+      <FormShell title="Project details" description="Changes stay scoped to your single-user CRM account.">
+        <ProjectForm project={project} clients={clients} clientUnavailable={clientUnavailable} submitLabel="Save project" submitting={submitting} onSubmit={onSubmit} />
+      </FormShell>
+    </div>
   );
 }

@@ -15,6 +15,16 @@ export const convertLead = protectedProcedure.input(leadIdSchema).mutation(async
   }
   const result = await ctx.crmRepository.leads.convert({ userId: ctx.auth.user.id, leadId: input.id, clientId: crypto.randomUUID(), now: new Date() });
   if (!result) {
+    const current = await ctx.crmRepository.leads.getById({ userId: ctx.auth.user.id, id: input.id });
+    if (!current || current.deletedAt) {
+      throw notFound("Lead not found.");
+    }
+    if (current.convertedAt) {
+      throw conflict("Lead has already been converted.");
+    }
+    if (current.stage !== "won") {
+      throw conflict("Only won leads can be converted.");
+    }
     throw conflict("Lead has already been converted.");
   }
   if (before.stage !== result.lead.stage) {

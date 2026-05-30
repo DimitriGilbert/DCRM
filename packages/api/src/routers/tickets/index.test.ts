@@ -142,6 +142,63 @@ describe("tickets and exchanges tRPC API", () => {
     await assert.rejects(userOne.tickets.update({ id: ticket.id, projectId: foreignProject.id }), /Project not found/u);
   });
 
+  it("hides active tickets under deleted projects unless stale parents are requested explicitly", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
+    await caller.projects.delete({ id: project.id });
+
+    await assert.rejects(caller.tickets.get({ id: ticket.id }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.update({ id: ticket.id, title: "Still broken" }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.updateStatus({ id: ticket.id, status: "closed" }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.delete({ id: ticket.id }), /Ticket not found/u);
+    assert.deepEqual(await caller.tickets.list({}), []);
+    assert.deepEqual(
+      (await caller.tickets.list({ includeInactiveParent: true })).map((record) => record.id),
+      [ticket.id],
+    );
+    assert.equal((await caller.tickets.get({ id: ticket.id, includeInactiveParent: true })).id, ticket.id);
+  });
+
+  it("hides active tickets under projects whose client is deleted unless stale parents are requested explicitly", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
+    await caller.clients.delete({ id: client.id });
+
+    await assert.rejects(caller.tickets.get({ id: ticket.id }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.update({ id: ticket.id, title: "Still broken" }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.updateStatus({ id: ticket.id, status: "closed" }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.delete({ id: ticket.id }), /Ticket not found/u);
+    assert.deepEqual(await caller.tickets.list({}), []);
+    assert.deepEqual(
+      (await caller.tickets.list({ includeInactiveParent: true })).map((record) => record.id),
+      [ticket.id],
+    );
+    assert.equal((await caller.tickets.get({ id: ticket.id, includeInactiveParent: true })).id, ticket.id);
+  });
+
+  it("rejects moving tickets that already have exchanges attached", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const firstClient = await caller.clients.create({ name: "Ada Lovelace" });
+    const secondClient = await caller.clients.create({ name: "Charles Babbage" });
+    const firstProject = await caller.projects.create({ clientId: firstClient.id, name: "Website rebuild" });
+    const secondProject = await caller.projects.create({ clientId: secondClient.id, name: "Research" });
+    const ticket = await caller.tickets.create({ projectId: firstProject.id, title: "Fix contact form" });
+    await caller.exchanges.addTicketComment({ ticketId: ticket.id, body: "I reproduced this on mobile.", visibility: "external" });
+
+    await assert.rejects(caller.tickets.update({ id: ticket.id, projectId: secondProject.id }), /Ticket project cannot be changed/u);
+    assert.equal((await caller.tickets.get({ id: ticket.id })).projectId, firstProject.id);
+  });
+
   it("stores ticket comments as exchanges and exposes them through client, project, and ticket timelines", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();

@@ -1,5 +1,5 @@
 import { protectedProcedure } from "../../index.js";
-import { notFound } from "./helpers.js";
+import { assertActiveTicketParent, notFound } from "./helpers.js";
 import { ticketIdSchema } from "./schemas.js";
 
 export const deleteTicket = protectedProcedure.input(ticketIdSchema).mutation(async ({ ctx, input }) => {
@@ -7,6 +7,7 @@ export const deleteTicket = protectedProcedure.input(ticketIdSchema).mutation(as
   if (!before) {
     throw notFound("Ticket not found.");
   }
+  await assertActiveTicketParent({ repository: ctx.crmRepository, userId: ctx.auth.user.id, projectId: before.projectId, notFoundMessage: "Ticket not found." });
   if (before.deletedAt) {
     return before;
   }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { customFieldSchemaInputSchema, jsonObjectSchema } from "../../crm/custom-fields.js";
 
 const budgetAmountSchema = z.string().regex(/^\d{1,10}(?:\.\d{1,2})?$/u).nullable().optional();
+const budgetCurrencySchema = z.string().trim().regex(/^[A-Za-z]{3}$/u).toUpperCase().nullable().optional();
 const hourAmountSchema = z.string().regex(/^\d{1,8}(?:\.\d{1,2})?$/u).nullable().optional();
 
 export const projectFieldsSchema = z.object({
@@ -12,7 +13,7 @@ export const projectFieldsSchema = z.object({
   description: z.string().nullable().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   budgetAmount: budgetAmountSchema,
-  budgetCurrency: z.string().trim().length(3).toUpperCase().nullable().optional(),
+  budgetCurrency: budgetCurrencySchema,
   estimatedHours: hourAmountSchema,
   actualHours: hourAmountSchema,
   startsAt: z.coerce.date().nullable().optional(),

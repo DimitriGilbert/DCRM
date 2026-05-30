@@ -11,9 +11,16 @@ export const updateLead = protectedProcedure.input(leadUpdateFieldsSchema).mutat
     throw conflict("Converted leads must remain in the won stage.");
   }
   const fields = normalizeUpdateLeadFields(input, before);
-  const lead = await ctx.crmRepository.leads.update({ userId: ctx.auth.user.id, id: input.id, fields, now: new Date() });
+  const lead = await ctx.crmRepository.leads.update({ userId: ctx.auth.user.id, id: input.id, fields, now: new Date(), expectedStage: input.stage === undefined ? undefined : before.stage });
   if (!lead) {
-    throw notFound("Lead not found.");
+    const current = await ctx.crmRepository.leads.getById({ userId: ctx.auth.user.id, id: input.id });
+    if (!current || current.deletedAt) {
+      throw notFound("Lead not found.");
+    }
+    if (current.convertedAt && input.stage !== undefined && input.stage !== "won") {
+      throw conflict("Converted leads must remain in the won stage.");
+    }
+    throw conflict("Lead stage changed before this update could be applied.");
   }
   await ctx.eventService.emitApi({
     type: "lead.updated",

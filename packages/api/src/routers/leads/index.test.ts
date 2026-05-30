@@ -183,6 +183,24 @@ describe("leads tRPC API", () => {
     await assert.rejects(caller.leads.convert({ id: lead.id }), /Only won leads can be converted/u);
   });
 
+  it("enforces lead transition invariants at the repository write boundary", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const proposalLead = await crmRepository.leads.create({ id: "lead_proposal", userId: "user_1", fields: { name: "Proposal", stage: "proposal" }, now });
+
+    assert.equal(await crmRepository.leads.convert({ userId: "user_1", leadId: proposalLead.id, clientId: "client_from_proposal", now }), undefined);
+
+    const wonLead = await crmRepository.leads.create({ id: "lead_won", userId: "user_1", fields: { name: "Won", stage: "won" }, now });
+    await crmRepository.leads.convert({ userId: "user_1", leadId: wonLead.id, clientId: "client_from_won", now });
+
+    assert.equal(await crmRepository.leads.update({ userId: "user_1", id: wonLead.id, fields: { stage: "lost" }, now }), undefined);
+    assert.equal(await crmRepository.leads.update({ userId: "user_1", id: wonLead.id, fields: { stage: "won" }, now, expectedStage: "lost" }), undefined);
+
+    const renamed = await crmRepository.leads.update({ userId: "user_1", id: wonLead.id, fields: { name: "Converted Won" }, now });
+    assert.equal(renamed?.name, "Converted Won");
+    assert.equal(renamed?.stage, "won");
+  });
+
   it("rejects converting the same lead twice without creating another client", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();

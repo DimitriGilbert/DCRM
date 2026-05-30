@@ -107,6 +107,49 @@ describe("projects tRPC API", () => {
     await assert.rejects(caller.projects.update({ id: project.id, actualHours: "123456789.00" }), /actualHours/u);
   });
 
+  it("rejects non alphabetic project budget currency codes", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild", budgetCurrency: "usd" });
+
+    await assert.rejects(caller.projects.create({ clientId: client.id, name: "Invalid budget", budgetCurrency: "123" }), /budgetCurrency/u);
+    await assert.rejects(caller.projects.update({ id: project.id, budgetCurrency: "U$D" }), /budgetCurrency/u);
+    assert.equal(project.budgetCurrency, "USD");
+  });
+
+  it("enforces active project and expected-status invariants at the repository write boundary", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const client = await crmRepository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Ada Lovelace" }, now });
+    const project = await crmRepository.projects.create({ id: "project_1", userId: "user_1", fields: { clientId: client.id, name: "Website rebuild", status: "planning" }, now });
+
+    assert.equal(await crmRepository.projects.update({ userId: "user_1", id: project.id, fields: { status: "active" }, now, expectedStatus: "archived" }), undefined);
+
+    const updated = await crmRepository.projects.update({ userId: "user_1", id: project.id, fields: { status: "active" }, now, expectedStatus: "planning" });
+    assert.equal(updated?.status, "active");
+
+    await crmRepository.projects.setDeletedAt({ userId: "user_1", id: project.id, deletedAt: now, now });
+    assert.equal(await crmRepository.projects.update({ userId: "user_1", id: project.id, fields: { name: "Deleted update" }, now }), undefined);
+  });
+
+  it("rejects generic project updates after a concurrent status change without emitting a stale status event", async () => {
+    const baseRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const setupCaller = appRouter.createCaller(createTestContext("user_1", baseRepository, eventService));
+    const client = await setupCaller.clients.create({ name: "Ada Lovelace" });
+    const project = await setupCaller.projects.create({ clientId: client.id, name: "Website rebuild", status: "planning" });
+    const racingRepository = createStatusRaceCrmRepository(baseRepository, { userId: "user_1", projectId: project.id, status: "active" });
+    const caller = appRouter.createCaller(createTestContext("user_1", racingRepository, eventService));
+
+    await assert.rejects(caller.projects.update({ id: project.id, name: "Renamed after stale read" }), /Project status changed/u);
+
+    assert.equal((await baseRepository.projects.getById({ userId: "user_1", id: project.id }))?.name, "Website rebuild");
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "project.created"],
+    );
+  });
+
   it("gets and soft-deletes project visibility through user-scoped procedures", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();
@@ -220,4 +263,22 @@ function createTestEventService(): EventService {
       return `event_${nextId}`;
     },
   });
+}
+
+function createStatusRaceCrmRepository(baseRepository: CrmRepository, race: { readonly userId: string; readonly projectId: string; readonly status: "active" }): CrmRepository {
+  let hasRaced = false;
+  return {
+    ...baseRepository,
+    projects: {
+      ...baseRepository.projects,
+      async getById(input) {
+        const project = await baseRepository.projects.getById(input);
+        if (!hasRaced && input.userId === race.userId && input.id === race.projectId && project && !project.deletedAt) {
+          hasRaced = true;
+          await baseRepository.projects.update({ userId: race.userId, id: race.projectId, fields: { status: race.status }, now: new Date("2026-01-01T00:00:00.000Z"), expectedStatus: project.status });
+        }
+        return project;
+      },
+    },
+  };
 }

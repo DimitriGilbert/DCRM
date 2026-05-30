@@ -358,6 +358,7 @@ export type TicketListInput = {
   readonly createdFrom?: Date;
   readonly createdTo?: Date;
   readonly includeDeleted?: boolean;
+  readonly includeInactiveParent?: boolean;
 };
 
 export type ExchangeListInput = {

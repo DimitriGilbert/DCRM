@@ -59,7 +59,7 @@ export type CrmRepository = {
     readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: LeadMutationFields; readonly now: Date }) => Promise<LeadRecord>;
     readonly getById: (input: LeadIdInput) => Promise<LeadRecord | undefined>;
     readonly list: (input: LeadListInput) => Promise<readonly LeadRecord[]>;
-    readonly update: (input: { readonly userId: string; readonly id: string; readonly fields: LeadUpdateFields; readonly now: Date }) => Promise<LeadRecord | undefined>;
+    readonly update: (input: { readonly userId: string; readonly id: string; readonly fields: LeadUpdateFields; readonly now: Date; readonly expectedStage?: LeadRecord["stage"] }) => Promise<LeadRecord | undefined>;
     readonly setDeletedAt: (input: { readonly userId: string; readonly id: string; readonly deletedAt: Date | null; readonly now: Date }) => Promise<LeadRecord | undefined>;
     readonly convert: (input: { readonly userId: string; readonly leadId: string; readonly clientId: string; readonly now: Date }) => Promise<{ readonly lead: LeadRecord; readonly client: ClientRecord } | undefined>;
   };
@@ -67,7 +67,7 @@ export type CrmRepository = {
     readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: ProjectMutationFields; readonly now: Date }) => Promise<ProjectRecord>;
     readonly getById: (input: ProjectIdInput) => Promise<ProjectRecord | undefined>;
     readonly list: (input: ProjectListInput) => Promise<readonly ProjectRecord[]>;
-    readonly update: (input: { readonly userId: string; readonly id: string; readonly fields: ProjectUpdateFields; readonly now: Date }) => Promise<ProjectRecord | undefined>;
+    readonly update: (input: { readonly userId: string; readonly id: string; readonly fields: ProjectUpdateFields; readonly now: Date; readonly expectedStatus?: ProjectRecord["status"] }) => Promise<ProjectRecord | undefined>;
     readonly setDeletedAt: (input: { readonly userId: string; readonly id: string; readonly deletedAt: Date | null; readonly now: Date }) => Promise<ProjectRecord | undefined>;
   };
   readonly tickets: {
@@ -121,6 +121,13 @@ export class DuplicateTagNameError extends Error {
   constructor(readonly tagName: string) {
     super(`Tag name is already reserved: ${tagName}`);
     this.name = "DuplicateTagNameError";
+  }
+}
+
+export class TicketProjectMoveBlockedError extends Error {
+  constructor(readonly ticketId: string) {
+    super("Ticket project cannot be changed while exchanges or comments are attached.");
+    this.name = "TicketProjectMoveBlockedError";
   }
 }
 
@@ -292,25 +299,36 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         });
       },
       async update(input) {
-        return updateById(leads, input.userId, input.id, (lead) => ({
-          ...lead,
-          ...input.fields,
-          updatedAt: input.now,
-          email: input.fields.email === undefined ? lead.email : input.fields.email,
-          phone: input.fields.phone === undefined ? lead.phone : input.fields.phone,
-          company: input.fields.company === undefined ? lead.company : input.fields.company,
-          website: input.fields.website === undefined ? lead.website : input.fields.website,
-          notes: input.fields.notes === undefined ? lead.notes : input.fields.notes,
-          source: input.fields.source === undefined ? lead.source : input.fields.source,
-          estimatedValueAmount: input.fields.estimatedValueAmount === undefined ? lead.estimatedValueAmount : input.fields.estimatedValueAmount,
-          estimatedValueCurrency: input.fields.estimatedValueCurrency === undefined ? lead.estimatedValueCurrency : input.fields.estimatedValueCurrency,
-        }));
+        return updateById(leads, input.userId, input.id, (lead) => {
+          if (lead.deletedAt) {
+            return undefined;
+          }
+          if (input.expectedStage !== undefined && lead.stage !== input.expectedStage) {
+            return undefined;
+          }
+          if (input.fields.stage !== undefined && input.fields.stage !== "won" && lead.convertedAt) {
+            return undefined;
+          }
+          return {
+            ...lead,
+            ...input.fields,
+            updatedAt: input.now,
+            email: input.fields.email === undefined ? lead.email : input.fields.email,
+            phone: input.fields.phone === undefined ? lead.phone : input.fields.phone,
+            company: input.fields.company === undefined ? lead.company : input.fields.company,
+            website: input.fields.website === undefined ? lead.website : input.fields.website,
+            notes: input.fields.notes === undefined ? lead.notes : input.fields.notes,
+            source: input.fields.source === undefined ? lead.source : input.fields.source,
+            estimatedValueAmount: input.fields.estimatedValueAmount === undefined ? lead.estimatedValueAmount : input.fields.estimatedValueAmount,
+            estimatedValueCurrency: input.fields.estimatedValueCurrency === undefined ? lead.estimatedValueCurrency : input.fields.estimatedValueCurrency,
+          };
+        });
       },
       async setDeletedAt(input) {
         return updateById(leads, input.userId, input.id, (lead) => ({ ...lead, deletedAt: input.deletedAt, updatedAt: input.now }));
       },
       async convert(input) {
-        const lead = leads.find((candidate) => candidate.userId === input.userId && candidate.id === input.leadId && !candidate.deletedAt && !candidate.convertedAt);
+        const lead = leads.find((candidate) => candidate.userId === input.userId && candidate.id === input.leadId && !candidate.deletedAt && !candidate.convertedAt && candidate.stage === "won");
         if (!lead) {
           return undefined;
         }
@@ -399,19 +417,27 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         if (input.fields.clientId !== undefined) {
           requireActiveClient(clients, input.userId, input.fields.clientId);
         }
-        return updateById(projects, input.userId, input.id, (project) => ({
-          ...project,
-          ...input.fields,
-          updatedAt: input.now,
-          description: input.fields.description === undefined ? project.description : input.fields.description,
-          budgetAmount: input.fields.budgetAmount === undefined ? project.budgetAmount : input.fields.budgetAmount,
-          budgetCurrency: input.fields.budgetCurrency === undefined ? project.budgetCurrency : input.fields.budgetCurrency,
-          estimatedHours: input.fields.estimatedHours === undefined ? project.estimatedHours : input.fields.estimatedHours,
-          actualHours: input.fields.actualHours === undefined ? project.actualHours : input.fields.actualHours,
-          startsAt: input.fields.startsAt === undefined ? project.startsAt : input.fields.startsAt,
-          dueAt: input.fields.dueAt === undefined ? project.dueAt : input.fields.dueAt,
-          completedAt: input.fields.completedAt === undefined ? project.completedAt : input.fields.completedAt,
-        }));
+        return updateById(projects, input.userId, input.id, (project) => {
+          if (project.deletedAt) {
+            return undefined;
+          }
+          if (input.expectedStatus !== undefined && project.status !== input.expectedStatus) {
+            return undefined;
+          }
+          return {
+            ...project,
+            ...input.fields,
+            updatedAt: input.now,
+            description: input.fields.description === undefined ? project.description : input.fields.description,
+            budgetAmount: input.fields.budgetAmount === undefined ? project.budgetAmount : input.fields.budgetAmount,
+            budgetCurrency: input.fields.budgetCurrency === undefined ? project.budgetCurrency : input.fields.budgetCurrency,
+            estimatedHours: input.fields.estimatedHours === undefined ? project.estimatedHours : input.fields.estimatedHours,
+            actualHours: input.fields.actualHours === undefined ? project.actualHours : input.fields.actualHours,
+            startsAt: input.fields.startsAt === undefined ? project.startsAt : input.fields.startsAt,
+            dueAt: input.fields.dueAt === undefined ? project.dueAt : input.fields.dueAt,
+            completedAt: input.fields.completedAt === undefined ? project.completedAt : input.fields.completedAt,
+          };
+        });
       },
       async setDeletedAt(input) {
         return updateById(projects, input.userId, input.id, (project) => ({ ...project, deletedAt: input.deletedAt, updatedAt: input.now }));
@@ -452,6 +478,9 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
           if (!input.includeDeleted && ticket.deletedAt) {
             return false;
           }
+          if (!input.includeInactiveParent && !hasActiveTicketProject(projects, clients, input.userId, ticket.projectId)) {
+            return false;
+          }
           if (input.projectId && ticket.projectId !== input.projectId) {
             return false;
           }
@@ -477,20 +506,32 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         });
       },
       async update(input) {
-        if (input.fields.projectId !== undefined) {
-          requireActiveProject(projects, clients, input.userId, input.fields.projectId);
-        }
-        return updateById(tickets, input.userId, input.id, (ticket) => ({
-          ...ticket,
-          ...input.fields,
-          updatedAt: input.now,
-          description: input.fields.description === undefined ? ticket.description : input.fields.description,
-          dueAt: input.fields.dueAt === undefined ? ticket.dueAt : input.fields.dueAt,
-          closedAt: input.fields.closedAt === undefined ? ticket.closedAt : input.fields.closedAt,
-        }));
+        return updateById(tickets, input.userId, input.id, (ticket) => {
+          if (ticket.deletedAt) {
+            return undefined;
+          }
+          const nextProjectId = input.fields.projectId ?? ticket.projectId;
+          requireActiveProject(projects, clients, input.userId, nextProjectId);
+          if (nextProjectId !== ticket.projectId && hasActiveTicketExchanges(exchanges, input.userId, ticket.id)) {
+            throw new TicketProjectMoveBlockedError(ticket.id);
+          }
+          return {
+            ...ticket,
+            ...input.fields,
+            updatedAt: input.now,
+            description: input.fields.description === undefined ? ticket.description : input.fields.description,
+            dueAt: input.fields.dueAt === undefined ? ticket.dueAt : input.fields.dueAt,
+            closedAt: input.fields.closedAt === undefined ? ticket.closedAt : input.fields.closedAt,
+          };
+        });
       },
       async setDeletedAt(input) {
-        return updateById(tickets, input.userId, input.id, (ticket) => ({ ...ticket, deletedAt: input.deletedAt, updatedAt: input.now }));
+        return updateById(tickets, input.userId, input.id, (ticket) => {
+          if (ticket.deletedAt || !hasActiveTicketProject(projects, clients, input.userId, ticket.projectId)) {
+            return undefined;
+          }
+          return { ...ticket, deletedAt: input.deletedAt, updatedAt: input.now };
+        });
       },
     },
     exchanges: {
@@ -807,7 +848,7 @@ function updateById<TRecord extends { readonly id: string; readonly userId: stri
   records: TRecord[],
   userId: string,
   id: string,
-  updater: (record: TRecord) => TRecord,
+  updater: (record: TRecord) => TRecord | undefined,
 ): TRecord | undefined {
   const index = records.findIndex((record) => record.userId === userId && record.id === id);
   const record = records[index];
@@ -815,6 +856,9 @@ function updateById<TRecord extends { readonly id: string; readonly userId: stri
     return undefined;
   }
   const updated = updater(record);
+  if (!updated) {
+    return undefined;
+  }
   records[index] = updated;
   return updated;
 }
@@ -845,6 +889,15 @@ function requireActiveProject(records: readonly ProjectRecord[], clientRecords: 
   }
   requireActiveClient(clientRecords, userId, project.clientId);
   return project;
+}
+
+function hasActiveTicketProject(records: readonly ProjectRecord[], clientRecords: readonly ClientRecord[], userId: string, projectId: string): boolean {
+  const project = records.find((candidate) => candidate.userId === userId && candidate.id === projectId && !candidate.deletedAt);
+  return Boolean(project && clientRecords.some((candidate) => candidate.userId === userId && candidate.id === project.clientId && !candidate.deletedAt));
+}
+
+function hasActiveTicketExchanges(records: readonly ExchangeRecord[], userId: string, ticketId: string): boolean {
+  return records.some((exchange) => exchange.userId === userId && exchange.ticketId === ticketId && !exchange.deletedAt);
 }
 
 function requireActiveTicket(records: readonly TicketRecord[], projectRecords: readonly ProjectRecord[], clientRecords: readonly ClientRecord[], userId: string, ticketId: string): TicketRecord {

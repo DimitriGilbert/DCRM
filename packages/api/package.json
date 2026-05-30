@@ -20,6 +20,7 @@
     "@DCRM/crypto": "workspace:*",
     "@DCRM/db": "workspace:*",
     "@DCRM/domain": "workspace:*",
+    "@DCRM/email": "workspace:*",
     "@DCRM/env": "workspace:*",
     "@DCRM/events": "workspace:*",
     "@DCRM/storage": "workspace:*",

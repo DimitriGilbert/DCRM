@@ -24,6 +24,7 @@ import { Route as ApiWebhookTokenRouteImport } from './routes/api/webhook/$token
 import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AuthenticatedSettingsIncomingWebhooksRouteImport } from './routes/_authenticated/settings/incoming-webhooks'
+import { Route as AuthenticatedSettingsEmailRouteImport } from './routes/_authenticated/settings/email'
 import { Route as AuthenticatedProjectsCreateRouteImport } from './routes/_authenticated/projects/create'
 import { Route as AuthenticatedProjectsProjectIdRouteImport } from './routes/_authenticated/projects/$projectId'
 import { Route as AuthenticatedLeadsCreateRouteImport } from './routes/_authenticated/leads/create'
@@ -116,6 +117,12 @@ const AuthenticatedSettingsIncomingWebhooksRoute =
   AuthenticatedSettingsIncomingWebhooksRouteImport.update({
     id: '/incoming-webhooks',
     path: '/incoming-webhooks',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
+const AuthenticatedSettingsEmailRoute =
+  AuthenticatedSettingsEmailRouteImport.update({
+    id: '/email',
+    path: '/email',
     getParentRoute: () => AuthenticatedSettingsRoute,
   } as any)
 const AuthenticatedProjectsCreateRoute =
@@ -215,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/leads/create': typeof AuthenticatedLeadsCreateRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/settings/email': typeof AuthenticatedSettingsEmailRoute
   '/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
@@ -245,6 +253,7 @@ export interface FileRoutesByTo {
   '/leads/create': typeof AuthenticatedLeadsCreateRoute
   '/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/settings/email': typeof AuthenticatedSettingsEmailRoute
   '/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
@@ -277,6 +286,7 @@ export interface FileRoutesById {
   '/_authenticated/leads/create': typeof AuthenticatedLeadsCreateRoute
   '/_authenticated/projects/$projectId': typeof AuthenticatedProjectsProjectIdRouteWithChildren
   '/_authenticated/projects/create': typeof AuthenticatedProjectsCreateRoute
+  '/_authenticated/settings/email': typeof AuthenticatedSettingsEmailRoute
   '/_authenticated/settings/incoming-webhooks': typeof AuthenticatedSettingsIncomingWebhooksRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | '/leads/create'
     | '/projects/$projectId'
     | '/projects/create'
+    | '/settings/email'
     | '/settings/incoming-webhooks'
     | '/api/auth/$'
     | '/api/trpc/$'
@@ -339,6 +350,7 @@ export interface FileRouteTypes {
     | '/leads/create'
     | '/projects/$projectId'
     | '/projects/create'
+    | '/settings/email'
     | '/settings/incoming-webhooks'
     | '/api/auth/$'
     | '/api/trpc/$'
@@ -370,6 +382,7 @@ export interface FileRouteTypes {
     | '/_authenticated/leads/create'
     | '/_authenticated/projects/$projectId'
     | '/_authenticated/projects/create'
+    | '/_authenticated/settings/email'
     | '/_authenticated/settings/incoming-webhooks'
     | '/api/auth/$'
     | '/api/trpc/$'
@@ -505,6 +518,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsIncomingWebhooksRouteImport
       parentRoute: typeof AuthenticatedSettingsRoute
     }
+    '/_authenticated/settings/email': {
+      id: '/_authenticated/settings/email'
+      path: '/email'
+      fullPath: '/settings/email'
+      preLoaderRoute: typeof AuthenticatedSettingsEmailRouteImport
+      parentRoute: typeof AuthenticatedSettingsRoute
+    }
     '/_authenticated/projects/create': {
       id: '/_authenticated/projects/create'
       path: '/projects/create'
@@ -607,10 +627,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedSettingsRouteChildren {
+  AuthenticatedSettingsEmailRoute: typeof AuthenticatedSettingsEmailRoute
   AuthenticatedSettingsIncomingWebhooksRoute: typeof AuthenticatedSettingsIncomingWebhooksRoute
 }
 
 const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
+  AuthenticatedSettingsEmailRoute: AuthenticatedSettingsEmailRoute,
   AuthenticatedSettingsIncomingWebhooksRoute:
     AuthenticatedSettingsIncomingWebhooksRoute,
 }

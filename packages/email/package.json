@@ -1,0 +1,27 @@
+{
+  "name": "@DCRM/email",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@DCRM/crypto": "workspace:*",
+    "bullmq": "^5.77.6",
+    "nodemailer": "^8.0.10"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "@types/nodemailer": "^8.0.0",
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  }
+}

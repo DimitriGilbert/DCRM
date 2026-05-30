@@ -44,3 +44,10 @@ export const timelineSchema = z.object({
 });
 
 export type TimelineInput = z.infer<typeof timelineSchema>;
+
+export const sendExchangeEmailSchema = z.object({
+  exchangeId: z.string().min(1),
+  emailAccountId: z.string().min(1),
+});
+
+export type SendExchangeEmailInput = z.infer<typeof sendExchangeEmailSchema>;

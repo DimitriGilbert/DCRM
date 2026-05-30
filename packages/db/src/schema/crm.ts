@@ -88,6 +88,8 @@ export const clients = pgTable(
     socialLinks: jsonb("social_links").$type<Record<string, string>>(),
     address: jsonb("address").$type<Record<string, string>>(),
     customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
+    /** Authorized email patterns for incoming email matching. Each entry is an exact email or `*@domain.com` wildcard. */
+    authorizedAddresses: jsonb("authorized_addresses").$type<string[]>().default([]),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

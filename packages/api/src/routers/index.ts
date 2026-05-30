@@ -17,6 +17,7 @@ import { settingsRouter } from "./settings";
 import { tagRouter } from "./tag";
 import { ticketRouter } from "./ticket";
 import { incomingWebhookRouter } from "./incoming-webhook";
+import { emailAccountRouter } from "./email-account";
 import { webhookRouter } from "./webhook";
 
 export const appRouter = router({
@@ -47,5 +48,6 @@ export const appRouter = router({
   settings: settingsRouter,
   webhook: webhookRouter,
   incomingWebhook: incomingWebhookRouter,
+  emailAccount: emailAccountRouter,
 });
 export type AppRouter = typeof appRouter;

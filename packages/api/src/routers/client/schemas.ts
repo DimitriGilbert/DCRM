@@ -39,6 +39,9 @@ export const listClientsSchema = z.object({
   limit: z.number().int().min(1).max(100).default(50),
   cursor: z.string().optional(),
   includeDeleted: z.boolean().default(false),
+  tagIds: z.array(z.string().min(1)).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
 });
 
 export type ListClientsInput = z.infer<typeof listClientsSchema>;

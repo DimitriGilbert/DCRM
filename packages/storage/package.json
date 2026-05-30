@@ -1,0 +1,26 @@
+{
+  "name": "@DCRM/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@DCRM/env": "workspace:*"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "@types/node": "^22.13.14",
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  }
+}

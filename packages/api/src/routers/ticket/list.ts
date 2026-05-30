@@ -1,6 +1,6 @@
 import { db } from "@DCRM/db";
-import { tickets } from "@DCRM/db/schema/crm";
-import { eq, and, isNull, lt, desc } from "drizzle-orm";
+import { tickets, entityTags } from "@DCRM/db/schema/crm";
+import { eq, and, isNull, lt, desc, gte, lte, inArray } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { listTicketsSchema } from "./schemas";
@@ -32,6 +32,31 @@ export const listTickets = protectedProcedure
 
     if (input.cursor) {
       conditions.push(lt(tickets.createdAt, new Date(input.cursor)));
+    }
+
+    if (input.dateFrom) {
+      conditions.push(gte(tickets.createdAt, new Date(input.dateFrom)));
+    }
+
+    if (input.dateTo) {
+      conditions.push(lte(tickets.createdAt, new Date(input.dateTo)));
+    }
+
+    if (input.tagIds && input.tagIds.length > 0) {
+      const taggedIds = await db
+        .select({ entityId: entityTags.entityId })
+        .from(entityTags)
+        .where(
+          and(
+            eq(entityTags.entityType, "ticket"),
+            inArray(entityTags.tagId, input.tagIds),
+          ),
+        );
+      const idSet = [...new Set(taggedIds.map((r) => r.entityId))];
+      if (idSet.length === 0) {
+        return { items: [], nextCursor: undefined };
+      }
+      conditions.push(inArray(tickets.id, idSet));
     }
 
     const rows = await db

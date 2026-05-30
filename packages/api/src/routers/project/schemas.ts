@@ -47,6 +47,9 @@ export const listProjectsSchema = z.object({
   includeDeleted: z.boolean().default(false),
   clientId: z.string().optional(),
   status: projectStatusSchema.optional(),
+  tagIds: z.array(z.string().min(1)).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
 });
 
 export type ListProjectsInput = z.infer<typeof listProjectsSchema>;

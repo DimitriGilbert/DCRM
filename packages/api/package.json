@@ -20,6 +20,7 @@
     "@DCRM/domain": "workspace:*",
     "@DCRM/env": "workspace:*",
     "@DCRM/events": "workspace:*",
+    "@DCRM/storage": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "drizzle-orm": "^0.45.1",

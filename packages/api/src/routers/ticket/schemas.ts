@@ -45,6 +45,9 @@ export const listTicketsSchema = z.object({
   status: ticketStatusSchema.optional(),
   type: ticketTypeSchema.optional(),
   priority: ticketPrioritySchema.optional(),
+  tagIds: z.array(z.string().min(1)).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
 });
 
 export type ListTicketsInput = z.infer<typeof listTicketsSchema>;

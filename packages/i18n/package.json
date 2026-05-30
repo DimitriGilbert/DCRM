@@ -1,0 +1,21 @@
+{
+  "name": "@DCRM/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "^3.2.1"
+  }
+}

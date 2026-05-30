@@ -1,6 +1,6 @@
 import { db } from "@DCRM/db";
 import { exchanges } from "@DCRM/db/schema/crm";
-import { eq, and, lt, desc } from "drizzle-orm";
+import { eq, and, lt, desc, gte, lte } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { listExchangesSchema } from "./schemas";
@@ -28,6 +28,14 @@ export const listExchanges = protectedProcedure
 
     if (input.cursor) {
       conditions.push(lt(exchanges.createdAt, new Date(input.cursor)));
+    }
+
+    if (input.dateFrom) {
+      conditions.push(gte(exchanges.createdAt, new Date(input.dateFrom)));
+    }
+
+    if (input.dateTo) {
+      conditions.push(lte(exchanges.createdAt, new Date(input.dateTo)));
     }
 
     const rows = await db

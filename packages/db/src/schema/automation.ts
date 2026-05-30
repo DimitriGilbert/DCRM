@@ -33,7 +33,7 @@ function pgEnumValues<T extends string>(values: readonly T[]): [T, ...T[]] {
 
 // --- Event changes shape stored in JSONB ---
 
-interface EventChanges {
+export interface EventChanges {
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;
 }

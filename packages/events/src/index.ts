@@ -4,7 +4,7 @@ export type JsonObject = Record<string, unknown>;
 
 /** Entity reference stored with an event when a meaningful action targets one record. */
 export type EventEntityReference = {
-  readonly type: CrmEntityType;
+  readonly type: CrmEntityType | "import" | "webhook";
   readonly id: string;
 };
 

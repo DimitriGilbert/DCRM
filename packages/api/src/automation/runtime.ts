@@ -2,10 +2,11 @@ import { createBullMqHookExecutionQueue, createHookAwareEventService, createHook
 
 import { createStructuredAiHookExecutor } from "./ai-hook-executor.js";
 import { createRepositoryAiHookModelRunner } from "./model-runner.js";
+import { createOutgoingWebhookExecutor } from "./outgoing-webhook-executor.js";
 
 import type { SecretCrypto } from "@DCRM/crypto";
 import type { EventService } from "@DCRM/events";
-import type { HookExecutionQueue, HookExecutionRepository } from "@DCRM/events/hooks";
+import type { HookExecutionContext, HookExecutionQueue, HookExecutionRepository, HookExecutor } from "@DCRM/events/hooks";
 
 import type { AutomationRepository } from "./repository.js";
 import type { CrmRepository } from "../crm/repository.js";
@@ -66,16 +67,33 @@ export function createProductionAiHookProcessor({
     eventService,
     hookRepository: automationRepository.hooks,
     executionRepository,
-    executor: createStructuredAiHookExecutor({
-      automationRepository,
-      crmRepository,
-      eventService,
-      runner: createRepositoryAiHookModelRunner({ automationRepository, secretCrypto }),
-      ...(clock ? { clock } : {}),
-      ...(idGenerator ? { idGenerator } : {}),
-    }),
+    executor: createCompositeHookExecutor([
+      createStructuredAiHookExecutor({
+        automationRepository,
+        crmRepository,
+        eventService,
+        runner: createRepositoryAiHookModelRunner({ automationRepository, secretCrypto }),
+        ...(clock ? { clock } : {}),
+        ...(idGenerator ? { idGenerator } : {}),
+      }),
+      createOutgoingWebhookExecutor({ secretCrypto }),
+    ]),
     ...(clock ? { clock } : {}),
   });
+}
+
+function createCompositeHookExecutor(executors: readonly HookExecutor[]): HookExecutor {
+  return {
+    async execute(context: HookExecutionContext) {
+      for (const executor of executors) {
+        const output = await executor.execute(context);
+        if (output?.skipped !== true) {
+          return output;
+        }
+      }
+      return { skipped: true, reason: "unsupported_hook_type" };
+    },
+  };
 }
 
 export function createProductionHookExecutionQueue(redisUrl: string): ProductionHookExecutionQueue {

@@ -1,8 +1,10 @@
 import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
-import type { AiHookTemplate, AiProviderType, DownstreamEventBehavior, HookExecutionStatus, HookWriteBehavior } from "@DCRM/domain";
+import type { AiHookTemplate, AiProviderType, DownstreamEventBehavior, HookExecutionStatus, HookWriteBehavior, WebhookAuthType, WebhookMode } from "@DCRM/domain";
 import { isCoreEventType } from "@DCRM/events";
-
 import type { CoreEventType } from "@DCRM/events";
+import type { HookSubscription } from "@DCRM/events/hooks";
+
+import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -36,9 +38,11 @@ export type AutomationRepository = {
   };
   readonly hooks: {
     readonly createAiHook: (input: CreateAiHookInput) => Promise<AiHookConfigRecord>;
+    readonly createOutgoingWebhookHook: (input: CreateOutgoingWebhookHookInput) => Promise<OutgoingWebhookHookSafeRecord>;
     readonly listAiHooks: (input: { readonly userId: string }) => Promise<readonly AiHookConfigRecord[]>;
-    readonly listEnabledForEvent: (input: { readonly userId: string; readonly eventType: CoreEventType }) => Promise<readonly AiHookConfigRecord[]>;
-    readonly getById: (hookId: string) => Promise<AiHookConfigRecord | undefined>;
+    readonly listOutgoingWebhookHooks: (input: { readonly userId: string }) => Promise<readonly OutgoingWebhookHookSafeRecord[]>;
+    readonly listEnabledForEvent: (input: { readonly userId: string; readonly eventType: CoreEventType }) => Promise<readonly HookSubscription[]>;
+    readonly getById: (hookId: string) => Promise<HookSubscription | undefined>;
   };
   readonly aiInsights: {
     readonly create: (input: CreateAiInsightInput) => Promise<AiInsightRecord>;
@@ -47,6 +51,13 @@ export type AutomationRepository = {
   readonly aiMessages: {
     readonly create: (input: CreateAiMessageInput) => Promise<AiMessageRecord>;
     readonly listConversation: (input: { readonly userId: string; readonly conversationId: string; readonly limit?: number }) => Promise<readonly AiMessageRecord[]>;
+  };
+  readonly incomingWebhooks: {
+    readonly create: (input: CreateIncomingWebhookInput) => Promise<IncomingWebhookSafeRecord>;
+    readonly listSafe: (input: { readonly userId: string }) => Promise<readonly IncomingWebhookSafeRecord[]>;
+    readonly getBySlug: (slug: string) => Promise<IncomingWebhookStoredRecord | null>;
+    readonly updateMode: (input: { readonly userId: string; readonly id: string; readonly mode: WebhookMode; readonly now: Date }) => Promise<IncomingWebhookSafeRecord>;
+    readonly recordTestPayload: (input: { readonly id: string; readonly payload: JsonObject; readonly now: Date }) => Promise<void>;
   };
 };
 
@@ -80,6 +91,68 @@ export type CreateAiHookInput = {
   readonly fieldMappings: readonly JsonObject[];
   readonly writeBehavior: HookWriteBehavior;
   readonly downstreamEventBehavior: DownstreamEventBehavior;
+  readonly now: Date;
+};
+
+export type OutgoingWebhookHookSafeRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly eventType: CoreEventType;
+  readonly type: "outgoing_webhook";
+  readonly enabled: boolean;
+  readonly url: string;
+  readonly authType: WebhookAuthType;
+  readonly customHeaderNames: readonly string[];
+  readonly retryPolicy: JsonObject | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+export type CreateOutgoingWebhookHookInput = {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly eventType: CoreEventType;
+  readonly enabled: boolean;
+  readonly url: string;
+  readonly auth: JsonObject;
+  readonly headers: JsonObject;
+  readonly retryPolicy: JsonObject;
+  readonly now: Date;
+};
+
+export type IncomingWebhookMappingConfig = JsonObject;
+
+export type IncomingWebhookSafeRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly enabled: boolean;
+  readonly mode: WebhookMode;
+  readonly targetEventType: CoreEventType;
+  readonly mappingConfig: IncomingWebhookMappingConfig;
+  readonly hasToken: boolean;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+export type IncomingWebhookStoredRecord = IncomingWebhookSafeRecord & {
+  readonly tokenHash: string | null;
+  readonly lastTestPayload: JsonObject | null;
+};
+
+export type CreateIncomingWebhookInput = {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly enabled: boolean;
+  readonly mode: WebhookMode;
+  readonly tokenHash: string | null;
+  readonly mappingConfig: IncomingWebhookMappingConfig;
+  readonly targetEventType: CoreEventType;
   readonly now: Date;
 };
 
@@ -157,9 +230,10 @@ export type UpsertAiProviderEncryptedInput = {
 export function createInMemoryAutomationRepository(records: readonly HookExecutionStatusRecord[] = []) {
   const hookExecutionRecords = [...records];
   const aiProviderRecords: AiProviderEncryptedRecord[] = [];
-  const hookRecords: AiHookConfigRecord[] = [];
+  const hookRecords: HookSubscription[] = [];
   const insightRecords: AiInsightRecord[] = [];
   const messageRecords: AiMessageRecord[] = [];
+  const incomingWebhookRecords: IncomingWebhookStoredRecord[] = [];
   return {
     aiProviders: {
       async listSafe(input) {
@@ -229,8 +303,16 @@ export function createInMemoryAutomationRepository(records: readonly HookExecuti
         hookRecords.push(record);
         return record;
       },
+      async createOutgoingWebhookHook(input) {
+        const record = createOutgoingWebhookHookRecord(input);
+        hookRecords.push(record);
+        return toSafeOutgoingWebhookHook(record);
+      },
       async listAiHooks(input) {
-        return hookRecords.filter((record) => record.userId === input.userId);
+        return hookRecords.filter((record): record is AiHookConfigRecord => record.userId === input.userId && record.type === "ai");
+      },
+      async listOutgoingWebhookHooks(input) {
+        return hookRecords.filter((record) => record.userId === input.userId && record.type === "outgoing_webhook").map(toSafeOutgoingWebhookHook);
       },
       async listEnabledForEvent(input) {
         return hookRecords.filter((record) => record.userId === input.userId && record.eventType === input.eventType && record.enabled);
@@ -266,7 +348,51 @@ export function createInMemoryAutomationRepository(records: readonly HookExecuti
           .slice(-(input.limit ?? 40));
       },
     },
+    incomingWebhooks: {
+      async create(input) {
+        const record: IncomingWebhookStoredRecord = { ...input, hasToken: input.tokenHash !== null, lastTestPayload: null, createdAt: input.now, updatedAt: input.now };
+        incomingWebhookRecords.push(record);
+        return toSafeIncomingWebhook(record);
+      },
+      async listSafe(input) {
+        return incomingWebhookRecords.filter((record) => record.userId === input.userId).map(toSafeIncomingWebhook);
+      },
+      async getBySlug(slug) {
+        return incomingWebhookRecords.find((record) => record.slug === slug) ?? null;
+      },
+      async updateMode(input) {
+        const record = incomingWebhookRecords.find((candidate) => candidate.id === input.id && candidate.userId === input.userId);
+        if (!record) {
+          throw new Error("Incoming webhook was not found.");
+        }
+        const updated: IncomingWebhookStoredRecord = { ...record, mode: input.mode, updatedAt: input.now };
+        incomingWebhookRecords[incomingWebhookRecords.indexOf(record)] = updated;
+        return toSafeIncomingWebhook(updated);
+      },
+      async recordTestPayload(input) {
+        const record = incomingWebhookRecords.find((candidate) => candidate.id === input.id);
+        if (record) {
+          incomingWebhookRecords[incomingWebhookRecords.indexOf(record)] = { ...record, lastTestPayload: input.payload, updatedAt: input.now };
+        }
+      },
+    },
   } satisfies AutomationRepository;
+}
+
+function toSafeIncomingWebhook(record: IncomingWebhookStoredRecord): IncomingWebhookSafeRecord {
+  return {
+    id: record.id,
+    userId: record.userId,
+    name: record.name,
+    slug: record.slug,
+    enabled: record.enabled,
+    mode: record.mode,
+    targetEventType: record.targetEventType,
+    mappingConfig: record.mappingConfig,
+    hasToken: record.tokenHash !== null,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
 }
 
 function createAiHookRecord(input: CreateAiHookInput): AiHookConfigRecord {
@@ -298,6 +424,59 @@ function createAiHookRecord(input: CreateAiHookInput): AiHookConfigRecord {
   };
 }
 
+function createOutgoingWebhookHookRecord(input: CreateOutgoingWebhookHookInput): HookSubscription & { readonly createdAt: Date; readonly updatedAt: Date } {
+  return {
+    id: input.id,
+    userId: input.userId,
+    name: input.name,
+    eventType: input.eventType,
+    type: "outgoing_webhook",
+    enabled: input.enabled,
+    config: {
+      url: input.url,
+      auth: input.auth,
+      headers: input.headers,
+      retryPolicy: input.retryPolicy,
+    },
+    createdAt: input.now,
+    updatedAt: input.now,
+  };
+}
+
+function toSafeOutgoingWebhookHook(record: HookSubscription): OutgoingWebhookHookSafeRecord {
+  const auth = isJsonObject(record.config.auth) ? record.config.auth : { type: "none" };
+  const authType = isWebhookAuthType(auth.type) ? auth.type : "none";
+  const customHeaderNames = authType === "custom_headers" && Array.isArray(auth.headers)
+    ? auth.headers.map((header) => (isJsonObject(header) && typeof header.name === "string" ? header.name : "")).filter((name) => name.length > 0)
+    : [];
+  return {
+    id: record.id,
+    userId: record.userId,
+    name: record.name,
+    eventType: record.eventType,
+    type: "outgoing_webhook",
+    enabled: record.enabled,
+    url: safeOutgoingWebhookListUrl(record.config.url),
+    authType,
+    customHeaderNames,
+    retryPolicy: isJsonObject(record.config.retryPolicy) ? record.config.retryPolicy : null,
+    createdAt: hasDateTimestamps(record) ? record.createdAt : new Date(0),
+    updatedAt: hasDateTimestamps(record) ? record.updatedAt : new Date(0),
+  };
+}
+
+function safeOutgoingWebhookListUrl(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  try {
+    parseSafeOutgoingWebhookUrl(value);
+    return value;
+  } catch {
+    return "";
+  }
+}
+
 function toSafeAiProvider(record: AiProviderEncryptedRecord): AiProviderSafeRecord {
   return {
     id: record.id,
@@ -311,4 +490,16 @@ function toSafeAiProvider(record: AiProviderEncryptedRecord): AiProviderSafeReco
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isWebhookAuthType(value: unknown): value is WebhookAuthType {
+  return value === "none" || value === "bearer" || value === "basic" || value === "hmac" || value === "custom_headers";
+}
+
+function hasDateTimestamps(record: HookSubscription): record is HookSubscription & { readonly createdAt: Date; readonly updatedAt: Date } {
+  return "createdAt" in record && record.createdAt instanceof Date && "updatedAt" in record && record.updatedAt instanceof Date;
 }

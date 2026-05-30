@@ -1,9 +1,11 @@
 import { createDb } from "@DCRM/db";
-import { aiInsights, aiMessages, aiProviders, events, hookExecutions, hooks } from "@DCRM/db/schema/automation-integrations";
+import { aiInsights, aiMessages, aiProviders, events, hookExecutions, hooks, incomingWebhooks } from "@DCRM/db/schema/automation-integrations";
 import { isCoreEventType } from "@DCRM/events";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
-import type { AiHookConfigRecord, AiInsightRecord, AiMessageRecord, AiProviderEncryptedRecord, AiProviderSafeRecord, AutomationRepository, HookExecutionStatusRecord } from "./repository.js";
+import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
+
+import type { AiHookConfigRecord, AiInsightRecord, AiMessageRecord, AiProviderEncryptedRecord, AiProviderSafeRecord, AutomationRepository, HookExecutionStatusRecord, IncomingWebhookSafeRecord, IncomingWebhookStoredRecord, OutgoingWebhookHookSafeRecord } from "./repository.js";
 
 type AutomationDatabase = ReturnType<typeof createDb>;
 
@@ -215,6 +217,37 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
           updatedAt: row.updatedAt,
         } satisfies AiHookConfigRecord;
       },
+      async createOutgoingWebhookHook(input) {
+        const config = {
+          url: input.url,
+          auth: input.auth,
+          headers: input.headers,
+          retryPolicy: input.retryPolicy,
+        };
+        const rows = await database
+          .insert(hooks)
+          .values({
+            id: input.id,
+            userId: input.userId,
+            name: input.name,
+            eventType: input.eventType,
+            type: "outgoing_webhook",
+            enabled: input.enabled,
+            config,
+            outputSchema: {},
+            fieldMapping: {},
+            writeBehavior: "propose",
+            downstreamEventBehavior: "suppress",
+            createdAt: input.now,
+            updatedAt: input.now,
+          })
+          .returning();
+        const row = rows[0];
+        if (!row) {
+          throw new Error("Outgoing webhook hook was not saved.");
+        }
+        return toSafeOutgoingWebhookHook(row);
+      },
       async listAiHooks(input) {
         const rows = await database
           .select()
@@ -237,30 +270,32 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
           updatedAt: row.updatedAt,
         }));
       },
+      async listOutgoingWebhookHooks(input) {
+        const rows = await database
+          .select()
+          .from(hooks)
+          .where(and(eq(hooks.userId, input.userId), eq(hooks.type, "outgoing_webhook"), isNull(hooks.deletedAt)))
+          .orderBy(desc(hooks.createdAt));
+        return rows.map(toSafeOutgoingWebhookHook);
+      },
       async listEnabledForEvent(input) {
         const rows = await database
           .select()
           .from(hooks)
-          .where(and(eq(hooks.userId, input.userId), eq(hooks.eventType, input.eventType), eq(hooks.type, "ai"), eq(hooks.enabled, true), isNull(hooks.deletedAt)))
+          .where(and(eq(hooks.userId, input.userId), eq(hooks.eventType, input.eventType), eq(hooks.enabled, true), isNull(hooks.deletedAt)))
           .orderBy(desc(hooks.createdAt));
-        return rows.map((row): AiHookConfigRecord => ({
+        return rows.map((row) => ({
           id: row.id,
           userId: row.userId,
           name: row.name,
           eventType: requireCoreEventType(row.eventType),
-          type: "ai",
+          type: row.type,
           enabled: row.enabled,
           config: row.config,
-          outputSchema: row.outputSchema,
-          fieldMapping: row.fieldMapping,
-          writeBehavior: row.writeBehavior,
-          downstreamEventBehavior: row.downstreamEventBehavior,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
         }));
       },
       async getById(hookId) {
-        const rows = await database.select().from(hooks).where(and(eq(hooks.id, hookId), eq(hooks.type, "ai"), isNull(hooks.deletedAt))).limit(1);
+        const rows = await database.select().from(hooks).where(and(eq(hooks.id, hookId), isNull(hooks.deletedAt))).limit(1);
         const row = rows[0];
         return row
           ? {
@@ -268,15 +303,9 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
               userId: row.userId,
               name: row.name,
               eventType: requireCoreEventType(row.eventType),
-              type: "ai",
+              type: row.type,
               enabled: row.enabled,
               config: row.config,
-              outputSchema: row.outputSchema,
-              fieldMapping: row.fieldMapping,
-              writeBehavior: row.writeBehavior,
-              downstreamEventBehavior: row.downstreamEventBehavior,
-              createdAt: row.createdAt,
-              updatedAt: row.updatedAt,
             }
           : undefined;
       },
@@ -398,6 +427,51 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
           .toReversed();
       },
     },
+    incomingWebhooks: {
+      async create(input) {
+        const rows = await database
+          .insert(incomingWebhooks)
+          .values({
+            id: input.id,
+            userId: input.userId,
+            name: input.name,
+            slug: input.slug,
+            enabled: input.enabled,
+            mode: input.mode,
+            tokenHash: input.tokenHash,
+            mappingConfig: input.mappingConfig,
+            targetEventType: input.targetEventType,
+            createdAt: input.now,
+            updatedAt: input.now,
+          })
+          .returning();
+        const row = rows[0];
+        if (!row) {
+          throw new Error("Incoming webhook was not saved.");
+        }
+        return toSafeIncomingWebhook({ ...row, targetEventType: requireCoreEventType(row.targetEventType) });
+      },
+      async listSafe(input) {
+        const rows = await database.select().from(incomingWebhooks).where(and(eq(incomingWebhooks.userId, input.userId), isNull(incomingWebhooks.deletedAt))).orderBy(desc(incomingWebhooks.createdAt));
+        return rows.map((row) => toSafeIncomingWebhook({ ...row, targetEventType: requireCoreEventType(row.targetEventType) }));
+      },
+      async getBySlug(slug) {
+        const rows = await database.select().from(incomingWebhooks).where(and(eq(incomingWebhooks.slug, slug), isNull(incomingWebhooks.deletedAt))).limit(1);
+        const row = rows[0];
+        return row ? { ...toSafeIncomingWebhook({ ...row, targetEventType: requireCoreEventType(row.targetEventType) }), tokenHash: row.tokenHash, lastTestPayload: row.lastTestPayload } : null;
+      },
+      async updateMode(input) {
+        const rows = await database.update(incomingWebhooks).set({ mode: input.mode, updatedAt: input.now }).where(and(eq(incomingWebhooks.id, input.id), eq(incomingWebhooks.userId, input.userId), isNull(incomingWebhooks.deletedAt))).returning();
+        const row = rows[0];
+        if (!row) {
+          throw new Error("Incoming webhook was not found.");
+        }
+        return toSafeIncomingWebhook({ ...row, targetEventType: requireCoreEventType(row.targetEventType) });
+      },
+      async recordTestPayload(input) {
+        await database.update(incomingWebhooks).set({ lastTestPayload: input.payload, updatedAt: input.now }).where(eq(incomingWebhooks.id, input.id));
+      },
+    },
   };
 }
 
@@ -406,6 +480,64 @@ function requireCoreEventType(value: string) {
     throw new Error(`Unsupported hook event type stored in automation repository: ${value}`);
   }
   return value;
+}
+
+function toSafeIncomingWebhook(row: Omit<IncomingWebhookStoredRecord, "hasToken">): IncomingWebhookSafeRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    name: row.name,
+    slug: row.slug,
+    enabled: row.enabled,
+    mode: row.mode,
+    targetEventType: row.targetEventType,
+    mappingConfig: row.mappingConfig,
+    hasToken: row.tokenHash !== null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toSafeOutgoingWebhookHook(row: { readonly id: string; readonly userId: string; readonly name: string; readonly eventType: string; readonly enabled: boolean; readonly config: Record<string, unknown>; readonly createdAt: Date; readonly updatedAt: Date }): OutgoingWebhookHookSafeRecord {
+  const auth = isJsonObject(row.config.auth) ? row.config.auth : { type: "none" };
+  const authType = isWebhookAuthType(auth.type) ? auth.type : "none";
+  const customHeaderNames = authType === "custom_headers" && Array.isArray(auth.headers)
+    ? auth.headers.map((header) => (isJsonObject(header) && typeof header.name === "string" ? header.name : "")).filter((name) => name.length > 0)
+    : [];
+  return {
+    id: row.id,
+    userId: row.userId,
+    name: row.name,
+    eventType: requireCoreEventType(row.eventType),
+    type: "outgoing_webhook",
+    enabled: row.enabled,
+    url: safeOutgoingWebhookListUrl(row.config.url),
+    authType,
+    customHeaderNames,
+    retryPolicy: isJsonObject(row.config.retryPolicy) ? row.config.retryPolicy : null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function safeOutgoingWebhookListUrl(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  try {
+    parseSafeOutgoingWebhookUrl(value);
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+function isWebhookAuthType(value: unknown): value is OutgoingWebhookHookSafeRecord["authType"] {
+  return value === "none" || value === "bearer" || value === "basic" || value === "hmac" || value === "custom_headers";
 }
 
 function requireAiMessageRole(value: string) {

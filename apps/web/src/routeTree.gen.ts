@@ -37,6 +37,7 @@ import { Route as LeadsLeadIdEditRouteImport } from './routes/leads.$leadId.edit
 import { Route as LeadsLeadIdConvertRouteImport } from './routes/leads.$leadId.convert'
 import { Route as ClientsClientIdEditRouteImport } from './routes/clients.$clientId.edit'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
+import { Route as ApiIncomingWebhooksSlugRouteImport } from './routes/api/incoming-webhooks.$slug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const TicketsRoute = TicketsRouteImport.update({
@@ -179,6 +180,11 @@ const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   path: '/api/trpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiIncomingWebhooksSlugRoute = ApiIncomingWebhooksSlugRouteImport.update({
+  id: '/api/incoming-webhooks/$slug',
+  path: '/api/incoming-webhooks/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -209,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/incoming-webhooks/$slug': typeof ApiIncomingWebhooksSlugRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/clients/$clientId/edit': typeof ClientsClientIdEditRoute
   '/leads/$leadId/convert': typeof LeadsLeadIdConvertRoute
@@ -240,6 +247,7 @@ export interface FileRoutesByTo {
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/incoming-webhooks/$slug': typeof ApiIncomingWebhooksSlugRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/clients/$clientId/edit': typeof ClientsClientIdEditRoute
   '/leads/$leadId/convert': typeof LeadsLeadIdConvertRoute
@@ -272,6 +280,7 @@ export interface FileRoutesById {
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/incoming-webhooks/$slug': typeof ApiIncomingWebhooksSlugRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/clients/$clientId/edit': typeof ClientsClientIdEditRoute
   '/leads/$leadId/convert': typeof LeadsLeadIdConvertRoute
@@ -305,6 +314,7 @@ export interface FileRouteTypes {
     | '/tickets/kanban'
     | '/tickets/new'
     | '/api/auth/$'
+    | '/api/incoming-webhooks/$slug'
     | '/api/trpc/$'
     | '/clients/$clientId/edit'
     | '/leads/$leadId/convert'
@@ -336,6 +346,7 @@ export interface FileRouteTypes {
     | '/tickets/kanban'
     | '/tickets/new'
     | '/api/auth/$'
+    | '/api/incoming-webhooks/$slug'
     | '/api/trpc/$'
     | '/clients/$clientId/edit'
     | '/leads/$leadId/convert'
@@ -367,6 +378,7 @@ export interface FileRouteTypes {
     | '/tickets/kanban'
     | '/tickets/new'
     | '/api/auth/$'
+    | '/api/incoming-webhooks/$slug'
     | '/api/trpc/$'
     | '/clients/$clientId/edit'
     | '/leads/$leadId/convert'
@@ -389,6 +401,7 @@ export interface RootRouteChildren {
   OnboardingLanguageRoute: typeof OnboardingLanguageRoute
   SettingsAiRoute: typeof SettingsAiRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiIncomingWebhooksSlugRoute: typeof ApiIncomingWebhooksSlugRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
@@ -590,6 +603,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/incoming-webhooks/$slug': {
+      id: '/api/incoming-webhooks/$slug'
+      path: '/api/incoming-webhooks/$slug'
+      fullPath: '/api/incoming-webhooks/$slug'
+      preLoaderRoute: typeof ApiIncomingWebhooksSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -719,6 +739,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingLanguageRoute: OnboardingLanguageRoute,
   SettingsAiRoute: SettingsAiRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiIncomingWebhooksSlugRoute: ApiIncomingWebhooksSlugRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport

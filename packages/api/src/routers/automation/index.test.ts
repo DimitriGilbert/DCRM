@@ -64,6 +64,93 @@ describe("automation tRPC API", () => {
     assert.deepEqual(notifications, []);
   });
 
+  it("stores outgoing webhook auth secrets encrypted and returns only safe hook metadata", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const secretCrypto = createTaggingSecretCrypto();
+    const caller = appRouter.createCaller(createTestContext("user_1", automationRepository, secretCrypto));
+
+    const saved = await caller.automation.createOutgoingWebhookHook({
+      name: "Notify billing",
+      eventType: "client.created",
+      enabled: true,
+      url: "https://example.test/hooks/dcrm",
+      auth: { type: "bearer", token: "plain-token" },
+      headers: {},
+      retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
+    });
+    const listed = await caller.automation.listOutgoingWebhookHooks();
+    const stored = await automationRepository.hooks.getById(saved.id);
+
+    assert.equal(saved.authType, "bearer");
+    assert.deepEqual(listed.map((hook) => hook.id), [saved.id]);
+    assert.equal(JSON.stringify(saved).includes("plain-token"), false);
+    assert.equal(JSON.stringify(listed).includes("plain-token"), false);
+    assert.equal(JSON.stringify(stored).includes("plain-token"), false);
+    assert.equal(JSON.stringify(stored).includes(Buffer.from("plain-token", "utf8").toString("base64")), true);
+    assert.equal(stored?.type, "outgoing_webhook");
+  });
+
+  it("rejects outgoing webhook URLs with embedded credentials and keeps them out of safe listings", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const caller = appRouter.createCaller(createTestContext("user_1", automationRepository, createTaggingSecretCrypto()));
+
+    await assert.rejects(
+      () => caller.automation.createOutgoingWebhookHook({
+        name: "Credential URL",
+        eventType: "client.created",
+        enabled: true,
+        url: "https://user:password@example.test/hooks/dcrm",
+        auth: { type: "none" },
+        headers: {},
+        retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
+      }),
+      /embedded credentials/,
+    );
+
+    const listed = await caller.automation.listOutgoingWebhookHooks();
+    assert.deepEqual(listed, []);
+    assert.equal(JSON.stringify(listed).includes("password"), false);
+
+    await automationRepository.hooks.createOutgoingWebhookHook({
+      id: "hook_poisoned",
+      userId: "user_1",
+      name: "Poisoned URL",
+      eventType: "client.created",
+      enabled: true,
+      url: "https://user:password@example.test/hooks/dcrm",
+      auth: { type: "none" },
+      headers: {},
+      retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
+      now: new Date("2026-05-30T12:00:00.000Z"),
+    });
+
+    const listedAfterStoredCredentialUrl = await caller.automation.listOutgoingWebhookHooks();
+    assert.equal(listedAfterStoredCredentialUrl[0]?.url, "");
+    assert.equal(JSON.stringify(listedAfterStoredCredentialUrl).includes("password"), false);
+  });
+
+  it("creates incoming webhook mappings in test mode and lists only safe token metadata", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const caller = appRouter.createCaller(createTestContext("user_1", automationRepository));
+
+    const saved = await caller.automation.createIncomingWebhook({
+      name: "Intake form",
+      slug: "intake-form",
+      token: "external-secret-token",
+      targetEventType: "webhook.webhook_received",
+      mappingConfig: { mappings: [{ sourcePath: "$.email", targetPath: "contact.email" }] },
+    });
+    const listed = await caller.automation.listIncomingWebhooks();
+    const preview = await caller.automation.previewIncomingWebhookMapping({ mappingConfig: saved.mappingConfig, payload: { email: "client@example.test" } });
+
+    assert.equal(saved.mode, "test");
+    assert.equal(saved.token, "external-secret-token");
+    assert.equal(listed[0]?.mode, "test");
+    assert.equal(listed[0]?.hasToken, true);
+    assert.equal(JSON.stringify(listed).includes("external-secret-token"), false);
+    assert.deepEqual(preview, { contact: { email: "client@example.test" } });
+  });
+
   it("executes matching stored AI hooks from event context and stores validated insights", async () => {
     const automationRepository = createInMemoryAutomationRepository();
     const crmRepository = createInMemoryCrmRepository();
@@ -254,12 +341,13 @@ describe("automation tRPC API", () => {
   });
 });
 
-function createTestContext(userId: string, automationRepository: AutomationRepository): Context {
+function createTestContext(userId: string, automationRepository: AutomationRepository, secretCrypto?: SecretCrypto): Context {
   return {
     auth: { kind: "session", user: { id: userId, email: `${userId}@example.com`, name: userId, image: null } },
     automationRepository,
     crmRepository: createInMemoryCrmRepository(),
     eventService: createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" }),
+    ...(secretCrypto ? { secretCrypto } : {}),
     session: null,
   };
 }
@@ -279,6 +367,17 @@ function createPassthroughSecretCrypto(): SecretCrypto {
     },
     decrypt(encrypted: EncryptedSecretV1) {
       return encrypted.ciphertext;
+    },
+  };
+}
+
+function createTaggingSecretCrypto(): SecretCrypto {
+  return {
+    encrypt(plaintext: string) {
+      return { version: "dcrm.secret.v1", algorithm: "aes-256-gcm", encoding: "base64", ciphertext: Buffer.from(plaintext, "utf8").toString("base64"), iv: "", authTag: "" } satisfies EncryptedSecretV1;
+    },
+    decrypt(encrypted: EncryptedSecretV1) {
+      return Buffer.from(encrypted.ciphertext, "base64").toString("utf8");
     },
   };
 }

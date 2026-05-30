@@ -1,4 +1,4 @@
-import { Queue, Worker } from "bullmq";
+import { Queue, UnrecoverableError, Worker } from "bullmq";
 
 import type { HookExecutionStatus, HookType } from "@DCRM/domain";
 import type { JobsOptions, QueueOptions, WorkerOptions } from "bullmq";
@@ -124,6 +124,16 @@ export type EmitHookWriteEventInput = {
 export type HookExecutor = {
   readonly execute: (context: HookExecutionContext) => Promise<JsonObject | undefined>;
 };
+
+export class NonRetryableHookExecutionError extends Error {
+  readonly error: unknown;
+
+  constructor(message: string, error: unknown) {
+    super(message);
+    this.name = "NonRetryableHookExecutionError";
+    this.error = error;
+  }
+}
 
 type CreateHookAwareEventServiceOptions = {
   readonly eventService: EventService;
@@ -263,13 +273,17 @@ export function createHookExecutionProcessor({
       return { executionId: execution.id, status: "success" };
     } catch (error) {
       const retryPolicy = resolveRetryPolicy(hook);
-      const nextRetryAt = attempt < retryPolicy.maxAttempts ? calculateNextRetryAt(clock(), retryPolicy, attempt) : undefined;
+      const retryable = isRetryableHookExecutionError(error);
+      const nextRetryAt = retryable && attempt < retryPolicy.maxAttempts ? calculateNextRetryAt(clock(), retryPolicy, attempt) : undefined;
       await executionRepository.markFailed({
         executionId: execution.id,
         error: errorToJsonObject(error),
         finishedAt: clock(),
         ...(nextRetryAt ? { nextRetryAt } : {}),
       });
+      if (!retryable) {
+        throw new UnrecoverableError(errorMessage(error));
+      }
       throw error;
     }
   };
@@ -546,6 +560,14 @@ function errorToJsonObject(error: unknown): JsonObject {
   return {
     message: "Unknown hook execution error.",
   };
+}
+
+function isRetryableHookExecutionError(error: unknown): boolean {
+  return !(error instanceof NonRetryableHookExecutionError);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Non-retryable hook execution failure.";
 }
 
 function isJsonObject(value: unknown): value is JsonObject {

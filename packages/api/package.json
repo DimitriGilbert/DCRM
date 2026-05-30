@@ -11,12 +11,16 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "rm -rf dist-test && tsc --project tsconfig.test.json && node --test \"dist-test/**/*.test.js\""
   },
   "dependencies": {
     "@DCRM/auth": "workspace:*",
     "@DCRM/db": "workspace:*",
+    "@DCRM/domain": "workspace:*",
     "@DCRM/env": "workspace:*",
+    "@DCRM/events": "workspace:*",
+    "drizzle-orm": "^0.45.1",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "dotenv": "catalog:",

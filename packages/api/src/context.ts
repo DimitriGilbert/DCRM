@@ -1,28 +1,55 @@
 import { auth } from "@DCRM/auth";
 import { verifyApiKeyFromHeaders } from "@DCRM/auth/api-keys";
 import { createDcrmApiKeyService } from "@DCRM/auth/api-keys.drizzle";
+import { createDb } from "@DCRM/db";
+import { createEventService } from "@DCRM/events";
+import { createDrizzleEventRepository } from "@DCRM/events/drizzle";
 
 import type { ApiKeyService, VerifiedApiKey } from "@DCRM/auth/api-keys";
+import type { EventService } from "@DCRM/events";
+
+import { createDrizzleCrmRepository } from "./crm/drizzle.js";
+
+import type { CrmRepository } from "./crm/repository.js";
 
 type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
+export type AuthUser = {
+  readonly id: string;
+  readonly email?: string | null;
+  readonly name?: string | null;
+  readonly image?: string | null;
+};
 
 export type RequestAuth =
   | {
       kind: "session";
-      user: Session["user"];
+      user: AuthUser;
     }
   | {
       kind: "apiKey";
       apiKey: VerifiedApiKey["apiKey"];
-      user: VerifiedApiKey["user"];
+      user: AuthUser;
     };
 
 type CreateContextOptions = {
   apiKeyService?: ApiKeyService;
+  crmRepository?: CrmRepository;
+  eventService?: EventService;
   req: Request;
 };
 
-export async function createContext({ apiKeyService, req }: CreateContextOptions) {
+export type Context = {
+  readonly auth: RequestAuth | null;
+  readonly crmRepository: CrmRepository;
+  readonly eventService: EventService;
+  readonly session: Session | null;
+};
+
+export async function createContext({ apiKeyService, crmRepository, eventService, req }: CreateContextOptions): Promise<Context> {
+  const database = crmRepository || eventService ? undefined : createDb();
+  const resolvedCrmRepository = crmRepository ?? createDrizzleCrmRepository(database ?? createDb());
+  const resolvedEventService =
+    eventService ?? createEventService({ repository: createDrizzleEventRepository(database ?? createDb()) });
   const session = await auth.api.getSession({
     headers: req.headers,
   });
@@ -33,6 +60,8 @@ export async function createContext({ apiKeyService, req }: CreateContextOptions
         kind: "session",
         user: session.user,
       } satisfies RequestAuth,
+      crmRepository: resolvedCrmRepository,
+      eventService: resolvedEventService,
       session,
     };
   }
@@ -49,11 +78,11 @@ export async function createContext({ apiKeyService, req }: CreateContextOptions
           user: verifiedApiKey.user,
         } satisfies RequestAuth)
       : null,
+    crmRepository: resolvedCrmRepository,
+    eventService: resolvedEventService,
     session,
   };
 }
-
-export type Context = Awaited<ReturnType<typeof createContext>>;
 
 function hasApiKeyCredential(headers: Headers) {
   return headers.has("authorization") || headers.has("x-api-key");

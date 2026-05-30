@@ -111,6 +111,7 @@ describe("event emission", () => {
 
   it("exposes a public guard for supported core event types", () => {
     assert.equal(isCoreEventType("client.created"), true);
+    assert.equal(isCoreEventType("lead.converted"), true);
     assert.equal(isCoreEventType(""), false);
     assert.equal(isCoreEventType("client.archived"), false);
   });

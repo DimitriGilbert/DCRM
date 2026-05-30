@@ -121,6 +121,7 @@ export const EVENT_ACTIONS = [
   "restored",
   "status_changed",
   "stage_changed",
+  "converted",
   "exchange_received",
   "file_attached",
   "import_completed",

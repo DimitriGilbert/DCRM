@@ -26,10 +26,15 @@ export const CORE_EVENT_DEFINITIONS = [
   { type: "client.updated", entityType: "client", action: "updated", description: "A client was updated." },
   { type: "client.deleted", entityType: "client", action: "deleted", description: "A client was soft-deleted." },
   { type: "client.restored", entityType: "client", action: "restored", description: "A client was restored." },
+  { type: "tag.created", entityType: "tag", action: "created", description: "A tag was created." },
+  { type: "tag.updated", entityType: "tag", action: "updated", description: "A tag was updated." },
+  { type: "tag.deleted", entityType: "tag", action: "deleted", description: "A tag was soft-deleted." },
+  { type: "tag.restored", entityType: "tag", action: "restored", description: "A tag was restored." },
   { type: "lead.created", entityType: "lead", action: "created", description: "A lead was created." },
   { type: "lead.updated", entityType: "lead", action: "updated", description: "A lead was updated." },
   { type: "lead.deleted", entityType: "lead", action: "deleted", description: "A lead was deleted." },
   { type: "lead.stage_changed", entityType: "lead", action: "stage_changed", description: "A lead moved pipeline stage." },
+  { type: "lead.converted", entityType: "lead", action: "converted", description: "A lead was converted into a client." },
   { type: "project.created", entityType: "project", action: "created", description: "A project was created." },
   { type: "project.updated", entityType: "project", action: "updated", description: "A project was updated." },
   { type: "project.deleted", entityType: "project", action: "deleted", description: "A project was deleted." },
@@ -39,6 +44,8 @@ export const CORE_EVENT_DEFINITIONS = [
   { type: "ticket.deleted", entityType: "ticket", action: "deleted", description: "A ticket was deleted." },
   { type: "ticket.status_changed", entityType: "ticket", action: "status_changed", description: "A ticket changed status." },
   { type: "exchange.created", entityType: "exchange", action: "created", description: "An exchange was created." },
+  { type: "exchange.updated", entityType: "exchange", action: "updated", description: "An exchange was updated." },
+  { type: "exchange.deleted", entityType: "exchange", action: "deleted", description: "An exchange was deleted." },
   { type: "exchange.exchange_received", entityType: "exchange", action: "exchange_received", description: "An exchange was received." },
   { type: "attachment.file_attached", entityType: "attachment", action: "file_attached", description: "A file was attached." },
   { type: "import.import_completed", entityType: "import", action: "import_completed", description: "An import completed." },
@@ -100,7 +107,7 @@ type CreateEventServiceOptions = {
 };
 
 /** Creates the public event engine interface for typed emission and user-scoped reads. */
-export function createEventService({ clock = () => new Date(), idGenerator = crypto.randomUUID, repository }: CreateEventServiceOptions): EventService {
+export function createEventService({ clock = () => new Date(), idGenerator = () => crypto.randomUUID(), repository }: CreateEventServiceOptions): EventService {
   const emit = async (input: EmitEventInput) => {
     const event = normalizeEventInput(input, idGenerator(), clock());
     return repository.insert(event);

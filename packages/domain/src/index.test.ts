@@ -67,6 +67,7 @@ describe("domain constants", () => {
       "restored",
       "status_changed",
       "stage_changed",
+      "converted",
       "exchange_received",
       "file_attached",
       "import_completed",

@@ -1,0 +1,158 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { createEventService, createInMemoryEventRepository } from "@DCRM/events";
+import type { EventService } from "@DCRM/events";
+
+import { createInMemoryCrmRepository } from "../../crm/repository.js";
+import { appRouter } from "../index.js";
+
+import type { Context } from "../../context.js";
+import type { CrmRepository } from "../../crm/repository.js";
+
+describe("clients tRPC API", () => {
+  it("creates a user-scoped client and emits a client.created event", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" });
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+
+    const client = await caller.clients.create({ name: "Ada Lovelace", email: "ada@example.com", company: "Analytical Engines" });
+
+    assert.equal(client.userId, "user_1");
+    assert.equal(client.name, "Ada Lovelace");
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created"],
+    );
+  });
+
+  it("searches active clients by core fields without leaking another user's records", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    await appRouter.createCaller(createTestContext("user_1", crmRepository, eventService)).clients.create({ name: "Ada Lovelace", company: "Analytical Engines" });
+    await appRouter.createCaller(createTestContext("user_2", crmRepository, eventService)).clients.create({ name: "Grace Hopper", company: "Analytical Engines" });
+
+    const result = await appRouter.createCaller(createTestContext("user_1", crmRepository, eventService)).clients.list({ search: "Analytical" });
+
+    assert.deepEqual(
+      result.map((client) => client.name),
+      ["Ada Lovelace"],
+    );
+  });
+
+  it("searches active clients by phone number as a core client field", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    await caller.clients.create({ name: "Ada Lovelace", phone: "+1 555 0100" });
+
+    const result = await caller.clients.list({ search: "555" });
+
+    assert.deepEqual(
+      result.map((client) => client.name),
+      ["Ada Lovelace"],
+    );
+  });
+
+  it("soft-deletes and restores a client through user-scoped mutations", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await caller.clients.delete({ id: client.id });
+    assert.deepEqual(await caller.clients.list({}), []);
+    assert.equal((await caller.clients.list({ includeDeleted: true })).length, 1);
+
+    await caller.clients.restore({ id: client.id });
+    assert.deepEqual(
+      (await caller.clients.list({})).map((record) => record.id),
+      [client.id],
+    );
+  });
+
+  it("validates client custom fields against the submitted custom field schema", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+
+    const client = await caller.clients.create({
+      name: "Ada Lovelace",
+      customFieldSchema: [{ key: "hourlyRate", label: "Hourly rate", type: "number", required: true }],
+      customFields: { hourlyRate: 125 },
+    });
+
+    assert.deepEqual(client.customFields, { hourlyRate: 125 });
+    await assert.rejects(
+      caller.clients.update({ id: client.id, customFieldSchema: [{ key: "portal", label: "Portal", type: "url", required: true }], customFields: { portal: "not-a-url" } }),
+      /Invalid URL/u,
+    );
+  });
+
+  it("manages tags and client entity tags without crossing user scope", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const userOne = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const userTwo = appRouter.createCaller(createTestContext("user_2", crmRepository, eventService));
+    const client = await userOne.clients.create({ name: "Ada Lovelace" });
+    const tag = await userOne.tags.create({ name: "vip", color: "#f59e0b" });
+
+    await userOne.tags.attach({ tagId: tag.id, entityType: "client", entityId: client.id });
+
+    assert.equal((await userOne.tags.listEntity({ entityType: "client", entityId: client.id })).length, 1);
+    await assert.rejects(userTwo.tags.attach({ tagId: tag.id, entityType: "client", entityId: client.id }), /Tag not found/u);
+  });
+
+  it("rejects entity tag types outside the current public tags API", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const tag = await caller.tags.create({ name: "vip" });
+
+    const listInput = JSON.parse(JSON.stringify({ entityType: "ticket", entityId: "ticket_1" })) as Parameters<typeof caller.tags.listEntity>[0];
+    const detachInput = JSON.parse(JSON.stringify({ tagId: tag.id, entityType: "lead", entityId: "lead_1" })) as Parameters<typeof caller.tags.detach>[0];
+
+    await assert.rejects(caller.tags.listEntity(listInput), /Invalid option/u);
+    await assert.rejects(caller.tags.detach(detachInput), /Invalid option/u);
+  });
+
+  it("updates tag fields without forwarding the route id as an update field", async () => {
+    const crmRepository = createTagUpdateFieldAssertingRepository(createInMemoryCrmRepository());
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, createTestEventService()));
+    const tag = await caller.tags.create({ name: "vip" });
+
+    const updated = await caller.tags.update({ id: tag.id, name: "priority" });
+
+    assert.equal(updated.id, tag.id);
+    assert.equal(updated.name, "priority");
+  });
+});
+
+function createTestContext(userId: string, crmRepository: CrmRepository, eventService: EventService): Context {
+  return {
+    auth: { kind: "session", user: { id: userId, email: `${userId}@example.com`, name: userId, image: null } },
+    crmRepository,
+    eventService,
+    session: null,
+  };
+}
+
+function createTestEventService(): EventService {
+  let nextId = 0;
+  return createEventService({
+    repository: createInMemoryEventRepository(),
+    idGenerator: () => {
+      nextId += 1;
+      return `event_${nextId}`;
+    },
+  });
+}
+
+function createTagUpdateFieldAssertingRepository(base: CrmRepository): CrmRepository {
+  return {
+    ...base,
+    tags: {
+      ...base.tags,
+      async update(input) {
+        assert.equal(Object.hasOwn(input.fields, "id"), false);
+        return base.tags.update(input);
+      },
+    },
+  };
+}

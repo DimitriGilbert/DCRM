@@ -205,7 +205,7 @@ export function createHookAwareEventService({
   executionRepository,
   queue,
   clock = () => new Date(),
-  idGenerator = crypto.randomUUID,
+  idGenerator = () => crypto.randomUUID(),
 }: CreateHookAwareEventServiceOptions): EventService {
   const emitAndDispatch = async (emit: () => Promise<DcrmEvent>) => {
     const event = await emit();

@@ -105,7 +105,6 @@ function DrawerLayout() {
           ),
         }}
       />
-      <Drawer.Screen name="(tabs)" options={{ drawerItemStyle: { display: "none" } }} />
     </Drawer>
   );
 }

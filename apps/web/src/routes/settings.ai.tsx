@@ -1,6 +1,9 @@
+import { Button } from "@DCRM/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@DCRM/ui/components/card";
+import { Input } from "@DCRM/ui/components/input";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { AiHookForm } from "@/features/ai/hook-form";
@@ -25,9 +28,17 @@ export const Route = createFileRoute("/settings/ai")({
   },
 });
 
+type GeneratedIncomingWebhookToken = {
+  readonly name: string;
+  readonly slug: string;
+  readonly token: string;
+};
+
 function RouteComponent() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const [generatedIncomingWebhookToken, setGeneratedIncomingWebhookToken] = useState<GeneratedIncomingWebhookToken | null>(null);
+  const [generatedIncomingWebhookTokenCopied, setGeneratedIncomingWebhookTokenCopied] = useState(false);
   const providers = useQuery(trpc.ai.listProviders.queryOptions());
   const hooks = useQuery(trpc.automation.listAiHooks.queryOptions());
   const incomingWebhooks = useQuery(trpc.automation.listIncomingWebhooks.queryOptions());
@@ -57,8 +68,24 @@ function RouteComponent() {
 
   async function handleIncomingWebhookSubmit(values: IncomingWebhookFormValues) {
     const saved = await createIncomingWebhook.mutateAsync(values);
+    if (saved.token) {
+      setGeneratedIncomingWebhookToken({ name: saved.name, slug: saved.slug, token: saved.token });
+      setGeneratedIncomingWebhookTokenCopied(false);
+    } else {
+      setGeneratedIncomingWebhookToken(null);
+    }
     await queryClient.invalidateQueries({ queryKey: trpc.automation.listIncomingWebhooks.queryKey() });
     toast.success("Incoming webhook created in test mode", { description: saved.token ? "Copy the generated token now; it will not be shown again." : "Use preview responses before switching to live mode." });
+  }
+
+  async function handleCopyGeneratedIncomingWebhookToken() {
+    if (!generatedIncomingWebhookToken) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(generatedIncomingWebhookToken.token);
+    setGeneratedIncomingWebhookTokenCopied(true);
+    toast.success("Incoming webhook token copied");
   }
 
   return (
@@ -99,6 +126,20 @@ function RouteComponent() {
           </CardHeader>
           <CardContent>
             <IncomingWebhookForm submitting={createIncomingWebhook.isPending} onSubmit={handleIncomingWebhookSubmit} />
+            {generatedIncomingWebhookToken ? (
+              <div className="mt-4 border border-destructive bg-destructive/10 p-4 text-sm" role="status" aria-live="polite">
+                <div className="font-semibold text-destructive">Copy this incoming webhook token now</div>
+                <p className="mt-1 text-muted-foreground">
+                  This token for {generatedIncomingWebhookToken.name} at /api/incoming-webhooks/{generatedIncomingWebhookToken.slug} is shown once and cannot be recovered after you leave this page.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Input readOnly aria-label="Generated incoming webhook token" value={generatedIncomingWebhookToken.token} className="font-mono" />
+                  <Button type="button" variant="destructive" onClick={handleCopyGeneratedIncomingWebhookToken}>
+                    {generatedIncomingWebhookTokenCopied ? "Copied" : "Copy token"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
         <Card>

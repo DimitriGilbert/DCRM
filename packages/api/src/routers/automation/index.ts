@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { SecretCrypto } from "@DCRM/crypto";
 
 import { protectedProcedure, router } from "../../index.js";
-import { mapIncomingWebhookPayload, normalizeIncomingWebhookCreate } from "../../automation/incoming-webhook.js";
+import { assertSafeIncomingWebhookTargetPath, mapIncomingWebhookPayload, normalizeIncomingWebhookCreate } from "../../automation/incoming-webhook.js";
 import { parseSafeOutgoingWebhookUrl } from "../../automation/outgoing-webhook-url.js";
 import { listFailedHookExecutions } from "./listFailedHookExecutions.js";
 
@@ -81,7 +81,19 @@ const createOutgoingWebhookHookInputSchema = z.object({
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 
 const incomingWebhookMappingSchema = z.object({
-  mappings: z.array(z.object({ sourcePath: z.string().trim().min(1), targetPath: z.string().trim().min(1) })).default([]),
+  mappings: z.array(z.object({
+    sourcePath: z.string().trim().min(1),
+    targetPath: z.string().trim().min(1).superRefine((value, ctx) => {
+      try {
+        assertSafeIncomingWebhookTargetPath(value);
+      } catch (error) {
+        ctx.addIssue({
+          code: "custom",
+          message: error instanceof Error ? error.message : "Incoming webhook target path is invalid.",
+        });
+      }
+    }),
+  })).default([]),
 });
 
 const createIncomingWebhookInputSchema = z.object({

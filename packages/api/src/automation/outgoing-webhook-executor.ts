@@ -1,18 +1,43 @@
 import { createHmac } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { z } from "zod";
+
+import type { ClientRequest } from "node:http";
 
 import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
 import type { DcrmEvent, JsonObject } from "@DCRM/events";
 import { NonRetryableHookExecutionError } from "@DCRM/events/hooks";
 import type { HookExecutionContext, HookExecutor } from "@DCRM/events/hooks";
 
-import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
+import { type OutgoingWebhookAddressResolver, type OutgoingWebhookConnectionTarget, parseSafeOutgoingWebhookUrl, resolveOutgoingWebhookConnectionTarget } from "./outgoing-webhook-url.js";
 
-type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+export type OutgoingWebhookRequestOptions = {
+  readonly method: "POST";
+  readonly headers: Record<string, string>;
+  readonly hostname: string;
+  readonly port?: string;
+  readonly servername: string;
+  readonly signal: AbortSignal;
+};
+
+export type OutgoingWebhookResponseMessage = {
+  readonly statusCode?: number;
+  resume(): void;
+  on(event: "end", listener: () => void): OutgoingWebhookResponseMessage;
+};
+
+export type OutgoingWebhookRequestHandle = {
+  on(event: "error", listener: (error: Error) => void): OutgoingWebhookRequestHandle;
+  end(body: string): void;
+};
+
+export type OutgoingWebhookRequestFactory = (url: URL, options: OutgoingWebhookRequestOptions, callback: (response: OutgoingWebhookResponseMessage) => void) => OutgoingWebhookRequestHandle;
 
 export type CreateOutgoingWebhookExecutorOptions = {
   readonly secretCrypto: SecretCrypto;
-  readonly fetch?: FetchLike;
+  readonly addressResolver?: OutgoingWebhookAddressResolver;
+  readonly requestFactory?: OutgoingWebhookRequestFactory;
 };
 
 const encryptedSecretSchema: z.ZodType<EncryptedSecretV1> = z.object({
@@ -52,7 +77,7 @@ const configSchema = z.object({
   retryPolicy: retryPolicySchema.optional(),
 });
 
-export function createOutgoingWebhookExecutor({ secretCrypto, fetch: fetchImplementation = fetch }: CreateOutgoingWebhookExecutorOptions): HookExecutor {
+export function createOutgoingWebhookExecutor({ secretCrypto, addressResolver, requestFactory }: CreateOutgoingWebhookExecutorOptions): HookExecutor {
   return {
     async execute(context) {
       if (context.hook.type !== "outgoing_webhook") {
@@ -67,8 +92,10 @@ export function createOutgoingWebhookExecutor({ secretCrypto, fetch: fetchImplem
         "user-agent": "DCRM-Outgoing-Webhooks/1.0",
       });
       applyValidatedHeaders({ headers, body, config, secretCrypto });
+      headers.set("idempotency-key", context.execution.id);
+      headers.set("x-dcrm-delivery-id", context.execution.id);
 
-      const response = await sendWebhookRequest(fetchImplementation, url, headers, body);
+      const response = await sendWebhookRequest({ url, headers, body, addressResolver, requestFactory });
 
       const output = { delivery: { status: response.ok ? "delivered" : "failed", statusCode: response.status, attempt: context.attempt } };
       if (response.ok) {
@@ -110,18 +137,49 @@ function applyValidatedHeaders(input: { readonly headers: Headers; readonly body
   }
 }
 
-async function sendWebhookRequest(fetchImplementation: FetchLike, url: URL, headers: Headers, body: string): Promise<Response> {
+async function sendWebhookRequest(input: { readonly url: URL; readonly headers: Headers; readonly body: string; readonly addressResolver?: OutgoingWebhookAddressResolver; readonly requestFactory?: OutgoingWebhookRequestFactory }): Promise<Response> {
+  let target: OutgoingWebhookConnectionTarget;
   try {
-    return await fetchImplementation(url.toString(), {
-      method: "POST",
-      headers,
-      body,
-      redirect: "error",
-      signal: AbortSignal.timeout(10_000),
-    });
+    target = await resolveOutgoingWebhookConnectionTarget(input.url, input.addressResolver);
+  } catch (error) {
+    throw new NonRetryableHookExecutionError(errorMessage(error), error);
+  }
+  try {
+    return await sendWebhookRequestToVettedAddress({ url: input.url, headers: input.headers, body: input.body, target, requestFactory: input.requestFactory });
   } catch {
     throw new OutgoingWebhookTransientError(0);
   }
+}
+
+async function sendWebhookRequestToVettedAddress(input: { readonly url: URL; readonly headers: Headers; readonly body: string; readonly target: OutgoingWebhookConnectionTarget; readonly requestFactory?: OutgoingWebhookRequestFactory }): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    const headers = headersToRecord(input.headers);
+    headers.host = input.url.host;
+    const requestFactory = input.requestFactory ?? createDefaultRequestFactory(input.url);
+    const request = requestFactory(
+      input.url,
+      {
+        method: "POST",
+        headers,
+        hostname: input.target.address,
+        port: input.url.port.length > 0 ? input.url.port : undefined,
+        servername: input.url.hostname,
+        signal: AbortSignal.timeout(10_000),
+      },
+      (response) => {
+        response.resume();
+        response.on("end", () => {
+          resolve(new Response(null, { status: response.statusCode ?? 0 }));
+        });
+      },
+    );
+    request.on("error", reject);
+    request.end(input.body);
+  });
+}
+
+function createDefaultRequestFactory(url: URL): OutgoingWebhookRequestFactory {
+  return (requestUrl, options, callback) => (url.protocol === "https:" ? httpsRequest : httpRequest)(requestUrl, options, callback) as ClientRequest;
 }
 
 export class OutgoingWebhookTransientError extends Error {
@@ -202,6 +260,14 @@ function setSafeHeader(headers: Headers, name: string, value: string) {
     throw new Error("Outgoing webhook header is not allowed.");
   }
   headers.set(normalizedName, value);
+}
+
+function headersToRecord(headers: Headers): Record<string, string> {
+  const output: Record<string, string> = {};
+  headers.forEach((value, name) => {
+    output[name] = value;
+  });
+  return output;
 }
 
 function isTransientStatus(status: number): boolean {

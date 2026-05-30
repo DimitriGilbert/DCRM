@@ -151,6 +151,29 @@ describe("automation tRPC API", () => {
     assert.deepEqual(preview, { contact: { email: "client@example.test" } });
   });
 
+  it("rejects incoming webhook mappings with prototype-polluting target paths in preview and create", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const caller = appRouter.createCaller(createTestContext("user_1", automationRepository));
+
+    await assert.rejects(
+      () => caller.automation.previewIncomingWebhookMapping({ mappingConfig: { mappings: [{ sourcePath: "$.email", targetPath: "__proto__.polluted" }] }, payload: { email: "client@example.test" } }),
+      /not allowed/,
+    );
+    await assert.rejects(
+      () => caller.automation.createIncomingWebhook({
+        name: "Polluting form",
+        slug: "polluting-form",
+        token: "external-secret-token",
+        targetEventType: "webhook.webhook_received",
+        mappingConfig: { mappings: [{ sourcePath: "$.email", targetPath: "contact.constructor.polluted" }] },
+      }),
+      /not allowed/,
+    );
+
+    assert.deepEqual(await caller.automation.listIncomingWebhooks(), []);
+    assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "polluted"), false);
+  });
+
   it("executes matching stored AI hooks from event context and stores validated insights", async () => {
     const automationRepository = createInMemoryAutomationRepository();
     const crmRepository = createInMemoryCrmRepository();

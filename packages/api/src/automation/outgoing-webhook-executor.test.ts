@@ -4,13 +4,13 @@ import { describe, it } from "node:test";
 
 import { createEventService, createInMemoryEventRepository } from "@DCRM/events";
 import { createHookExecutionProcessor, createInMemoryHookExecutionRepository, createInMemoryHookRepository } from "@DCRM/events/hooks";
-
-import { createOutgoingWebhookExecutor } from "./outgoing-webhook-executor.js";
-import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
-
 import type { SecretCrypto, EncryptedSecretV1 } from "@DCRM/crypto";
 import type { JsonObject } from "@DCRM/events";
 import type { HookSubscription } from "@DCRM/events/hooks";
+
+import { createOutgoingWebhookExecutor } from "./outgoing-webhook-executor.js";
+import type { OutgoingWebhookRequestFactory, OutgoingWebhookRequestHandle, OutgoingWebhookRequestOptions, OutgoingWebhookResponseMessage } from "./outgoing-webhook-executor.js";
+import { parseSafeOutgoingWebhookUrl, resolveOutgoingWebhookConnectionTarget, validateOutgoingWebhookDestination } from "./outgoing-webhook-url.js";
 
 describe("outgoing webhook executor", () => {
   it("sends bearer, basic, HMAC, and custom header authentication without exposing plaintext secrets in hook config", async () => {
@@ -31,7 +31,7 @@ describe("outgoing webhook executor", () => {
       eventService,
       hookRepository,
       executionRepository,
-      executor: createOutgoingWebhookExecutor({ secretCrypto, fetch: createRecordingFetch(requests, [200, 200, 200, 200]) }),
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [200, 200, 200, 200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
       clock: () => new Date("2026-01-01T00:00:02.000Z"),
     });
 
@@ -63,7 +63,7 @@ describe("outgoing webhook executor", () => {
       eventService,
       hookRepository,
       executionRepository,
-      executor: createOutgoingWebhookExecutor({ secretCrypto, fetch: createRecordingFetch([], [503, 200, 200]) }),
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory([], [503, 200, 200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
       clock: () => new Date("2026-01-01T00:00:02.000Z"),
     });
 
@@ -93,7 +93,7 @@ describe("outgoing webhook executor", () => {
       eventService,
       hookRepository,
       executionRepository,
-      executor: createOutgoingWebhookExecutor({ secretCrypto, fetch: createRecordingFetch([], [400, 503]) }),
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory([], [400, 503]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
       clock: () => new Date("2026-01-01T00:00:02.000Z"),
     });
 
@@ -121,7 +121,7 @@ describe("outgoing webhook executor", () => {
       eventService,
       hookRepository,
       executionRepository,
-      executor: createOutgoingWebhookExecutor({ secretCrypto, fetch: createRecordingFetch(requests, [200]) }),
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
       clock: () => new Date("2026-01-01T00:00:02.000Z"),
     });
 
@@ -143,7 +143,7 @@ describe("outgoing webhook executor", () => {
       eventService,
       hookRepository,
       executionRepository,
-      executor: createOutgoingWebhookExecutor({ secretCrypto, fetch: createRecordingFetch(requests, [200]) }),
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
       clock: () => new Date("2026-01-01T00:00:02.000Z"),
     });
 
@@ -157,6 +157,95 @@ describe("outgoing webhook executor", () => {
   it("rejects IPv6 loopback webhook URLs", () => {
     assert.throws(() => parseSafeOutgoingWebhookUrl("https://[::1]/hooks/dcrm"), /host is not allowed/);
   });
+
+  it("rejects unsafe literal and resolved webhook destinations", async () => {
+    assert.throws(() => parseSafeOutgoingWebhookUrl("https://127.0.0.1/hooks/dcrm"), /host is not allowed/);
+    assert.throws(() => parseSafeOutgoingWebhookUrl("https://[::ffff:10.0.0.1]/hooks/dcrm"), /host is not allowed/);
+    assert.throws(() => parseSafeOutgoingWebhookUrl("https://[fe80::1]/hooks/dcrm"), /host is not allowed/);
+    await assert.rejects(
+      () => validateOutgoingWebhookDestination(new URL("https://safe.example.test/hooks/dcrm"), createStaticAddressResolver("192.168.1.25")),
+      /resolves to a host that is not allowed/,
+    );
+    await assert.rejects(
+      () => validateOutgoingWebhookDestination(new URL("https://safe.example.test/hooks/dcrm"), createStaticAddressResolver("::ffff:172.16.0.1")),
+      /resolves to a host that is not allowed/,
+    );
+  });
+
+  it("selects a vetted resolved address for the actual outgoing webhook connection", async () => {
+    await assert.rejects(
+      () => resolveOutgoingWebhookConnectionTarget(new URL("https://safe.example.test/hooks/dcrm"), createStaticAddressResolver("169.254.169.254")),
+      /resolves to a host that is not allowed/,
+    );
+
+    assert.deepEqual(await resolveOutgoingWebhookConnectionTarget(new URL("https://safe.example.test/hooks/dcrm"), createStaticAddressResolver("203.0.113.10")), {
+      address: "203.0.113.10",
+      family: 4,
+    });
+  });
+
+  it("executes deliveries against the vetted address while preserving the original host and never following redirects", async () => {
+    const secretCrypto = createPassthroughSecretCrypto();
+    const requests: CapturedRequest[] = [];
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_connection_bound", clock: () => new Date("2026-01-01T00:00:00.000Z") });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Mildred" } });
+    const hook = createHook("hook_connection_bound", { url: "https://safe.example.test/hooks/dcrm" });
+    const hookRepository = createInMemoryHookRepository([hook]);
+    const executionRepository = createInMemoryHookExecutionRepository();
+    await executionRepository.createPending({ id: "execution_connection_bound", event, hook, retryPolicy: { maxAttempts: 1, backoff: { type: "fixed", delayMs: 0 } }, queuedAt: new Date("2026-01-01T00:00:01.000Z") });
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository,
+      executionRepository,
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [302]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
+      clock: () => new Date("2026-01-01T00:00:02.000Z"),
+    });
+
+    await assert.rejects(() => processor({ executionId: "execution_connection_bound" }, 1), /permanent/);
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.url, "https://safe.example.test/hooks/dcrm");
+    assert.equal(requests[0]?.hostname, "203.0.113.10");
+    assert.notEqual(requests[0]?.hostname, "safe.example.test");
+    assert.equal(requests[0]?.headers.host, "safe.example.test");
+    assert.equal(requests[0]?.servername, "safe.example.test");
+  });
+
+  it("sends a stable idempotency header across retry attempts for the same execution", async () => {
+    const secretCrypto = createPassthroughSecretCrypto();
+    const requests: CapturedRequest[] = [];
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_6", clock: () => new Date("2026-01-01T00:00:00.000Z") });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Hedy" } });
+    const hook = createHook("hook_idempotent", {
+      auth: {
+        type: "custom_headers",
+        headers: [
+          { name: "Idempotency-Key", value: secretCrypto.encrypt("auth_idempotency_override") },
+          { name: "X-DCRM-Delivery-ID", value: secretCrypto.encrypt("auth_delivery_override") },
+        ],
+      },
+      headers: { "idempotency-key": "config_idempotency_override", "x-dcrm-delivery-id": "config_delivery_override" },
+      retryPolicy: { maxAttempts: 2, backoff: { type: "fixed", delayMs: 0 } },
+    });
+    const hookRepository = createInMemoryHookRepository([hook]);
+    const executionRepository = createInMemoryHookExecutionRepository();
+    await executionRepository.createPending({ id: "execution_idempotent", event, hook, retryPolicy: { maxAttempts: 2, backoff: { type: "fixed", delayMs: 0 } }, queuedAt: new Date("2026-01-01T00:00:01.000Z") });
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository,
+      executionRepository,
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [503, 200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
+      clock: () => new Date("2026-01-01T00:00:02.000Z"),
+    });
+
+    await assert.rejects(() => processor({ executionId: "execution_idempotent" }, 1), /transient/);
+    await processor({ executionId: "execution_idempotent" }, 2);
+
+    assert.equal(requests[0]?.headers["idempotency-key"], "execution_idempotent");
+    assert.equal(requests[1]?.headers["idempotency-key"], "execution_idempotent");
+    assert.equal(requests[0]?.headers["x-dcrm-delivery-id"], "execution_idempotent");
+    assert.equal(requests[1]?.headers["x-dcrm-delivery-id"], "execution_idempotent");
+  });
 });
 
 type CapturedRequest = {
@@ -164,6 +253,8 @@ type CapturedRequest = {
   readonly method: string;
   readonly headers: Record<string, string>;
   readonly body: string;
+  readonly hostname: string;
+  readonly servername: string;
 };
 
 function createHook(id: string, configOverrides: JsonObject = {}): HookSubscription {
@@ -182,19 +273,36 @@ function createHook(id: string, configOverrides: JsonObject = {}): HookSubscript
   };
 }
 
-function createRecordingFetch(requests: CapturedRequest[], statuses: readonly number[]) {
+function createRecordingRequestFactory(requests: CapturedRequest[], statuses: readonly number[]): OutgoingWebhookRequestFactory {
   let requestCount = 0;
-  return async (url: string, init: RequestInit): Promise<Response> => {
-    const headers = new Headers(init.headers);
-    const normalizedHeaders: Record<string, string> = {};
-    headers.forEach((value, name) => {
-      normalizedHeaders[name] = value;
-    });
-    requests.push({ url, method: init.method ?? "GET", headers: normalizedHeaders, body: typeof init.body === "string" ? init.body : "" });
+  return (url: URL, options: OutgoingWebhookRequestOptions, callback: (response: OutgoingWebhookResponseMessage) => void): OutgoingWebhookRequestHandle => {
     const status = statuses[requestCount] ?? 200;
     requestCount += 1;
-    return new Response(null, { status });
+    return {
+      on() {
+        return this;
+      },
+      end(body: string) {
+        requests.push({ url: url.toString(), method: options.method, headers: options.headers, body, hostname: options.hostname, servername: options.servername });
+        queueMicrotask(() => callback(createResponseMessage(status)));
+      },
+    };
   };
+}
+
+function createResponseMessage(statusCode: number): OutgoingWebhookResponseMessage {
+  return {
+    statusCode,
+    resume() {},
+    on(_event: "end", listener: () => void) {
+      queueMicrotask(listener);
+      return this;
+    },
+  };
+}
+
+function createStaticAddressResolver(address: string) {
+  return async () => [{ address }];
 }
 
 function createPassthroughSecretCrypto(): SecretCrypto {

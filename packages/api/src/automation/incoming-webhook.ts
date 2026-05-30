@@ -11,7 +11,12 @@ const jsonObjectSchema: z.ZodType<JsonObject> = z.record(z.string(), z.unknown()
 
 const mappingEntrySchema = z.object({
   sourcePath: z.string().trim().min(1),
-  targetPath: z.string().trim().min(1),
+  targetPath: z.string().trim().min(1).superRefine((value, ctx) => {
+    const unsafeSegment = findUnsafeTargetPathSegment(value);
+    if (unsafeSegment) {
+      ctx.addIssue({ code: "custom", message: `Incoming webhook target path segment is not allowed: ${unsafeSegment}` });
+    }
+  }),
 });
 
 const mappingConfigSchema = z.object({
@@ -42,10 +47,15 @@ export function createIncomingWebhookService({ automationRepository, eventServic
     async receive(input: IncomingWebhookReceiveInput): Promise<IncomingWebhookReceiveResult> {
       const webhook = await automationRepository.incomingWebhooks.getBySlug(input.slug.trim());
       if (!webhook || !webhook.enabled) {
-        throw new Error("Incoming webhook was not found.");
+        throw new IncomingWebhookNotFoundError();
       }
       verifyIncomingWebhookToken({ providedToken: input.token, expectedHash: webhook.tokenHash, tokenHasher });
-      const preview = mapIncomingWebhookPayload(webhook.mappingConfig, input.payload);
+      let preview: JsonObject;
+      try {
+        preview = mapIncomingWebhookPayload(webhook.mappingConfig, input.payload);
+      } catch (error) {
+        throw new IncomingWebhookPayloadMappingError(error);
+      }
 
       if (webhook.mode === "test") {
         await automationRepository.incomingWebhooks.recordTestPayload({ id: webhook.id, payload: input.payload, now: clock() });
@@ -66,14 +76,14 @@ export function createIncomingWebhookService({ automationRepository, eventServic
 
 export function mapIncomingWebhookPayload(mappingConfig: JsonObject, payload: JsonObject): JsonObject {
   const parsed = mappingConfigSchema.parse(mappingConfig);
-  const output: Record<string, unknown> = {};
+  const output = createNullPrototypeRecord();
   for (const mapping of parsed.mappings) {
     const value = readJsonPath(payload, mapping.sourcePath);
     if (value !== undefined) {
       writeTargetPath(output, mapping.targetPath, value);
     }
   }
-  return jsonObjectSchema.parse(output);
+  return jsonObjectSchema.parse(toPlainJsonObject(output));
 }
 
 export function createIncomingWebhookToken(): string {
@@ -89,12 +99,36 @@ export function verifyIncomingWebhookToken(input: { readonly providedToken: stri
     return;
   }
   if (!input.providedToken) {
-    throw new Error("Invalid incoming webhook token.");
+    throw new IncomingWebhookAuthenticationError();
   }
   const actual = Buffer.from((input.tokenHasher ?? hashIncomingWebhookToken)(input.providedToken), "utf8");
   const expected = Buffer.from(input.expectedHash, "utf8");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
-    throw new Error("Invalid incoming webhook token.");
+    throw new IncomingWebhookAuthenticationError();
+  }
+}
+
+export class IncomingWebhookAuthenticationError extends Error {
+  constructor() {
+    super("Invalid incoming webhook credentials.");
+    this.name = "IncomingWebhookAuthenticationError";
+  }
+}
+
+export class IncomingWebhookNotFoundError extends Error {
+  constructor() {
+    super("Incoming webhook was not found.");
+    this.name = "IncomingWebhookNotFoundError";
+  }
+}
+
+export class IncomingWebhookPayloadMappingError extends Error {
+  readonly error: unknown;
+
+  constructor(error: unknown) {
+    super("Incoming webhook payload could not be mapped.");
+    this.name = "IncomingWebhookPayloadMappingError";
+    this.error = error;
   }
 }
 
@@ -147,18 +181,18 @@ function readJsonPath(value: unknown, path: string): unknown {
 }
 
 function writeTargetPath(output: Record<string, unknown>, targetPath: string, value: unknown): void {
-  const segments = targetPath.split(".").map((segment) => segment.trim()).filter(Boolean);
+  const segments = parseTargetPath(targetPath);
   if (segments.length === 0) {
     throw new Error("Target path is required.");
   }
   let cursor: Record<string, unknown> = output;
   for (const segment of segments.slice(0, -1)) {
-    const existing = cursor[segment];
-    if (!isRecord(existing)) {
-      cursor[segment] = {};
+    const existing = Object.hasOwn(cursor, segment) ? cursor[segment] : undefined;
+    if (!isSafePlainRecord(existing)) {
+      cursor[segment] = createNullPrototypeRecord();
     }
     const next = cursor[segment];
-    if (!isRecord(next)) {
+    if (!isSafePlainRecord(next)) {
       throw new Error(`Target path cannot be written: ${targetPath}`);
     }
     cursor = next;
@@ -168,6 +202,44 @@ function writeTargetPath(output: Record<string, unknown>, targetPath: string, va
     throw new Error("Target path is required.");
   }
   cursor[finalSegment] = value;
+}
+
+export function assertSafeIncomingWebhookTargetPath(targetPath: string): void {
+  parseTargetPath(targetPath);
+}
+
+function parseTargetPath(targetPath: string): readonly string[] {
+  const segments = targetPath.split(".").map((segment) => segment.trim()).filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error("Target path is required.");
+  }
+  for (const segment of segments) {
+    if (isDangerousTargetPathSegment(segment)) {
+      throw new Error(`Incoming webhook target path segment is not allowed: ${segment}`);
+    }
+  }
+  return segments;
+}
+
+function findUnsafeTargetPathSegment(targetPath: string): string | undefined {
+  const segments = targetPath.split(".").map((segment) => segment.trim()).filter(Boolean);
+  return segments.find(isDangerousTargetPathSegment);
+}
+
+function isDangerousTargetPathSegment(segment: string): boolean {
+  return segment === "__proto__" || segment === "constructor" || segment === "prototype";
+}
+
+function createNullPrototypeRecord(): Record<string, unknown> {
+  return Object.create(null) as Record<string, unknown>;
+}
+
+function toPlainJsonObject(value: Record<string, unknown>): JsonObject {
+  const output: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    output[key] = isSafePlainRecord(nestedValue) ? toPlainJsonObject(nestedValue) : nestedValue;
+  }
+  return jsonObjectSchema.parse(output);
 }
 
 function parseJsonPath(path: string): readonly (string | number)[] {
@@ -201,4 +273,12 @@ function normalizeSlug(slug: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSafePlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  return prototype === null || prototype === Object.prototype;
 }

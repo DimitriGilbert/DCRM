@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createEventService, createInMemoryEventRepository } from "@DCRM/events";
+import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
 
 import { createInMemoryAutomationRepository } from "../automation/repository.js";
 import { createInMemoryCrmRepository } from "../crm/repository.js";
 import { createEmailSyncProcessor, createInMemoryEmailSyncRepository, createNodeImapMailboxClient, createProductionEmailSyncProcessor, createProductionEmailSyncWorker, createRecordingEmailSyncQueue } from "./sync.js";
 
-import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
 import type { EmailSyncJobData, EmailSyncJobResult, ImapEmailMessage, ImapMailboxClient, ImapNetworkClient, ImapNetworkMessage } from "./sync.js";
 
 describe("IMAP email sync", () => {
@@ -198,6 +198,33 @@ describe("IMAP email sync", () => {
     assert.equal(account.emailAddress, "me@example.com");
   });
 
+  it("resets the IMAP UID cursor when UIDVALIDITY changes", async () => {
+    const now = new Date("2026-01-01T12:00:00.000Z");
+    const automationRepository = createInMemoryAutomationRepository();
+    const crmRepository = createInMemoryCrmRepository();
+    const eventRepository = createInMemoryEventRepository();
+    const emailSyncRepository = createInMemoryEmailSyncRepository();
+    const secretCrypto = createTaggingSecretCrypto();
+    const account = await automationRepository.emailAccounts.upsertEncrypted(createAccountInput(secretCrypto, now));
+    await emailSyncRepository.markSucceeded({ userId: "user_1", emailAccountId: account.id, mailbox: "INBOX", lastUid: "900", syncCursor: "old-validity", now });
+    const connections: FakeImapNetworkClient[] = [];
+    const imapClient = createNodeImapMailboxClient({
+      connectionFactory(input) {
+        const connection = new FakeImapNetworkClient(input.account.imapPassword, [rawImapMessage({ uid: 7, messageId: "<reset@example.test>", from: "new@example.test" })], "new-validity");
+        connections.push(connection);
+        return connection;
+      },
+    });
+    const processor = createProductionEmailSyncProcessor({ automationRepository, clock: () => now, crmRepository, emailSyncRepository, eventService: createEventService({ repository: eventRepository }), idGenerator: nextId("record"), imapClient, secretCrypto });
+
+    await processor({ userId: "user_1" });
+    const state = await emailSyncRepository.getState({ userId: "user_1", emailAccountId: account.id, mailbox: "INBOX" });
+
+    assert.deepEqual(connections[0]?.fetchRange, "1:*");
+    assert.equal(state?.lastUid, "7");
+    assert.equal(state?.syncCursor, "new-validity");
+  });
+
   it("wires a production sync worker to the production IMAP client boundary", () => {
     const automationRepository = createInMemoryAutomationRepository();
     const crmRepository = createInMemoryCrmRepository();
@@ -228,13 +255,15 @@ describe("IMAP email sync", () => {
 class FakeImapNetworkClient implements ImapNetworkClient {
   readonly passwordSeen: string;
   readonly messages: readonly ImapNetworkMessage[];
+  readonly mailbox?: { readonly uidValidity: string };
   mailboxLocked: string | null = null;
   fetchRange: string | readonly number[] | null = null;
   loggedOut = false;
 
-  constructor(passwordSeen: string, messages: readonly ImapNetworkMessage[]) {
+  constructor(passwordSeen: string, messages: readonly ImapNetworkMessage[], uidValidity: string | null = null) {
     this.passwordSeen = passwordSeen;
     this.messages = messages;
+    this.mailbox = uidValidity ? { uidValidity } : undefined;
   }
 
   async connect() {}
@@ -272,7 +301,7 @@ function rawImapMessage(input: { readonly uid: number; readonly messageId: strin
 function createMockImapClient(messages: readonly ImapEmailMessage[]): ImapMailboxClient {
   return {
     async fetchNewMessages() {
-      return messages;
+      return { messages, uidValidity: null };
     },
   };
 }

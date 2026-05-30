@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import net from "node:net";
 import { describe, it } from "node:test";
 
+import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
+
 import { createInMemoryAutomationRepository } from "../automation/repository.js";
 import { createInMemoryCrmRepository } from "../crm/repository.js";
 import { createNodeSmtpPlainTextClient } from "./smtp.js";
 import { createTicketCommentEmailSender } from "./send.js";
 
-import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
 import type { SmtpPlainTextClient, SmtpPlainTextMessage } from "./send.js";
 
 describe("SMTP ticket comment email sender", () => {
@@ -50,6 +51,61 @@ describe("SMTP ticket comment email sender", () => {
 
     await assert.rejects(sender({ userId: "user_1", exchangeId: comment.id, now }), /Internal ticket comments cannot be sent externally/u);
     assert.equal(sentMessages.length, 0);
+  });
+
+  it("does not send a ticket comment email again after sent metadata is persisted", async () => {
+    const now = new Date("2026-01-01T12:00:00.000Z");
+    const crmRepository = createInMemoryCrmRepository();
+    const automationRepository = createInMemoryAutomationRepository();
+    const secretCrypto = createTaggingSecretCrypto();
+    const sentMessages: SmtpPlainTextMessage[] = [];
+    await automationRepository.emailAccounts.upsertEncrypted(createAccountInput(secretCrypto, now));
+    const client = await crmRepository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Acme", email: "client@acme.test" }, now });
+    const project = await crmRepository.projects.create({ id: "project_1", userId: "user_1", fields: { clientId: client.id, name: "Support" }, now });
+    const ticket = await crmRepository.tickets.create({ id: "ticket_1", userId: "user_1", fields: { projectId: project.id, title: "Broken form" }, now });
+    const comment = await crmRepository.exchanges.create({ id: "exchange_1", userId: "user_1", fields: { clientId: client.id, projectId: project.id, ticketId: ticket.id, type: "comment", visibility: "external", body: "I shipped a fix." }, now });
+    const sender = createTicketCommentEmailSender({ automationRepository, crmRepository, secretCrypto, smtpClient: createRecordingSmtpClient(sentMessages, "<smtp-1@example.test>"), idGenerator: () => "msg_1" });
+
+    const firstResult = await sender({ userId: "user_1", exchangeId: comment.id, now });
+    const retryResult = await sender({ userId: "user_1", exchangeId: comment.id, now });
+
+    assert.equal(sentMessages.length, 1);
+    assert.equal(firstResult.messageId, "<smtp-1@example.test>");
+    assert.equal(retryResult.messageId, "<smtp-1@example.test>");
+  });
+
+  it("does not send a ticket comment email again when SMTP sent metadata exists without external message id", async () => {
+    const now = new Date("2026-01-01T12:00:00.000Z");
+    const crmRepository = createInMemoryCrmRepository();
+    const automationRepository = createInMemoryAutomationRepository();
+    const secretCrypto = createTaggingSecretCrypto();
+    const sentMessages: SmtpPlainTextMessage[] = [];
+    await automationRepository.emailAccounts.upsertEncrypted(createAccountInput(secretCrypto, now));
+    const client = await crmRepository.clients.create({ id: "client_1", userId: "user_1", fields: { name: "Acme", email: "client@acme.test" }, now });
+    const project = await crmRepository.projects.create({ id: "project_1", userId: "user_1", fields: { clientId: client.id, name: "Support" }, now });
+    const ticket = await crmRepository.tickets.create({ id: "ticket_1", userId: "user_1", fields: { projectId: project.id, title: "Broken form" }, now });
+    const comment = await crmRepository.exchanges.create({
+      id: "exchange_1",
+      userId: "user_1",
+      fields: {
+        clientId: client.id,
+        projectId: project.id,
+        ticketId: ticket.id,
+        type: "comment",
+        visibility: "external",
+        body: "I shipped a fix.",
+        metadata: { smtp: { sentAt: now.toISOString(), messageId: "<smtp-persisted@example.test>", headers: { "x-dcrm-sent": "true" } } },
+      },
+      now,
+    });
+    assert.equal(comment.externalMessageId, null);
+    const sender = createTicketCommentEmailSender({ automationRepository, crmRepository, secretCrypto, smtpClient: createRecordingSmtpClient(sentMessages, "<smtp-1@example.test>"), idGenerator: () => "msg_1" });
+
+    const result = await sender({ userId: "user_1", exchangeId: comment.id, now });
+
+    assert.equal(sentMessages.length, 0);
+    assert.equal(result.messageId, "<smtp-persisted@example.test>");
+    assert.equal(result.exchange.externalMessageId, null);
   });
 
   it("sends through the production SMTP client using decrypted saved account settings without an injected test client", async () => {
@@ -98,6 +154,28 @@ describe("SMTP ticket comment email sender", () => {
       assert.equal(smtpServer.sessions[0]?.message, "");
     } finally {
       await smtpServer.close();
+    }
+  });
+
+  it("settles pending SMTP reads when the server closes cleanly", async () => {
+    const server = net.createServer((socket) => {
+      socket.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    assert(typeof address === "object" && address !== null);
+    try {
+      const smtpClient = createNodeSmtpPlainTextClient();
+
+      await assert.rejects(
+        smtpClient.sendPlainText({
+          account: { host: "127.0.0.1", port: address.port, username: "", password: "", fromEmail: "me@example.com", fromName: "Work inbox" },
+          message: { from: "me@example.com", to: ["client@acme.test"], subject: "Re: Broken form", text: "Hello.", headers: { "x-dcrm-sent": "true" }, messageId: "<dcrm-msg_1@dcrm.local>" },
+        }),
+        /SMTP connection (?:ended|closed)/u,
+      );
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
   });
 });

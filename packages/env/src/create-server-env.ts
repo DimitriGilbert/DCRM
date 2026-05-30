@@ -10,7 +10,7 @@ const serverSchema = {
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
   CORS_ORIGIN: z.url(),
-  ENCRYPTION_KEY: z.string().min(32),
+  ENCRYPTION_KEY: z.string().refine(isValidEncryptionKey, "Encryption key must decode to 32 bytes for AES-256-GCM."),
   WEBHOOK_BASE_URL: z.url(),
   STORAGE_BACKEND: z.enum(["local", "s3_compatible"]).default("local"),
   LOCAL_STORAGE_PATH: z.string().min(1).default("./data/attachments"),
@@ -64,4 +64,19 @@ export function createServerEnv(runtimeEnv: Record<string, string | undefined>) 
   }
 
   return parsedEnv;
+}
+
+function isValidEncryptionKey(key: string): boolean {
+  const trimmedKey = key.trim();
+
+  if (/^[a-fA-F0-9]{64}$/u.test(trimmedKey)) {
+    return true;
+  }
+
+  const base64Key = Buffer.from(trimmedKey, "base64");
+  if (base64Key.byteLength === 32 && base64Key.toString("base64") === trimmedKey) {
+    return true;
+  }
+
+  return Buffer.from(key, "utf8").byteLength === 32;
 }

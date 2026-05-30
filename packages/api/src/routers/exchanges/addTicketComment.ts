@@ -21,14 +21,6 @@ export const addTicketComment = protectedProcedure.input(ticketCommentSchema).mu
   }
   const now = new Date();
   const exchange = await ctx.crmRepository.exchanges.create({ id: crypto.randomUUID(), userId: ctx.auth.user.id, fields: normalizeTicketCommentFields(input, { client, project, ticket }), now });
-  const sentEmail = input.emailToClient
-    ? await createTicketCommentEmailSender({
-        automationRepository: requireAutomationRepository(ctx.automationRepository),
-        crmRepository: ctx.crmRepository,
-        secretCrypto: requireSecretCrypto(ctx.secretCrypto),
-        smtpClient: requireSmtpClient(ctx.smtpClient),
-      })({ userId: ctx.auth.user.id, exchangeId: exchange.id, emailAccountId: input.emailAccountId, now })
-    : null;
   await ctx.eventService.emitApi({
     type: "exchange.created",
     userId: ctx.auth.user.id,
@@ -37,6 +29,14 @@ export const addTicketComment = protectedProcedure.input(ticketCommentSchema).mu
     changes: { after: { type: exchange.type, visibility: exchange.visibility, ticketId: ticket.id, projectId: project.id, clientId: client.id } },
   });
   await ctx.eventService.emitApi({ type: "ticket.updated", userId: ctx.auth.user.id, entity: { type: "ticket", id: ticket.id }, payload: { id: ticket.id, exchangeId: exchange.id, action: "comment_added" } });
+  const sentEmail = input.emailToClient
+    ? await createTicketCommentEmailSender({
+        automationRepository: requireAutomationRepository(ctx.automationRepository),
+        crmRepository: ctx.crmRepository,
+        secretCrypto: requireSecretCrypto(ctx.secretCrypto),
+        smtpClient: requireSmtpClient(ctx.smtpClient),
+      })({ userId: ctx.auth.user.id, exchangeId: exchange.id, emailAccountId: input.emailAccountId, now })
+    : null;
   return sentEmail?.exchange ?? exchange;
 });
 

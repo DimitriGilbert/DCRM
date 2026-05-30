@@ -92,25 +92,33 @@ function createSmtpReader(connection: SmtpConnection): { readonly readResponse: 
   const pending: Array<(response: SmtpResponse) => void> = [];
   const failures: Array<(error: Error) => void> = [];
 
+  const rejectPending = (error: Error) => {
+    const callbacks = failures.splice(0);
+    pending.splice(0);
+    for (const reject of callbacks) {
+      reject(error);
+    }
+  };
+
   connection.on("data", (chunk) => {
     buffer += chunk.toString("utf8");
     flushResponses();
   });
 
   connection.on("error", (error) => {
-    const callbacks = failures.splice(0);
-    pending.splice(0);
-    for (const reject of callbacks) {
-      reject(error);
-    }
+    rejectPending(error);
   });
 
   connection.on("timeout", () => {
-    const callbacks = failures.splice(0);
-    pending.splice(0);
-    for (const reject of callbacks) {
-      reject(new Error("SMTP response timed out."));
-    }
+    rejectPending(new Error("SMTP response timed out."));
+  });
+
+  connection.on("end", () => {
+    rejectPending(new Error("SMTP connection ended before a complete response was received."));
+  });
+
+  connection.on("close", () => {
+    rejectPending(new Error("SMTP connection closed before a complete response was received."));
   });
 
   function flushResponses() {

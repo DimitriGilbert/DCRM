@@ -72,7 +72,7 @@ export function createBillingService(options: { readonly config: BillingConfig; 
       }
       requireStripeConfig(options.config);
       const subscription = await options.repository.getByUserId({ userId: input.user.id });
-      if (hasActiveSubscription(subscription ?? null)) {
+      if (hasActiveSubscription(options.config, subscription ?? null)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Subscription is already active." });
       }
       const session = await stripeClient.createCheckoutSession({ config: options.config, user: input.user, existingCustomerId: subscription?.stripeCustomerId ?? null });
@@ -126,7 +126,7 @@ export async function assertHostedBillingAccess(input: { readonly config: Billin
     return;
   }
   const subscription = await input.repository.getByUserId({ userId: input.userId });
-  if (!hasActiveSubscription(subscription ?? null)) {
+  if (!hasActiveSubscription(input.config, subscription ?? null)) {
     throw new TRPCError({ code: "PAYMENT_REQUIRED", message: "An active hosted subscription is required." });
   }
 }
@@ -135,13 +135,13 @@ export function toBillingOverview(config: BillingConfig, subscription: Subscript
   return {
     enabled: config.enabled,
     hostedPrice: { amountCents: HOSTED_PRICE_CENTS, currency: HOSTED_PRICE_CURRENCY, interval: HOSTED_PRICE_INTERVAL },
-    hasActiveSubscription: hasActiveSubscription(subscription),
+    hasActiveSubscription: hasActiveSubscription(config, subscription),
     subscription,
   };
 }
 
-function hasActiveSubscription(subscription: SubscriptionRecord | null): boolean {
-  return Boolean(subscription && activeSubscriptionStatuses.some((status) => status === subscription.status));
+function hasActiveSubscription(config: BillingConfig, subscription: SubscriptionRecord | null): boolean {
+  return Boolean(subscription && subscription.stripePriceId === config.stripePriceId && activeSubscriptionStatuses.some((status) => status === subscription.status));
 }
 
 function normalizeSubscriptionStatus(value: string): SubscriptionStatus {

@@ -61,6 +61,10 @@ export function createTicketCommentEmailSender(input: {
       throw new Error("Ticket comment was not found.");
     }
     assertExternallySendableTicketComment(exchange);
+    const previousSend = existingSentEmail(exchange);
+    if (previousSend) {
+      return previousSend;
+    }
     const ticket = await input.crmRepository.tickets.getById({ userId: sendInput.userId, id: requireLinkedId(exchange.ticketId, "Ticket") });
     if (!ticket || ticket.deletedAt) {
       throw new Error("Ticket was not found.");
@@ -104,6 +108,25 @@ export function createTicketCommentEmailSender(input: {
     }
     return { exchange: updated, messageId, headers };
   };
+}
+
+function existingSentEmail(exchange: ExchangeRecord): SendTicketCommentEmailResult | null {
+  if (exchange.externalMessageId) {
+    return { exchange, messageId: exchange.externalMessageId, headers: extractSentHeaders(exchange.metadata) };
+  }
+  const smtp = exchange.metadata.smtp;
+  if (!isJsonObject(smtp) || typeof smtp.sentAt !== "string" || typeof smtp.messageId !== "string") {
+    return null;
+  }
+  return { exchange, messageId: smtp.messageId, headers: extractSentHeaders(exchange.metadata) };
+}
+
+function extractSentHeaders(metadata: JsonObject): Readonly<Record<string, string>> {
+  const smtp = metadata.smtp;
+  if (!isJsonObject(smtp) || !isJsonObject(smtp.headers)) {
+    return {};
+  }
+  return Object.fromEntries(Object.entries(smtp.headers).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
 }
 
 function assertExternallySendableTicketComment(exchange: ExchangeRecord): void {

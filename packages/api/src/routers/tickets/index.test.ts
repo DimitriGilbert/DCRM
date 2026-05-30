@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createEventService, createInMemoryEventRepository } from "@DCRM/events";
+import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
 import type { EventService } from "@DCRM/events";
 
 import { createInMemoryAutomationRepository } from "../../automation/repository.js";
 import { createInMemoryCrmRepository } from "../../crm/repository.js";
 import { appRouter } from "../index.js";
 
-import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
 import type { AutomationRepository } from "../../automation/repository.js";
 import type { Context } from "../../context.js";
 import type { CrmRepository } from "../../crm/repository.js";
@@ -124,6 +124,27 @@ describe("tickets and exchanges tRPC API", () => {
     assert.equal(comment.externalMessageId, "<sent@example.test>");
   });
 
+  it("emits ticket comment events even when optional email sending fails", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const automationRepository = createInMemoryAutomationRepository();
+    const eventService = createTestEventService();
+    const secretCrypto = createTaggingSecretCrypto();
+    await automationRepository.emailAccounts.upsertEncrypted(createAccountInput(secretCrypto, new Date("2026-01-01T12:00:00.000Z")));
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService, { automationRepository, secretCrypto, smtpClient: createFailingSmtpClient() }));
+    const client = await caller.clients.create({ name: "Ada Lovelace", email: "ada@example.test" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
+
+    await assert.rejects(caller.exchanges.addTicketComment({ ticketId: ticket.id, body: "Please try the form again.", visibility: "external", emailToClient: true }), /SMTP unavailable/u);
+    const exchanges = await crmRepository.exchanges.list({ userId: "user_1", type: "comment" });
+
+    assert.equal(exchanges.length, 1);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "project.created", "ticket.created", "exchange.created", "ticket.updated"],
+    );
+  });
+
   it("does not email internal ticket comments from the ticket comment API", async () => {
     const sentMessages: SmtpPlainTextMessage[] = [];
     const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService(), { smtpClient: createRecordingSmtpClient(sentMessages, "<sent@example.test>") }));
@@ -164,6 +185,14 @@ function createRecordingSmtpClient(messages: SmtpPlainTextMessage[], messageId: 
     async sendPlainText(input) {
       messages.push(input.message);
       return { messageId };
+    },
+  };
+}
+
+function createFailingSmtpClient(): SmtpPlainTextClient {
+  return {
+    async sendPlainText() {
+      throw new Error("SMTP unavailable");
     },
   };
 }

@@ -104,7 +104,12 @@ export type StoreUnmatchedEmailInput = {
 };
 
 export type ImapMailboxClient = {
-  readonly fetchNewMessages: (input: { readonly account: DecryptedImapAccount; readonly mailbox: string; readonly state: EmailSyncStateRecord | null }) => Promise<readonly ImapEmailMessage[]>;
+  readonly fetchNewMessages: (input: { readonly account: DecryptedImapAccount; readonly mailbox: string; readonly state: EmailSyncStateRecord | null }) => Promise<ImapMailboxFetchResult>;
+};
+
+export type ImapMailboxFetchResult = {
+  readonly messages: readonly ImapEmailMessage[];
+  readonly uidValidity: string | null;
 };
 
 export type ImapNetworkFetchRange = string | number[];
@@ -148,7 +153,12 @@ export type ImapNetworkLock = {
   readonly release: () => void;
 };
 
+export type ImapNetworkMailbox = {
+  readonly uidValidity?: bigint | number | string;
+};
+
 export type ImapNetworkClient = {
+  readonly mailbox?: ImapNetworkMailbox | false;
   readonly connect: () => Promise<void>;
   readonly getMailboxLock: (mailbox: string) => Promise<ImapNetworkLock>;
   readonly fetch: (range: ImapNetworkFetchRange, query: ImapNetworkFetchQuery, options: ImapNetworkFetchOptions) => AsyncIterable<ImapNetworkMessage>;
@@ -220,9 +230,10 @@ export function createEmailSyncProcessor({ automationRepository, clock = () => n
       const state = await emailSyncRepository.getState({ userId: account.userId, emailAccountId: account.id, mailbox });
       await emailSyncRepository.markRunning({ userId: account.userId, emailAccountId: account.id, mailbox, now: clock() });
       try {
-        const messages = await imapClient.fetchNewMessages({ account: decryptImapAccount(account, secretCrypto), mailbox, state });
+        const fetchResult = await imapClient.fetchNewMessages({ account: decryptImapAccount(account, secretCrypto), mailbox, state });
+        const messages = fetchResult.messages;
         totals.messagesFetched += messages.length;
-        let lastUid = state?.lastUid ?? null;
+        let lastUid = hasSameUidValidity(state, fetchResult.uidValidity) ? (state?.lastUid ?? null) : null;
         for (const message of messages) {
           lastUid = message.uid;
           if (hasLoopPreventionHeader(message)) {
@@ -236,7 +247,7 @@ export function createEmailSyncProcessor({ automationRepository, clock = () => n
             totals.unmatchedStored += 1;
           }
         }
-        await emailSyncRepository.markSucceeded({ userId: account.userId, emailAccountId: account.id, mailbox, lastUid, syncCursor: lastUid, now: clock() });
+        await emailSyncRepository.markSucceeded({ userId: account.userId, emailAccountId: account.id, mailbox, lastUid, syncCursor: fetchResult.uidValidity ?? state?.syncCursor ?? null, now: clock() });
       } catch (error) {
         await emailSyncRepository.markFailed({ userId: account.userId, emailAccountId: account.id, mailbox, error: safeError(error), now: clock() });
         throw error;
@@ -260,13 +271,14 @@ export function createNodeImapMailboxClient({ connectionFactory = createDefaultI
         const lock = await client.getMailboxLock(input.mailbox);
         try {
           const messages: ImapEmailMessage[] = [];
-          for await (const message of client.fetch(nextUidRange(input.state), { uid: true, source: { maxLength: maxMessageBytes }, envelope: true, internalDate: true, headers: true }, { uid: true })) {
+          const uidValidity = normalizeMailboxUidValidity(client.mailbox);
+          for await (const message of client.fetch(nextUidRange(input.state, uidValidity), { uid: true, source: { maxLength: maxMessageBytes }, envelope: true, internalDate: true, headers: true }, { uid: true })) {
             messages.push(await toImapEmailMessage(input.account, message));
             if (messages.length >= maxMessagesPerSync) {
               break;
             }
           }
-          return messages;
+          return { messages, uidValidity };
         } finally {
           lock.release();
         }
@@ -317,12 +329,33 @@ function createDefaultImapNetworkClient({ account }: { readonly account: Decrypt
   });
 }
 
-function nextUidRange(state: EmailSyncStateRecord | null): string {
-  const lastUid = state?.lastUid ? Number.parseInt(state.lastUid, 10) : 0;
+function nextUidRange(state: EmailSyncStateRecord | null, uidValidity: string | null): string {
+  const lastUid = hasSameUidValidity(state, uidValidity) && state?.lastUid ? Number.parseInt(state.lastUid, 10) : 0;
   if (Number.isSafeInteger(lastUid) && lastUid > 0) {
     return `${lastUid + 1}:*`;
   }
   return "1:*";
+}
+
+function hasSameUidValidity(state: EmailSyncStateRecord | null, uidValidity: string | null): boolean {
+  return !uidValidity || state?.syncCursor === uidValidity;
+}
+
+function normalizeUidValidity(value: bigint | number | string | undefined): string | null {
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return String(value);
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+  return null;
+}
+
+function normalizeMailboxUidValidity(mailbox: ImapNetworkMailbox | false | undefined): string | null {
+  return mailbox ? normalizeUidValidity(mailbox.uidValidity) : null;
 }
 
 async function toImapEmailMessage(account: DecryptedImapAccount, message: ImapNetworkMessage): Promise<ImapEmailMessage> {

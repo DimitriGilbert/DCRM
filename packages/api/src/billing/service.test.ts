@@ -43,9 +43,18 @@ test("hosted billing gate rejects unpaid hosted access when enabled", async () =
 });
 
 test("hosted billing gate allows active hosted subscribers", async () => {
-  const repository = createInMemoryBillingRepository([subscriptionRecord({ status: "active" })]);
+  const repository = createInMemoryBillingRepository([subscriptionRecord({ status: "active", stripePriceId: "price_24_yearly" })]);
 
   await assertHostedBillingAccess({ config: enabledConfig, repository, userId: "user_1", path: "clients.list" });
+});
+
+test("hosted billing gate rejects active subscriptions for a different Stripe price", async () => {
+  const repository = createInMemoryBillingRepository([subscriptionRecord({ status: "active", stripePriceId: "price_other" })]);
+
+  await assert.rejects(
+    assertHostedBillingAccess({ config: enabledConfig, repository, userId: "user_1", path: "clients.list" }),
+    (error: unknown) => error instanceof TRPCError && error.code === "PAYMENT_REQUIRED",
+  );
 });
 
 test("Stripe subscription webhook updates subscription status", async () => {
@@ -70,6 +79,35 @@ test("Stripe subscription webhook updates subscription status", async () => {
   assert.equal(updated?.status, "active");
   assert.equal(updated?.stripeSubscriptionId, "sub_123");
   assert.equal(updated?.stripePriceId, "price_24_yearly");
+});
+
+test("Stripe subscription webhook does not grant hosted access for active subscriptions on another price", async () => {
+  const repository = createInMemoryBillingRepository([subscriptionRecord({ status: "unknown", stripeCustomerId: "cus_123" })]);
+  const rawBody = JSON.stringify({
+    id: "evt_wrong_price",
+    type: "customer.subscription.updated",
+    data: {
+      object: {
+        id: "sub_wrong_price",
+        customer: "cus_123",
+        status: "active",
+        current_period_end: 1_767_225_600,
+        items: { data: [{ price: { id: "price_other" } }] },
+      },
+    },
+  });
+
+  const service = createBillingService({ config: enabledConfig, repository });
+  await service.handleWebhook({ rawBody, signature: signStripePayload(rawBody, enabledConfig.stripeWebhookSecret), now: new Date("2026-01-01T00:00:00.000Z") });
+
+  const overview = await service.getOverview({ userId: "user_1" });
+  assert.equal(overview.subscription?.status, "active");
+  assert.equal(overview.subscription?.stripePriceId, "price_other");
+  assert.equal(overview.hasActiveSubscription, false);
+  await assert.rejects(
+    assertHostedBillingAccess({ config: enabledConfig, repository, userId: "user_1", path: "clients.list" }),
+    (error: unknown) => error instanceof TRPCError && error.code === "PAYMENT_REQUIRED",
+  );
 });
 
 test("Stripe subscription webhook can create subscription from trusted metadata user", async () => {

@@ -53,4 +53,19 @@ describe("server environment", () => {
       }),
     );
   });
+
+  it("rejects encryption keys that do not decode to 32 bytes", () => {
+    assert.throws(() =>
+      createServerEnv({
+        APP_URL: "https://dcrm.example.com",
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        BETTER_AUTH_URL: "https://dcrm.example.com",
+        CORS_ORIGIN: "https://dcrm.example.com",
+        DATABASE_URL: "postgres://dcrm:dcrm@localhost:5432/dcrm",
+        ENCRYPTION_KEY: "not-a-valid-thirty-two-byte-key",
+        REDIS_URL: "redis://localhost:6379",
+        WEBHOOK_BASE_URL: "https://dcrm.example.com/api/webhooks",
+      }),
+    );
+  });
 });

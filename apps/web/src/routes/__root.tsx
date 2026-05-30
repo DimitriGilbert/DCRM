@@ -1,4 +1,5 @@
 import type { AppRouter } from "@DCRM/api/routers/index";
+import { DEFAULT_LOCALE } from "@DCRM/i18n";
 import { Toaster } from "@DCRM/ui/components/sonner";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -41,7 +42,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   return (
-    <html lang="en" className="dark">
+    <html lang={DEFAULT_LOCALE} className="dark">
       <head>
         <HeadContent />
       </head>

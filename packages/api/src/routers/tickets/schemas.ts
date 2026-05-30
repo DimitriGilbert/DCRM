@@ -29,6 +29,9 @@ export const listTicketsSchema = z.object({
   type: z.enum(TICKET_TYPES).optional(),
   status: z.enum(TICKET_STATUSES).optional(),
   priority: z.enum(TICKET_PRIORITIES).optional(),
+  tagIds: z.array(z.string().trim().min(1)).optional(),
+  createdFrom: z.coerce.date().optional(),
+  createdTo: z.coerce.date().optional(),
   includeDeleted: z.boolean().optional(),
 });
 

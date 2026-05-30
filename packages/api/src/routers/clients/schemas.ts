@@ -24,5 +24,8 @@ export const clientIdSchema = z.object({ id: z.string().trim().min(1) });
 
 export const listClientsSchema = z.object({
   search: z.string().trim().optional(),
+  tagIds: z.array(z.string().trim().min(1)).optional(),
+  createdFrom: z.coerce.date().optional(),
+  createdTo: z.coerce.date().optional(),
   includeDeleted: z.boolean().optional(),
 });

@@ -11,6 +11,7 @@
     "@DCRM/api": "workspace:*",
     "@DCRM/auth": "workspace:*",
     "@DCRM/env": "workspace:*",
+    "@DCRM/i18n": "workspace:*",
     "@DCRM/ui": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-form": "catalog:",

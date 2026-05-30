@@ -1,4 +1,5 @@
-import type { AttachmentTargetType, CustomFieldType, ExchangeType, ExchangeVisibility, LeadStage, ProjectStatus, TicketPriority, TicketStatus, TicketType } from "@DCRM/domain";
+import type { SupportedLocale } from "@DCRM/i18n";
+import type { AttachmentStorageBackend, AttachmentTargetType, CustomFieldType, ExchangeType, ExchangeVisibility, LeadStage, ProjectStatus, TicketPriority, TicketStatus, TicketType, UserThemePreference } from "@DCRM/domain";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -132,6 +133,55 @@ export type EntityTagRecord = {
   readonly updatedAt: Date;
 };
 
+export type AttachmentRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly targetType: AttachmentTargetType;
+  readonly targetId: string;
+  readonly storageBackend: AttachmentStorageBackend;
+  readonly storageKey: string;
+  readonly fileName: string;
+  readonly contentType: string | null;
+  readonly byteSize: number;
+  readonly checksum: string | null;
+  readonly metadata: JsonObject;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly deletedAt: Date | null;
+};
+
+export type NotificationRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly title: string;
+  readonly body: string | null;
+  readonly type: string;
+  readonly readAt: Date | null;
+  readonly entityType: string | null;
+  readonly entityId: string | null;
+  readonly metadata: JsonObject;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+export type UserSettingsRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly locale: SupportedLocale;
+  readonly theme: UserThemePreference;
+  readonly onboardingCompleted: boolean;
+  readonly preferences: JsonObject;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+};
+
+export type UserSettingsMutationFields = {
+  readonly locale?: SupportedLocale;
+  readonly theme?: UserThemePreference;
+  readonly onboardingCompleted?: boolean;
+  readonly preferences?: JsonObject;
+};
+
 export type ClientMutationFields = {
   readonly name: string;
   readonly email?: string | null;
@@ -215,9 +265,33 @@ export type ExchangeMutationFields = {
 
 export type ExchangeUpdateFields = Partial<ExchangeMutationFields>;
 
+export type AttachmentMutationFields = {
+  readonly targetType: AttachmentTargetType;
+  readonly targetId: string;
+  readonly storageBackend: AttachmentStorageBackend;
+  readonly storageKey: string;
+  readonly fileName: string;
+  readonly contentType?: string | null;
+  readonly byteSize: number;
+  readonly checksum?: string | null;
+  readonly metadata?: JsonObject;
+};
+
+export type NotificationMutationFields = {
+  readonly title: string;
+  readonly body?: string | null;
+  readonly type?: string;
+  readonly entityType?: string | null;
+  readonly entityId?: string | null;
+  readonly metadata?: JsonObject;
+};
+
 export type ClientListInput = {
   readonly userId: string;
   readonly search?: string;
+  readonly tagIds?: readonly string[];
+  readonly createdFrom?: Date;
+  readonly createdTo?: Date;
   readonly includeDeleted?: boolean;
 };
 
@@ -230,6 +304,9 @@ export type LeadListInput = {
   readonly userId: string;
   readonly search?: string;
   readonly stage?: LeadStage;
+  readonly tagIds?: readonly string[];
+  readonly createdFrom?: Date;
+  readonly createdTo?: Date;
   readonly includeDeleted?: boolean;
   readonly includeConverted?: boolean;
 };
@@ -244,6 +321,9 @@ export type ProjectListInput = {
   readonly clientId?: string;
   readonly search?: string;
   readonly status?: ProjectStatus;
+  readonly tagIds?: readonly string[];
+  readonly createdFrom?: Date;
+  readonly createdTo?: Date;
   readonly includeDeleted?: boolean;
 };
 
@@ -259,6 +339,19 @@ export type TicketListInput = {
   readonly type?: TicketType;
   readonly status?: TicketStatus;
   readonly priority?: TicketPriority;
+  readonly tagIds?: readonly string[];
+  readonly createdFrom?: Date;
+  readonly createdTo?: Date;
+  readonly includeDeleted?: boolean;
+};
+
+export type ExchangeListInput = {
+  readonly userId: string;
+  readonly search?: string;
+  readonly type?: ExchangeType;
+  readonly tagIds?: readonly string[];
+  readonly occurredFrom?: Date;
+  readonly occurredTo?: Date;
   readonly includeDeleted?: boolean;
 };
 
@@ -291,4 +384,11 @@ export type EntityTagInput = {
   readonly tagId: string;
   readonly entityType: AttachmentTargetType;
   readonly entityId: string;
+};
+
+export type AttachmentTargetInput = {
+  readonly userId: string;
+  readonly targetType: AttachmentTargetType;
+  readonly targetId: string;
+  readonly includeDeleted?: boolean;
 };

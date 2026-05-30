@@ -1,4 +1,7 @@
 import type {
+  AttachmentMutationFields,
+  AttachmentRecord,
+  AttachmentTargetInput,
   ClientIdInput,
   ClientListInput,
   ClientMutationFields,
@@ -7,6 +10,7 @@ import type {
   EntityTagInput,
   EntityTagRecord,
   ExchangeIdInput,
+  ExchangeListInput,
   ExchangeMutationFields,
   ExchangeRecord,
   ExchangeTimelineInput,
@@ -16,6 +20,8 @@ import type {
   LeadMutationFields,
   LeadRecord,
   LeadUpdateFields,
+  NotificationMutationFields,
+  NotificationRecord,
   ProjectIdInput,
   ProjectListInput,
   ProjectMutationFields,
@@ -28,6 +34,8 @@ import type {
   TicketMutationFields,
   TicketRecord,
   TicketUpdateFields,
+  UserSettingsMutationFields,
+  UserSettingsRecord,
 } from "./types.js";
 
 export type CrmRepository = {
@@ -63,6 +71,7 @@ export type CrmRepository = {
   readonly exchanges: {
     readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: ExchangeMutationFields; readonly now: Date }) => Promise<ExchangeRecord>;
     readonly getById: (input: ExchangeIdInput) => Promise<ExchangeRecord | undefined>;
+    readonly list: (input: ExchangeListInput) => Promise<readonly ExchangeRecord[]>;
     readonly listTimeline: (input: ExchangeTimelineInput) => Promise<readonly ExchangeRecord[]>;
     readonly update: (input: { readonly userId: string; readonly id: string; readonly fields: ExchangeUpdateFields; readonly now: Date }) => Promise<ExchangeRecord | undefined>;
     readonly setDeletedAt: (input: { readonly userId: string; readonly id: string; readonly deletedAt: Date | null; readonly now: Date }) => Promise<ExchangeRecord | undefined>;
@@ -79,6 +88,20 @@ export type CrmRepository = {
     readonly detach: (input: EntityTagInput) => Promise<boolean>;
     readonly listForEntity: (input: Omit<EntityTagInput, "tagId">) => Promise<readonly EntityTagRecord[]>;
   };
+  readonly attachments: {
+    readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: AttachmentMutationFields; readonly now: Date }) => Promise<AttachmentRecord>;
+    readonly listForTarget: (input: AttachmentTargetInput) => Promise<readonly AttachmentRecord[]>;
+    readonly sumByteSizeForUser: (input: { readonly userId: string }) => Promise<number>;
+  };
+  readonly notifications: {
+    readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: NotificationMutationFields; readonly now: Date }) => Promise<NotificationRecord>;
+    readonly list: (input: { readonly userId: string; readonly unreadOnly?: boolean; readonly limit?: number }) => Promise<readonly NotificationRecord[]>;
+    readonly markRead: (input: { readonly userId: string; readonly id: string; readonly now: Date }) => Promise<NotificationRecord | undefined>;
+  };
+  readonly userSettings: {
+    readonly getByUserId: (input: { readonly userId: string }) => Promise<UserSettingsRecord | undefined>;
+    readonly upsert: (input: { readonly id: string; readonly userId: string; readonly fields: UserSettingsMutationFields; readonly now: Date }) => Promise<UserSettingsRecord>;
+  };
 };
 
 export function createInMemoryCrmRepository(): CrmRepository {
@@ -89,6 +112,9 @@ export function createInMemoryCrmRepository(): CrmRepository {
   const exchanges: ExchangeRecord[] = [];
   const tags: TagRecord[] = [];
   const entityTags: EntityTagRecord[] = [];
+  const attachments: AttachmentRecord[] = [];
+  const notifications: NotificationRecord[] = [];
+  const userSettings: UserSettingsRecord[] = [];
 
   return {
     clients: {
@@ -123,6 +149,12 @@ export function createInMemoryCrmRepository(): CrmRepository {
             return false;
           }
           if (!input.includeDeleted && client.deletedAt) {
+            return false;
+          }
+          if (!matchesTagFilter(entityTags, input.userId, "client", client.id, input.tagIds)) {
+            return false;
+          }
+          if (!matchesDateRange(client.createdAt, input.createdFrom, input.createdTo)) {
             return false;
           }
           if (!search) {
@@ -191,6 +223,12 @@ export function createInMemoryCrmRepository(): CrmRepository {
             return false;
           }
           if (input.stage && lead.stage !== input.stage) {
+            return false;
+          }
+          if (!matchesTagFilter(entityTags, input.userId, "lead", lead.id, input.tagIds)) {
+            return false;
+          }
+          if (!matchesDateRange(lead.createdAt, input.createdFrom, input.createdTo)) {
             return false;
           }
           if (!search) {
@@ -290,6 +328,12 @@ export function createInMemoryCrmRepository(): CrmRepository {
           if (input.status && project.status !== input.status) {
             return false;
           }
+          if (!matchesTagFilter(entityTags, input.userId, "project", project.id, input.tagIds)) {
+            return false;
+          }
+          if (!matchesDateRange(project.createdAt, input.createdFrom, input.createdTo)) {
+            return false;
+          }
           if (!search) {
             return true;
           }
@@ -361,6 +405,12 @@ export function createInMemoryCrmRepository(): CrmRepository {
           if (input.priority && ticket.priority !== input.priority) {
             return false;
           }
+          if (!matchesTagFilter(entityTags, input.userId, "ticket", ticket.id, input.tagIds)) {
+            return false;
+          }
+          if (!matchesDateRange(ticket.createdAt, input.createdFrom, input.createdTo)) {
+            return false;
+          }
           if (!search) {
             return true;
           }
@@ -406,6 +456,32 @@ export function createInMemoryCrmRepository(): CrmRepository {
       },
       async getById(input) {
         return exchanges.find((exchange) => exchange.userId === input.userId && exchange.id === input.id);
+      },
+      async list(input) {
+        const search = input.search?.trim().toLowerCase();
+        return exchanges
+          .filter((exchange) => {
+            if (exchange.userId !== input.userId) {
+              return false;
+            }
+            if (!input.includeDeleted && exchange.deletedAt) {
+              return false;
+            }
+            if (input.type && exchange.type !== input.type) {
+              return false;
+            }
+            if (!matchesTagFilter(entityTags, input.userId, "exchange", exchange.id, input.tagIds)) {
+              return false;
+            }
+            if (!matchesDateRange(exchange.occurredAt, input.occurredFrom, input.occurredTo)) {
+              return false;
+            }
+            if (!search) {
+              return true;
+            }
+            return [exchange.subject, exchange.body, exchange.externalMessageId, exchange.threadId].some((value) => value?.toLowerCase().includes(search));
+          })
+          .sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime());
       },
       async listTimeline(input) {
         return exchanges
@@ -510,6 +586,93 @@ export function createInMemoryCrmRepository(): CrmRepository {
         return entityTags.filter((entityTag) => entityTag.userId === input.userId && entityTag.entityType === input.entityType && entityTag.entityId === input.entityId);
       },
     },
+    attachments: {
+      async create(input) {
+        const record: AttachmentRecord = {
+          id: input.id,
+          userId: input.userId,
+          targetType: input.fields.targetType,
+          targetId: input.fields.targetId,
+          storageBackend: input.fields.storageBackend,
+          storageKey: input.fields.storageKey,
+          fileName: input.fields.fileName,
+          contentType: input.fields.contentType ?? null,
+          byteSize: input.fields.byteSize,
+          checksum: input.fields.checksum ?? null,
+          metadata: input.fields.metadata ?? {},
+          createdAt: input.now,
+          updatedAt: input.now,
+          deletedAt: null,
+        };
+        attachments.push(record);
+        return record;
+      },
+      async listForTarget(input) {
+        return attachments.filter((attachment) => attachment.userId === input.userId && attachment.targetType === input.targetType && attachment.targetId === input.targetId && (input.includeDeleted || !attachment.deletedAt));
+      },
+      async sumByteSizeForUser(input) {
+        return attachments.reduce((total, attachment) => (attachment.userId === input.userId && !attachment.deletedAt ? total + attachment.byteSize : total), 0);
+      },
+    },
+    notifications: {
+      async create(input) {
+        const record: NotificationRecord = {
+          id: input.id,
+          userId: input.userId,
+          title: input.fields.title,
+          body: input.fields.body ?? null,
+          type: input.fields.type ?? "info",
+          readAt: null,
+          entityType: input.fields.entityType ?? null,
+          entityId: input.fields.entityId ?? null,
+          metadata: input.fields.metadata ?? {},
+          createdAt: input.now,
+          updatedAt: input.now,
+        };
+        notifications.push(record);
+        return record;
+      },
+      async list(input) {
+        const limit = input.limit ?? 50;
+        return notifications
+          .filter((notification) => notification.userId === input.userId && (!input.unreadOnly || !notification.readAt))
+          .toSorted((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+          .slice(0, limit);
+      },
+      async markRead(input) {
+        return updateById(notifications, input.userId, input.id, (notification) => ({ ...notification, readAt: input.now, updatedAt: input.now }));
+      },
+    },
+    userSettings: {
+      async getByUserId(input) {
+        return userSettings.find((settings) => settings.userId === input.userId);
+      },
+      async upsert(input) {
+        const existing = userSettings.find((settings) => settings.userId === input.userId);
+        if (existing) {
+          const updated: UserSettingsRecord = {
+            ...existing,
+            ...input.fields,
+            updatedAt: input.now,
+          };
+          const index = userSettings.findIndex((settings) => settings.userId === input.userId);
+          userSettings[index] = updated;
+          return updated;
+        }
+        const record: UserSettingsRecord = {
+          id: input.id,
+          userId: input.userId,
+          locale: input.fields.locale ?? "en",
+          theme: input.fields.theme ?? "system",
+          onboardingCompleted: input.fields.onboardingCompleted ?? false,
+          preferences: input.fields.preferences ?? {},
+          createdAt: input.now,
+          updatedAt: input.now,
+        };
+        userSettings.push(record);
+        return record;
+      },
+    },
   };
 }
 
@@ -531,4 +694,21 @@ function updateById<TRecord extends { readonly id: string; readonly userId: stri
 
 function matchesEntityTag(record: EntityTagRecord, input: EntityTagInput): boolean {
   return record.userId === input.userId && record.tagId === input.tagId && record.entityType === input.entityType && record.entityId === input.entityId;
+}
+
+function matchesTagFilter(records: readonly EntityTagRecord[], userId: string, entityType: EntityTagRecord["entityType"], entityId: string, tagIds: readonly string[] | undefined): boolean {
+  if (!tagIds || tagIds.length === 0) {
+    return true;
+  }
+  return tagIds.every((tagId) => records.some((record) => record.userId === userId && record.entityType === entityType && record.entityId === entityId && record.tagId === tagId));
+}
+
+function matchesDateRange(value: Date, from: Date | undefined, to: Date | undefined): boolean {
+  if (from && value < from) {
+    return false;
+  }
+  if (to && value > to) {
+    return false;
+  }
+  return true;
 }

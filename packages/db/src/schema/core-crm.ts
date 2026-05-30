@@ -332,6 +332,33 @@ export const userSettings = pgTable(
   (table) => [uniqueIndex("user_settings_user_id_idx").on(table.userId)],
 );
 
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body"),
+    type: text("type").default("info").notNull(),
+    readAt: timestamp("read_at"),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    metadata: jsonb("metadata").$type<JsonObject>().default({}).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("notifications_user_id_idx").on(table.userId),
+    index("notifications_read_at_idx").on(table.readAt),
+    index("notifications_entity_idx").on(table.entityType, table.entityId),
+  ],
+);
+
 export const coreCrmTables = [
   clients,
   leads,
@@ -343,6 +370,7 @@ export const coreCrmTables = [
   entityTags,
   attachments,
   userSettings,
+  notifications,
 ] as const;
 
 export const clientRelations = relations(clients, ({ many, one }) => ({
@@ -451,6 +479,13 @@ export const attachmentRelations = relations(attachments, ({ one }) => ({
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   user: one(user, {
     fields: [userSettings.userId],
+    references: [user.id],
+  }),
+}));
+
+export const notificationRelations = relations(notifications, ({ one }) => ({
+  user: one(user, {
+    fields: [notifications.userId],
     references: [user.id],
   }),
 }));

@@ -30,6 +30,9 @@ export const listProjectsSchema = z.object({
   clientId: z.string().trim().min(1).optional(),
   search: z.string().trim().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
+  tagIds: z.array(z.string().trim().min(1)).optional(),
+  createdFrom: z.coerce.date().optional(),
+  createdTo: z.coerce.date().optional(),
   includeDeleted: z.boolean().optional(),
 });
 

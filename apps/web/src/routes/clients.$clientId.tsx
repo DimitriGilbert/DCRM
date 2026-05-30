@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { toast } from "sonner";
 
+import { AttachmentPanel, AttachmentUploadForm } from "@/features/attachments/components";
+import type { AttachmentCreateInput } from "@/features/attachments/components";
 import { getUser } from "@/functions/get-user";
 import { BackButton, TagCreateForm } from "@/features/client-lead/forms";
 import type { TagFormValues } from "@/features/client-lead/forms";
@@ -31,10 +33,12 @@ function RouteComponent() {
   const tags = useQuery(trpc.tags.list.queryOptions({ includeDeleted: false }));
   const entityTags = useQuery(trpc.tags.listEntity.queryOptions({ entityType: "client", entityId: clientId }));
   const timeline = useQuery(trpc.exchanges.timeline.queryOptions({ clientId, includeDeleted: false }));
+  const attachments = useQuery(trpc.attachments.listForTarget.queryOptions({ targetType: "client", targetId: clientId }));
   const createTag = useMutation(trpc.tags.create.mutationOptions());
   const attachTag = useMutation(trpc.tags.attach.mutationOptions());
   const detachTag = useMutation(trpc.tags.detach.mutationOptions());
   const createExchange = useMutation(trpc.exchanges.create.mutationOptions());
+  const createAttachment = useMutation(trpc.attachments.create.mutationOptions());
 
   async function refreshTags() {
     await queryClient.invalidateQueries();
@@ -65,6 +69,12 @@ function RouteComponent() {
     toast.success("Internal note added", { description: "The note is private and never email-sendable." });
   }
 
+  async function handleAttachment(input: AttachmentCreateInput) {
+    await createAttachment.mutateAsync(input);
+    await queryClient.invalidateQueries();
+    toast.success("File attached", { description: `${input.fileName} was attached to this client.` });
+  }
+
   const attachedTagIds = new Set(entityTags.data?.map((tag) => tag.tagId) ?? []);
 
   return (
@@ -76,6 +86,11 @@ function RouteComponent() {
         actions={<div className="flex gap-2"><BackButton href="/clients" label="Back" /><Button render={<a href={`/clients/${clientId}/edit`} />}>Edit client</Button></div>}
       />
       {client.isError ? <ErrorState title="Client could not load" /> : client.data ? <ClientDetails client={client.data} /> : <LoadingCards />}
+      {client.data ? (
+        <AttachmentPanel attachments={attachments.data ?? []}>
+          <AttachmentUploadForm targetType="client" targetId={clientId} maxBytes={25 * 1024 * 1024} submitting={createAttachment.isPending} onSubmit={handleAttachment} />
+        </AttachmentPanel>
+      ) : null}
       {timeline.isError ? <ErrorState title="Client timeline could not load" /> : timeline.data ? <ExchangeTimeline title="Client timeline" description="Unified exchanges across this client, including project and ticket context when linked." exchanges={timeline.data} /> : <LoadingCards />}
       {client.data ? (
         <FormShell title="Add internal client note" description="Notes are always internal-only timeline entries, not outbound messages.">

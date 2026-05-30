@@ -30,6 +30,9 @@ export const leadIdSchema = z.object({ id: z.string().trim().min(1) });
 export const listLeadsSchema = z.object({
   search: z.string().trim().optional(),
   stage: z.enum(LEAD_STAGES).optional(),
+  tagIds: z.array(z.string().trim().min(1)).optional(),
+  createdFrom: z.coerce.date().optional(),
+  createdTo: z.coerce.date().optional(),
   includeDeleted: z.boolean().optional(),
   includeConverted: z.boolean().optional(),
 });

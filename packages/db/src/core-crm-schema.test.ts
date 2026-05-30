@@ -14,6 +14,7 @@ import {
   exchanges,
   leadStageEnum,
   leads,
+  notifications,
   projects,
   tags,
   tickets,
@@ -32,10 +33,12 @@ describe("core CRM schema public exports", () => {
     assert.equal(getTableName(entityTags), "entity_tags");
     assert.equal(getTableName(attachments), "attachments");
     assert.equal(getTableName(userSettings), "user_settings");
+    assert.equal(getTableName(notifications), "notifications");
 
     const clientColumns = getTableColumns(clients);
     const exchangeColumns = getTableColumns(exchanges);
     const settingsColumns = getTableColumns(userSettings);
+    const notificationColumns = getTableColumns(notifications);
 
     assert.ok(clientColumns.userId);
     assert.ok(clientColumns.createdAt);
@@ -43,6 +46,9 @@ describe("core CRM schema public exports", () => {
     assert.ok(clientColumns.deletedAt);
     assert.ok(exchangeColumns.ticketId);
     assert.ok(settingsColumns.userId);
+    assert.ok(notificationColumns.userId);
+    assert.ok(notificationColumns.readAt);
+    assert.ok(notificationColumns.entityId);
 
     assert.deepEqual(leadStageEnum.enumValues, ["new", "contacted", "qualified", "proposal", "won", "lost"]);
     assert.deepEqual(exchangeTypeEnum.enumValues, ["email", "note", "call", "meeting", "comment"]);
@@ -63,6 +69,7 @@ describe("core CRM schema public exports", () => {
         "entity_tags",
         "attachments",
         "user_settings",
+        "notifications",
       ],
     );
   });

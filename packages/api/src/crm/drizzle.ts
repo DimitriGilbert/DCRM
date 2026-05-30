@@ -1,9 +1,11 @@
 import { createDb } from "@DCRM/db";
-import { clients, entityTags, exchanges, leads, projects, tags, tickets } from "@DCRM/db/schema/core-crm";
-import { and, asc, eq, ilike, isNull, or } from "drizzle-orm";
+import { attachments, clients, entityTags, exchanges, leads, notifications, projects, tags, tickets, userSettings } from "@DCRM/db/schema/core-crm";
+import { resolveLocale } from "@DCRM/i18n";
+import type { AttachmentTargetType } from "@DCRM/domain";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sum } from "drizzle-orm";
 
 import type { CrmRepository } from "./repository.js";
-import type { ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, ProjectRecord, TagRecord, TicketRecord } from "./types.js";
+import type { AttachmentRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
 
 type CrmDatabase = ReturnType<typeof createDb>;
 
@@ -28,8 +30,14 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           const term = `%${search}%`;
           predicates.push(or(ilike(clients.name, term), ilike(clients.email, term), ilike(clients.phone, term), ilike(clients.company, term), ilike(clients.website, term), ilike(clients.notes, term)) ?? eq(clients.userId, input.userId));
         }
+        if (input.createdFrom) {
+          predicates.push(gte(clients.createdAt, input.createdFrom));
+        }
+        if (input.createdTo) {
+          predicates.push(lte(clients.createdAt, input.createdTo));
+        }
         const rows = await database.select().from(clients).where(and(...predicates));
-        return rows.map(rowToClient);
+        return filterRowsByTags(database, input.userId, "client", rows, input.tagIds).then((filteredRows) => filteredRows.map(rowToClient));
       },
       async update(input) {
         const rows = await database
@@ -73,8 +81,14 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           const term = `%${search}%`;
           predicates.push(or(ilike(leads.name, term), ilike(leads.email, term), ilike(leads.phone, term), ilike(leads.company, term), ilike(leads.website, term), ilike(leads.notes, term), ilike(leads.source, term)) ?? eq(leads.userId, input.userId));
         }
+        if (input.createdFrom) {
+          predicates.push(gte(leads.createdAt, input.createdFrom));
+        }
+        if (input.createdTo) {
+          predicates.push(lte(leads.createdAt, input.createdTo));
+        }
         const rows = await database.select().from(leads).where(and(...predicates));
-        return rows.map(rowToLead);
+        return filterRowsByTags(database, input.userId, "lead", rows, input.tagIds).then((filteredRows) => filteredRows.map(rowToLead));
       },
       async update(input) {
         const rows = await database
@@ -151,8 +165,14 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           const term = `%${search}%`;
           predicates.push(or(ilike(projects.name, term), ilike(projects.description, term)) ?? eq(projects.userId, input.userId));
         }
+        if (input.createdFrom) {
+          predicates.push(gte(projects.createdAt, input.createdFrom));
+        }
+        if (input.createdTo) {
+          predicates.push(lte(projects.createdAt, input.createdTo));
+        }
         const rows = await database.select().from(projects).where(and(...predicates));
-        return rows.map(rowToProject);
+        return filterRowsByTags(database, input.userId, "project", rows, input.tagIds).then((filteredRows) => filteredRows.map(rowToProject));
       },
       async update(input) {
         const rows = await database
@@ -202,8 +222,14 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           const term = `%${search}%`;
           predicates.push(or(ilike(tickets.title, term), ilike(tickets.description, term)) ?? eq(tickets.userId, input.userId));
         }
+        if (input.createdFrom) {
+          predicates.push(gte(tickets.createdAt, input.createdFrom));
+        }
+        if (input.createdTo) {
+          predicates.push(lte(tickets.createdAt, input.createdTo));
+        }
         const rows = await database.select().from(tickets).where(and(...predicates));
-        return rows.map(rowToTicket);
+        return filterRowsByTags(database, input.userId, "ticket", rows, input.tagIds).then((filteredRows) => filteredRows.map(rowToTicket));
       },
       async update(input) {
         const rows = await database
@@ -230,6 +256,28 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
       async getById(input) {
         const rows = await database.select().from(exchanges).where(and(eq(exchanges.userId, input.userId), eq(exchanges.id, input.id))).limit(1);
         return rows[0] ? rowToExchange(rows[0]) : undefined;
+      },
+      async list(input) {
+        const search = input.search?.trim();
+        const predicates = [eq(exchanges.userId, input.userId)];
+        if (!input.includeDeleted) {
+          predicates.push(isNull(exchanges.deletedAt));
+        }
+        if (input.type) {
+          predicates.push(eq(exchanges.type, input.type));
+        }
+        if (search) {
+          const term = `%${search}%`;
+          predicates.push(or(ilike(exchanges.subject, term), ilike(exchanges.body, term), ilike(exchanges.externalMessageId, term), ilike(exchanges.threadId, term)) ?? eq(exchanges.userId, input.userId));
+        }
+        if (input.occurredFrom) {
+          predicates.push(gte(exchanges.occurredAt, input.occurredFrom));
+        }
+        if (input.occurredTo) {
+          predicates.push(lte(exchanges.occurredAt, input.occurredTo));
+        }
+        const rows = await database.select().from(exchanges).where(and(...predicates)).orderBy(asc(exchanges.occurredAt));
+        return filterRowsByTags(database, input.userId, "exchange", rows, input.tagIds).then((filteredRows) => filteredRows.map(rowToExchange));
       },
       async listTimeline(input) {
         const predicates = [eq(exchanges.userId, input.userId)];
@@ -325,6 +373,61 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         return rows.map(rowToEntityTag);
       },
     },
+    attachments: {
+      async create(input) {
+        const rows = await database.insert(attachments).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
+        return requireAttachment(rows[0], input.id);
+      },
+      async listForTarget(input) {
+        const rows = await database
+          .select()
+          .from(attachments)
+          .where(input.includeDeleted ? and(eq(attachments.userId, input.userId), eq(attachments.targetType, input.targetType), eq(attachments.targetId, input.targetId)) : and(eq(attachments.userId, input.userId), eq(attachments.targetType, input.targetType), eq(attachments.targetId, input.targetId), isNull(attachments.deletedAt)))
+          .orderBy(asc(attachments.createdAt));
+        return rows.map(rowToAttachment);
+      },
+      async sumByteSizeForUser(input) {
+        const rows = await database.select({ total: sum(attachments.byteSize) }).from(attachments).where(and(eq(attachments.userId, input.userId), isNull(attachments.deletedAt)));
+        return Number(rows[0]?.total ?? 0);
+      },
+    },
+    notifications: {
+      async create(input) {
+        const rows = await database.insert(notifications).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
+        return requireNotification(rows[0], input.id);
+      },
+      async list(input) {
+        const rows = await database
+          .select()
+          .from(notifications)
+          .where(input.unreadOnly ? and(eq(notifications.userId, input.userId), isNull(notifications.readAt)) : eq(notifications.userId, input.userId))
+          .orderBy(desc(notifications.createdAt))
+          .limit(input.limit ?? 50);
+        return rows.map(rowToNotification);
+      },
+      async markRead(input) {
+        const rows = await database
+          .update(notifications)
+          .set({ readAt: input.now, updatedAt: input.now })
+          .where(and(eq(notifications.userId, input.userId), eq(notifications.id, input.id)))
+          .returning();
+        return rows[0] ? rowToNotification(rows[0]) : undefined;
+      },
+    },
+    userSettings: {
+      async getByUserId(input) {
+        const rows = await database.select().from(userSettings).where(eq(userSettings.userId, input.userId)).limit(1);
+        return rows[0] ? rowToUserSettings(rows[0]) : undefined;
+      },
+      async upsert(input) {
+        const rows = await database
+          .insert(userSettings)
+          .values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now })
+          .onConflictDoUpdate({ target: userSettings.userId, set: { ...input.fields, updatedAt: input.now } })
+          .returning();
+        return requireUserSettings(rows[0], input.userId);
+      },
+    },
   };
 }
 
@@ -354,6 +457,18 @@ function rowToExchange(row: typeof exchanges.$inferSelect): ExchangeRecord {
 
 function rowToEntityTag(row: typeof entityTags.$inferSelect): EntityTagRecord {
   return row;
+}
+
+function rowToAttachment(row: typeof attachments.$inferSelect): AttachmentRecord {
+  return row;
+}
+
+function rowToNotification(row: typeof notifications.$inferSelect): NotificationRecord {
+  return row;
+}
+
+function rowToUserSettings(row: typeof userSettings.$inferSelect): UserSettingsRecord {
+  return { ...row, locale: resolveLocale(row.locale) };
 }
 
 function requireClient(row: typeof clients.$inferSelect | undefined, id: string): ClientRecord {
@@ -403,4 +518,37 @@ function requireEntityTag(row: typeof entityTags.$inferSelect | undefined, tagId
     throw new Error(`Entity tag could not be persisted: ${tagId}`);
   }
   return rowToEntityTag(row);
+}
+
+function requireAttachment(row: typeof attachments.$inferSelect | undefined, id: string): AttachmentRecord {
+  if (!row) {
+    throw new Error(`Attachment could not be persisted: ${id}`);
+  }
+  return rowToAttachment(row);
+}
+
+function requireNotification(row: typeof notifications.$inferSelect | undefined, id: string): NotificationRecord {
+  if (!row) {
+    throw new Error(`Notification could not be persisted: ${id}`);
+  }
+  return rowToNotification(row);
+}
+
+function requireUserSettings(row: typeof userSettings.$inferSelect | undefined, userId: string): UserSettingsRecord {
+  if (!row) {
+    throw new Error(`Settings could not be persisted for user: ${userId}`);
+  }
+  return rowToUserSettings(row);
+}
+
+function filterRowsByTags<TRow extends { readonly id: string }>(database: CrmDatabase, userId: string, entityType: AttachmentTargetType, rows: readonly TRow[], tagIds: readonly string[] | undefined): Promise<readonly TRow[]> {
+  if (!tagIds || tagIds.length === 0 || rows.length === 0) {
+    return Promise.resolve(rows);
+  }
+  const rowIds = rows.map((row) => row.id);
+  return database
+    .select({ entityId: entityTags.entityId, tagId: entityTags.tagId })
+    .from(entityTags)
+    .where(and(eq(entityTags.userId, userId), eq(entityTags.entityType, entityType), inArray(entityTags.entityId, rowIds), inArray(entityTags.tagId, [...tagIds])))
+    .then((matches) => rows.filter((row) => tagIds.every((tagId) => matches.some((match) => match.entityId === row.id && match.tagId === tagId))));
 }

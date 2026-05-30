@@ -45,6 +45,10 @@ export function notFound(message: string): TRPCError {
   return new TRPCError({ code: "NOT_FOUND", message });
 }
 
+export function badRequest(message: string): TRPCError {
+  return new TRPCError({ code: "BAD_REQUEST", message });
+}
+
 function parseCustomFields(definitions: readonly CustomFieldDefinition[], values: Record<string, unknown> | undefined) {
   try {
     return validateCustomFieldValues(definitions, values);

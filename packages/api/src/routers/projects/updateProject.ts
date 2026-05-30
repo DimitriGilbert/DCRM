@@ -4,7 +4,7 @@ import { projectUpdateFieldsSchema } from "./schemas.js";
 
 export const updateProject = protectedProcedure.input(projectUpdateFieldsSchema).mutation(async ({ ctx, input }) => {
   const before = await ctx.crmRepository.projects.getById({ userId: ctx.auth.user.id, id: input.id });
-  if (!before) {
+  if (!before || before.deletedAt) {
     throw notFound("Project not found.");
   }
   if (input.clientId !== undefined) {

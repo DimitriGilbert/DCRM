@@ -117,6 +117,27 @@ describe("projects tRPC API", () => {
     );
   });
 
+  it("rejects direct deleted project access and keeps repeated delete stable", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+
+    const deleted = await caller.projects.delete({ id: project.id });
+    const repeatedDelete = await caller.projects.delete({ id: project.id });
+
+    await assert.rejects(caller.projects.get({ id: project.id }), /Project not found/u);
+    await assert.rejects(caller.projects.update({ id: project.id, name: "Deleted project" }), /Project not found/u);
+    await assert.rejects(caller.projects.updateStatus({ id: project.id, status: "active" }), /Project not found/u);
+    assert.deepEqual(repeatedDelete.deletedAt, deleted.deletedAt);
+    assert.deepEqual(repeatedDelete.updatedAt, deleted.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "project.created", "project.deleted"],
+    );
+  });
+
   it("manages project tags without allowing cross-user project tagging", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();
@@ -151,6 +172,21 @@ describe("projects tRPC API", () => {
     assert.deepEqual(
       (await eventService.listForUser("user_1")).map((event) => event.type),
       ["client.created", "project.created", "project.status_changed"],
+    );
+  });
+
+  it("treats repeated project status updates as stable no-ops", async () => {
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild", status: "active" });
+
+    const repeated = await caller.projects.updateStatus({ id: project.id, status: "active" });
+
+    assert.deepEqual(repeated.updatedAt, project.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "project.created"],
     );
   });
 });

@@ -3,6 +3,13 @@ import { notFound } from "./helpers.js";
 import { leadIdSchema } from "./schemas.js";
 
 export const deleteLead = protectedProcedure.input(leadIdSchema).mutation(async ({ ctx, input }) => {
+  const before = await ctx.crmRepository.leads.getById({ userId: ctx.auth.user.id, id: input.id });
+  if (!before) {
+    throw notFound("Lead not found.");
+  }
+  if (before.deletedAt) {
+    return before;
+  }
   const now = new Date();
   const lead = await ctx.crmRepository.leads.setDeletedAt({ userId: ctx.auth.user.id, id: input.id, deletedAt: now, now });
   if (!lead) {

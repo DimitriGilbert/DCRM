@@ -4,7 +4,7 @@ import { ticketUpdateFieldsSchema } from "./schemas.js";
 
 export const updateTicket = protectedProcedure.input(ticketUpdateFieldsSchema).mutation(async ({ ctx, input }) => {
   const before = await ctx.crmRepository.tickets.getById({ userId: ctx.auth.user.id, id: input.id });
-  if (!before) {
+  if (!before || before.deletedAt) {
     throw notFound("Ticket not found.");
   }
   if (input.projectId !== undefined) {

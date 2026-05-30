@@ -4,7 +4,7 @@ import { leadIdSchema } from "./schemas.js";
 
 export const convertLead = protectedProcedure.input(leadIdSchema).mutation(async ({ ctx, input }) => {
   const before = await ctx.crmRepository.leads.getById({ userId: ctx.auth.user.id, id: input.id });
-  if (!before) {
+  if (!before || before.deletedAt) {
     throw notFound("Lead not found.");
   }
   if (before.convertedAt) {

@@ -61,6 +61,46 @@ describe("tickets and exchanges tRPC API", () => {
     );
   });
 
+  it("rejects direct deleted ticket access and keeps repeated delete stable", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
+
+    const deleted = await caller.tickets.delete({ id: ticket.id });
+    const repeatedDelete = await caller.tickets.delete({ id: ticket.id });
+
+    await assert.rejects(caller.tickets.get({ id: ticket.id }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.update({ id: ticket.id, title: "Deleted ticket" }), /Ticket not found/u);
+    await assert.rejects(caller.tickets.updateStatus({ id: ticket.id, status: "closed" }), /Ticket not found/u);
+    assert.deepEqual(repeatedDelete.deletedAt, deleted.deletedAt);
+    assert.deepEqual(repeatedDelete.updatedAt, deleted.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "project.created", "ticket.created", "ticket.deleted"],
+    );
+  });
+
+  it("keeps repeated ticket status updates from changing closedAt or emitting events", async () => {
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
+    const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
+
+    const closed = await caller.tickets.updateStatus({ id: ticket.id, status: "closed" });
+    const repeatedClosed = await caller.tickets.updateStatus({ id: ticket.id, status: "closed" });
+
+    assert.deepEqual(repeatedClosed.closedAt, closed.closedAt);
+    assert.deepEqual(repeatedClosed.updatedAt, closed.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "project.created", "ticket.created", "ticket.status_changed"],
+    );
+  });
+
   it("rejects ticket parent project IDs that are missing, deleted, or owned by another user", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();
@@ -145,6 +185,25 @@ describe("tickets and exchanges tRPC API", () => {
 
     assert.equal(note.type, "note");
     assert.equal(note.visibility, "internal");
+  });
+
+  it("rejects deleted exchange reads and updates while keeping repeated delete stable", async () => {
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const exchange = await caller.exchanges.create({ clientId: client.id, type: "note", body: "Private pricing concern" });
+
+    const deleted = await caller.exchanges.delete({ id: exchange.id });
+    const repeatedDelete = await caller.exchanges.delete({ id: exchange.id });
+
+    await assert.rejects(caller.exchanges.get({ id: exchange.id }), /Exchange not found/u);
+    await assert.rejects(caller.exchanges.update({ id: exchange.id, body: "Changed" }), /Exchange not found/u);
+    assert.deepEqual(repeatedDelete.deletedAt, deleted.deletedAt);
+    assert.deepEqual(repeatedDelete.updatedAt, deleted.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "exchange.created", "exchange.deleted"],
+    );
   });
 
   it("emails external ticket comments to the client through SMTP and records threading headers", async () => {

@@ -5,7 +5,7 @@ import { exchangeUpdateFieldsSchema } from "./schemas.js";
 
 export const updateExchange = protectedProcedure.input(exchangeUpdateFieldsSchema).mutation(async ({ ctx, input }) => {
   const before = await ctx.crmRepository.exchanges.getById({ userId: ctx.auth.user.id, id: input.id });
-  if (!before) {
+  if (!before || before.deletedAt) {
     throw notFound("Exchange not found.");
   }
   const scope = input.clientId !== undefined || input.projectId !== undefined || input.ticketId !== undefined ? await resolveExchangeScope(ctx, input) : { client: null, project: null, ticket: null };

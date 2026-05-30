@@ -77,6 +77,18 @@ describe("leads tRPC API", () => {
     );
   });
 
+  it("rejects reading a soft-deleted lead through the direct get API", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const lead = await caller.leads.create({ name: "Deleted lead" });
+    await caller.leads.delete({ id: lead.id });
+
+    await assert.rejects(caller.leads.get({ id: lead.id }), /Lead not found/u);
+    assert.deepEqual(
+      (await caller.leads.list({ includeDeleted: true })).map((record) => record.id),
+      [lead.id],
+    );
+  });
+
   it("moves a lead stage through the dedicated pipeline mutation", async () => {
     const eventService = createTestEventService();
     const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), eventService));
@@ -128,6 +140,24 @@ describe("leads tRPC API", () => {
       (await eventService.listForUser("user_1")).map((event) => event.type),
       ["lead.created", "lead.stage_changed", "lead.converted", "client.created"],
     );
+  });
+
+  it("rejects deleted lead mutations and converted lead stage regressions", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const deletedLead = await caller.leads.create({ name: "Deleted lead" });
+    await caller.leads.delete({ id: deletedLead.id });
+
+    await assert.rejects(caller.leads.update({ id: deletedLead.id, name: "Changed" }), /Lead not found/u);
+    await assert.rejects(caller.leads.updateStage({ id: deletedLead.id, stage: "qualified" }), /Lead not found/u);
+    await assert.rejects(caller.leads.convert({ id: deletedLead.id }), /Lead not found/u);
+
+    const convertedLead = await caller.leads.create({ name: "Converted lead", stage: "proposal" });
+    await caller.leads.convert({ id: convertedLead.id });
+
+    await assert.rejects(caller.leads.update({ id: convertedLead.id, stage: "lost" }), /Converted leads must remain in the won stage/u);
+    await assert.rejects(caller.leads.updateStage({ id: convertedLead.id, stage: "qualified" }), /Converted leads must remain in the won stage/u);
   });
 });
 

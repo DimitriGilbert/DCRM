@@ -1,13 +1,17 @@
 import { protectedProcedure } from "../../index.js";
-import { isStageChange, normalizeUpdateLeadFields, notFound } from "./helpers.js";
+import { conflict, isStageChange, normalizeUpdateLeadFields, notFound } from "./helpers.js";
 import { leadUpdateFieldsSchema } from "./schemas.js";
 
 export const updateLead = protectedProcedure.input(leadUpdateFieldsSchema).mutation(async ({ ctx, input }) => {
   const before = await ctx.crmRepository.leads.getById({ userId: ctx.auth.user.id, id: input.id });
-  if (!before) {
+  if (!before || before.deletedAt) {
     throw notFound("Lead not found.");
   }
-  const lead = await ctx.crmRepository.leads.update({ userId: ctx.auth.user.id, id: input.id, fields: normalizeUpdateLeadFields(input), now: new Date() });
+  if (before.convertedAt && input.stage !== undefined && input.stage !== "won") {
+    throw conflict("Converted leads must remain in the won stage.");
+  }
+  const fields = normalizeUpdateLeadFields(input);
+  const lead = await ctx.crmRepository.leads.update({ userId: ctx.auth.user.id, id: input.id, fields, now: new Date() });
   if (!lead) {
     throw notFound("Lead not found.");
   }

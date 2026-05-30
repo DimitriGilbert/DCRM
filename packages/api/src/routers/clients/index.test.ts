@@ -71,6 +71,43 @@ describe("clients tRPC API", () => {
     );
   });
 
+  it("rejects direct access to deleted clients and keeps delete and restore idempotent", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    const deleted = await caller.clients.delete({ id: client.id });
+    const repeatedDelete = await caller.clients.delete({ id: client.id });
+    await assert.rejects(caller.clients.get({ id: client.id }), /Client not found/u);
+    await assert.rejects(caller.clients.update({ id: client.id, name: "Deleted client" }), /Client not found/u);
+
+    assert.deepEqual(repeatedDelete.deletedAt, deleted.deletedAt);
+    assert.deepEqual(repeatedDelete.updatedAt, deleted.updatedAt);
+    const restored = await caller.clients.restore({ id: client.id });
+    const repeatedRestore = await caller.clients.restore({ id: client.id });
+    assert.deepEqual(repeatedRestore.updatedAt, restored.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "client.deleted", "client.restored"],
+    );
+  });
+
+  it("rejects empty client update patches without emitting update events", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(caller.clients.update({ id: client.id }), /At least one client field/u);
+    await assert.rejects(caller.clients.update({ id: client.id, customFieldSchema: [] }), /At least one client field/u);
+
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created"],
+    );
+  });
+
   it("validates client custom fields against the submitted custom field schema", async () => {
     const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
 
@@ -99,6 +136,26 @@ describe("clients tRPC API", () => {
 
     assert.equal((await userOne.tags.listEntity({ entityType: "client", entityId: client.id })).length, 1);
     await assert.rejects(userTwo.tags.attach({ tagId: tag.id, entityType: "client", entityId: client.id }), /Tag not found/u);
+  });
+
+  it("lists only active entity tags for active entities", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const activeTag = await caller.tags.create({ name: "active" });
+    const deletedTag = await caller.tags.create({ name: "deleted" });
+    await caller.tags.attach({ tagId: activeTag.id, entityType: "client", entityId: client.id });
+    await caller.tags.attach({ tagId: deletedTag.id, entityType: "client", entityId: client.id });
+    await caller.tags.delete({ id: deletedTag.id });
+
+    assert.deepEqual(
+      (await caller.tags.listEntity({ entityType: "client", entityId: client.id })).map((entityTag) => entityTag.tagId),
+      [activeTag.id],
+    );
+
+    await caller.clients.delete({ id: client.id });
+    assert.deepEqual(await caller.tags.listEntity({ entityType: "client", entityId: client.id }), []);
   });
 
   it("rejects entity tag types outside the current public tags API", async () => {

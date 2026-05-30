@@ -1,6 +1,5 @@
 import { Queue, UnrecoverableError, Worker } from "bullmq";
-
-import type { HookExecutionStatus, HookType } from "@DCRM/domain";
+import type { DownstreamEventBehavior, HookExecutionStatus, HookType, HookWriteBehavior } from "@DCRM/domain";
 import type { JobsOptions, QueueOptions, WorkerOptions } from "bullmq";
 
 import type { CoreEventType, DcrmEvent, EventService, JsonObject, SourceSpecificEmitEventInput } from "./index.js";
@@ -208,6 +207,23 @@ export function emitHookWriteEvent({
   });
 }
 
+/** Composes runtime hook config from legacy config JSON and dedicated persisted behavior columns. */
+export function composePersistedHookRuntimeConfig(input: {
+  readonly config: JsonObject;
+  readonly outputSchema: JsonObject;
+  readonly fieldMapping: JsonObject;
+  readonly writeBehavior: HookWriteBehavior;
+  readonly downstreamEventBehavior: DownstreamEventBehavior;
+}): JsonObject {
+  return {
+    ...input.config,
+    outputFields: readJsonArray(input.outputSchema.fields) ?? readJsonArray(input.config.outputFields) ?? [],
+    fieldMappings: readJsonArray(input.fieldMapping.mappings) ?? readJsonArray(input.config.fieldMappings) ?? [],
+    writeBehavior: input.writeBehavior,
+    downstreamEventBehavior: input.downstreamEventBehavior,
+  };
+}
+
 /** Wraps event emission with hook subscription resolution and BullMQ enqueueing. */
 export function createHookAwareEventService({
   eventService,
@@ -263,16 +279,17 @@ export function createHookExecutionProcessor({
 }: CreateHookExecutionProcessorOptions) {
   return async (job: HookExecutionJobData, attempt: number): Promise<HookExecutionJobResult> => {
     const execution = await requireExecution(executionRepository, job.executionId);
-    const hook = await requireHook(hookRepository, execution.hookId);
-    const event = await requireEvent(eventService, execution.eventId, execution.userId);
-    const running = await executionRepository.markRunning({ executionId: execution.id, startedAt: clock(), attempt });
+    let hook: HookSubscription | undefined;
 
     try {
+      hook = await requireHook(hookRepository, execution.hookId);
+      const event = await requireEvent(eventService, execution.eventId, execution.userId);
+      const running = await executionRepository.markRunning({ executionId: execution.id, startedAt: clock(), attempt });
       const output = await executor.execute({ event, hook, execution: running, attempt });
       await executionRepository.markSuccess({ executionId: execution.id, output: output ?? {}, finishedAt: clock() });
       return { executionId: execution.id, status: "success" };
     } catch (error) {
-      const retryPolicy = resolveRetryPolicy(hook);
+      const retryPolicy = hook ? resolveRetryPolicy(hook) : executionRecordToRetryPolicy(execution);
       const retryable = isRetryableHookExecutionError(error);
       const nextRetryAt = retryable && attempt < retryPolicy.maxAttempts ? calculateNextRetryAt(clock(), retryPolicy, attempt) : undefined;
       await executionRepository.markFailed({
@@ -455,7 +472,7 @@ async function requireExecution(repository: HookExecutionRepository, executionId
 async function requireHook(repository: HookRepository, hookId: string): Promise<HookSubscription> {
   const hook = await repository.getById(hookId);
   if (!hook) {
-    throw new Error(`Hook subscription not found: ${hookId}`);
+    throw new NonRetryableHookExecutionError(`Hook subscription not found: ${hookId}`, { hookId });
   }
   return hook;
 }
@@ -464,7 +481,7 @@ async function requireEvent(eventService: EventService, eventId: string, userId:
   const events = await eventService.listForUser(userId);
   const event = events.find((candidate) => candidate.id === eventId);
   if (!event) {
-    throw new Error(`Event not found for hook execution: ${eventId}`);
+    throw new NonRetryableHookExecutionError(`Event not found for hook execution: ${eventId}`, { eventId, userId });
   }
   return event;
 }
@@ -572,4 +589,8 @@ function errorMessage(error: unknown): string {
 
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readJsonArray(value: unknown): readonly unknown[] | undefined {
+  return Array.isArray(value) ? value : undefined;
 }

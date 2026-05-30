@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { EventSource } from "@DCRM/domain";
+
+import { persistedEventRowToEvent } from "./event-drizzle-mapping.js";
 import { createEventService, createInMemoryEventRepository, isCoreEventType } from "./index.js";
+
+import type { JsonObject } from "./index.js";
+import type { PersistedEventRow } from "./event-drizzle-mapping.js";
 
 describe("event emission", () => {
   it("persists a normalized user-scoped event through the public event service", async () => {
@@ -109,6 +115,40 @@ describe("event emission", () => {
     );
   });
 
+  it("round-trips synthetic import and webhook entity references", async () => {
+    const service = createEventService({
+      clock: () => new Date("2026-05-30T12:00:00.000Z"),
+      idGenerator: createSequentialIdGenerator(),
+      repository: createInMemoryEventRepository(),
+    });
+
+    const importEvent = await service.emitSystem({
+      type: "import.import_completed",
+      userId: "user_1",
+      entity: { type: "import", id: "import_1" },
+    });
+    const webhookEvent = await service.emitWebhook({
+      type: "webhook.webhook_received",
+      userId: "user_1",
+      entity: { type: "webhook", id: "webhook_1" },
+    });
+
+    assert.deepEqual(await service.listForUser("user_1"), [importEvent, webhookEvent]);
+  });
+
+  it("maps synthetic import and webhook entity references from Drizzle-persisted rows", () => {
+    assert.deepEqual(
+      [
+        persistedEventRowToEvent(createPersistedEventRow({ id: "event_1", type: "import.import_completed", source: "system", entityType: "import", entityId: "import_1" })),
+        persistedEventRowToEvent(createPersistedEventRow({ id: "event_2", type: "webhook.webhook_received", source: "webhook", entityType: "webhook", entityId: "webhook_1" })),
+      ].map((event) => event.entity),
+      [
+        { type: "import", id: "import_1" },
+        { type: "webhook", id: "webhook_1" },
+      ],
+    );
+  });
+
   it("exposes a public guard for supported core event types", () => {
     assert.equal(isCoreEventType("client.created"), true);
     assert.equal(isCoreEventType("lead.converted"), true);
@@ -123,5 +163,28 @@ function createSequentialIdGenerator() {
   return () => {
     nextId += 1;
     return `event_${nextId}`;
+  };
+}
+
+type EventRowInput = {
+  readonly id: string;
+  readonly type: string;
+  readonly source: EventSource;
+  readonly entityType: string;
+  readonly entityId: string;
+};
+
+function createPersistedEventRow(input: EventRowInput): PersistedEventRow {
+  return {
+    id: input.id,
+    userId: "user_1",
+    type: input.type,
+    source: input.source,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    payload: {} satisfies JsonObject,
+    changes: null,
+    metadata: {} satisfies JsonObject,
+    createdAt: new Date("2026-05-30T12:00:00.000Z"),
   };
 }

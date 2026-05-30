@@ -1,6 +1,7 @@
 import { createDb } from "@DCRM/db";
 import { aiInsights, aiMessages, aiProviders, emailAccounts, events, hookExecutions, hooks, incomingWebhooks } from "@DCRM/db/schema/automation-integrations";
 import { isCoreEventType } from "@DCRM/events";
+import { persistedHookRowToSubscription } from "@DCRM/events/hook-drizzle-mapping";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
@@ -300,30 +301,12 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
           .from(hooks)
           .where(and(eq(hooks.userId, input.userId), eq(hooks.eventType, input.eventType), eq(hooks.enabled, true), isNull(hooks.deletedAt)))
           .orderBy(desc(hooks.createdAt));
-        return rows.map((row) => ({
-          id: row.id,
-          userId: row.userId,
-          name: row.name,
-          eventType: requireCoreEventType(row.eventType),
-          type: row.type,
-          enabled: row.enabled,
-          config: row.config,
-        }));
+        return rows.map(persistedHookRowToSubscription);
       },
       async getById(hookId) {
         const rows = await database.select().from(hooks).where(and(eq(hooks.id, hookId), isNull(hooks.deletedAt))).limit(1);
         const row = rows[0];
-        return row
-          ? {
-              id: row.id,
-              userId: row.userId,
-              name: row.name,
-              eventType: requireCoreEventType(row.eventType),
-              type: row.type,
-              enabled: row.enabled,
-              config: row.config,
-            }
-          : undefined;
+        return row ? persistedHookRowToSubscription(row) : undefined;
       },
     },
     aiInsights: {

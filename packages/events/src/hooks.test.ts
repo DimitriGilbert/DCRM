@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { persistedHookRowToSubscription } from "./hook-drizzle-mapping.js";
 import { createEventService, createInMemoryEventRepository } from "./index.js";
 import {
   createHookExecutionProcessor,
@@ -9,7 +10,12 @@ import {
   createInMemoryHookExecutionRepository,
   createInMemoryHookRepository,
   createRecordingHookExecutionQueue,
+  composePersistedHookRuntimeConfig,
 } from "./hooks.js";
+
+import type { DcrmEvent } from "./index.js";
+import type { PersistedHookRuntimeRow } from "./hook-drizzle-mapping.js";
+import type { HookRepository, HookSubscription } from "./hooks.js";
 
 describe("hook subscriptions", () => {
   it("creates and enqueues one pending execution for every enabled hook subscribed to an emitted event", async () => {
@@ -213,6 +219,152 @@ describe("hook subscriptions", () => {
     );
   });
 
+  it("marks an existing execution failed when its hook subscription is missing before processing", async () => {
+    const event = createEvent("event_missing_hook");
+    const eventService = createEventService({
+      idGenerator: () => event.id,
+      repository: createInMemoryEventRepository(),
+    });
+    await eventService.emit({
+      type: event.type,
+      userId: event.userId,
+      source: event.source,
+      entity: event.entity,
+      payload: event.payload,
+      metadata: event.metadata,
+    });
+    const hook = createHook("hook_deleted");
+    const executions = createInMemoryHookExecutionRepository();
+    const pending = await executions.createPending({
+      id: "execution_missing_hook",
+      event,
+      hook,
+      retryPolicy: { maxAttempts: 3, backoff: { type: "fixed", delayMs: 1_000 } },
+      queuedAt: new Date("2026-05-30T12:00:00.000Z"),
+    });
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository: createMissingHookRepository(),
+      executionRepository: executions,
+      executor: { async execute() { return { unreachable: true }; } },
+      clock: createStepClock("2026-05-30T12:01:00.000Z"),
+    });
+
+    await assert.rejects(processor({ executionId: pending.id }, 1), /Hook subscription not found/u);
+
+    const failed = await executions.getById(pending.id);
+    assert.equal(failed?.status, "failed");
+    assert.deepEqual(failed?.error, { name: "NonRetryableHookExecutionError", message: "Hook subscription not found: hook_deleted" });
+    assert.equal(failed?.nextRetryAt, undefined);
+  });
+
+  it("marks an existing execution failed when its triggering event is missing before processing", async () => {
+    const event = createEvent("event_deleted");
+    const hook = createHook("hook_present");
+    const executions = createInMemoryHookExecutionRepository();
+    const pending = await executions.createPending({
+      id: "execution_missing_event",
+      event,
+      hook,
+      retryPolicy: { maxAttempts: 3, backoff: { type: "fixed", delayMs: 1_000 } },
+      queuedAt: new Date("2026-05-30T12:00:00.000Z"),
+    });
+    const eventService = createEventService({
+      repository: createInMemoryEventRepository(),
+    });
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository: createInMemoryHookRepository([hook]),
+      executionRepository: executions,
+      executor: { async execute() { return { unreachable: true }; } },
+      clock: createStepClock("2026-05-30T12:01:00.000Z"),
+    });
+
+    await assert.rejects(processor({ executionId: pending.id }, 1), /Event not found for hook execution/u);
+
+    const failed = await executions.getById(pending.id);
+    assert.equal(failed?.status, "failed");
+    assert.deepEqual(failed?.error, { name: "NonRetryableHookExecutionError", message: "Event not found for hook execution: event_deleted" });
+    assert.equal(failed?.nextRetryAt, undefined);
+  });
+
+  it("composes persisted AI hook behavior columns into the runtime hook config", () => {
+    assert.deepEqual(
+      composePersistedHookRuntimeConfig({
+        config: {
+          providerId: "provider_1",
+          model: "model_1",
+          template: "summarize",
+          outputFields: [{ name: "stale", type: "string", required: true }],
+          fieldMappings: [],
+          writeBehavior: "propose",
+          downstreamEventBehavior: "suppress",
+        },
+        outputSchema: { fields: [{ name: "summary", type: "string", required: true }] },
+        fieldMapping: { mappings: [{ sourcePath: "summary", targetField: "notes" }] },
+        writeBehavior: "direct",
+        downstreamEventBehavior: "emit",
+      }),
+      {
+        providerId: "provider_1",
+        model: "model_1",
+        template: "summarize",
+        outputFields: [{ name: "summary", type: "string", required: true }],
+        fieldMappings: [{ sourcePath: "summary", targetField: "notes" }],
+        writeBehavior: "direct",
+        downstreamEventBehavior: "emit",
+      },
+    );
+  });
+
+  it("uses dedicated hook behavior columns from persisted Drizzle hook rows during runtime execution", async () => {
+    const event = createEvent("event_drizzle_hook");
+    const eventService = createEventService({
+      idGenerator: () => event.id,
+      repository: createInMemoryEventRepository(),
+    });
+    await eventService.emit({
+      type: event.type,
+      userId: event.userId,
+      source: event.source,
+      entity: event.entity,
+      payload: event.payload,
+      metadata: event.metadata,
+    });
+    const hookRepository = createPersistedHookMappingRepository(createPersistedAiHookRow());
+    const executions = createInMemoryHookExecutionRepository();
+    const pending = await executions.createPending({
+      id: "execution_drizzle_hook",
+      event,
+      hook: createHook("hook_persisted_ai"),
+      retryPolicy: { maxAttempts: 1, backoff: { type: "fixed", delayMs: 1_000 } },
+      queuedAt: new Date("2026-05-30T12:00:00.000Z"),
+    });
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository,
+      executionRepository: executions,
+      executor: {
+        async execute(context) {
+          assert.deepEqual(context.hook.config, {
+            providerId: "provider_1",
+            model: "model_1",
+            template: "summarize",
+            outputFields: [{ name: "summary", type: "string", required: true }],
+            fieldMappings: [{ sourcePath: "summary", targetField: "notes" }],
+            writeBehavior: "direct",
+            downstreamEventBehavior: "emit",
+          });
+          return { ok: true };
+        },
+      },
+    });
+
+    await processor({ executionId: pending.id }, 1);
+
+    assert.equal((await executions.getById(pending.id))?.status, "success");
+  });
+
   it("records provenance and suppresses downstream hook automation by default for hook-driven writes", async () => {
     const baseEvents = createEventService({
       clock: createStepClock("2026-05-30T12:00:00.000Z"),
@@ -285,11 +437,82 @@ function createSequentialIdGenerator(prefix: string) {
   };
 }
 
+function createEvent(id: string): DcrmEvent {
+  return {
+    id,
+    type: "client.created",
+    userId: "user_1",
+    source: "app",
+    entity: { type: "client", id: "client_1" },
+    payload: {},
+    metadata: {},
+    createdAt: new Date("2026-05-30T12:00:00.000Z"),
+  };
+}
+
+function createHook(id: string): HookSubscription {
+  return {
+    id,
+    userId: "user_1",
+    name: "Hook",
+    eventType: "client.created",
+    type: "built_in",
+    enabled: true,
+    config: {},
+  };
+}
+
+function createMissingHookRepository(): HookRepository {
+  return {
+    async listEnabledForEvent() {
+      return [];
+    },
+    async getById() {
+      return undefined;
+    },
+  };
+}
+
 function createStepClock(start: string) {
   let nextTick = new Date(start).getTime();
   return () => {
     const value = new Date(nextTick);
     nextTick += 1_000;
     return value;
+  };
+}
+
+function createPersistedAiHookRow(): PersistedHookRuntimeRow {
+  return {
+    id: "hook_persisted_ai",
+    userId: "user_1",
+    name: "Persisted AI",
+    eventType: "client.created",
+    type: "ai",
+    enabled: true,
+    config: {
+      providerId: "provider_1",
+      model: "model_1",
+      template: "summarize",
+      outputFields: [{ name: "stale", type: "string", required: true }],
+      fieldMappings: [],
+      writeBehavior: "propose",
+      downstreamEventBehavior: "suppress",
+    },
+    outputSchema: { fields: [{ name: "summary", type: "string", required: true }] },
+    fieldMapping: { mappings: [{ sourcePath: "summary", targetField: "notes" }] },
+    writeBehavior: "direct",
+    downstreamEventBehavior: "emit",
+  };
+}
+
+function createPersistedHookMappingRepository(row: PersistedHookRuntimeRow): HookRepository {
+  return {
+    async listEnabledForEvent() {
+      return [persistedHookRowToSubscription(row)];
+    },
+    async getById() {
+      return persistedHookRowToSubscription(row);
+    },
   };
 }

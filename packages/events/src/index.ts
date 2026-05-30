@@ -1,10 +1,15 @@
+import { CRM_ENTITY_TYPES } from "@DCRM/domain";
 import type { CrmEntityType, EventAction, EventSource } from "@DCRM/domain";
 
 export type JsonObject = Record<string, unknown>;
 
+export const SYNTHETIC_EVENT_ENTITY_TYPES = ["import", "webhook"] as const;
+
+export type SyntheticEventEntityType = (typeof SYNTHETIC_EVENT_ENTITY_TYPES)[number];
+
 /** Entity reference stored with an event when a meaningful action targets one record. */
 export type EventEntityReference = {
-  readonly type: CrmEntityType | "import" | "webhook";
+  readonly type: CrmEntityType | SyntheticEventEntityType;
   readonly id: string;
 };
 
@@ -16,7 +21,7 @@ export type EventChanges = {
 
 export type EventDefinition = {
   readonly type: string;
-  readonly entityType?: CrmEntityType | "import" | "webhook";
+  readonly entityType?: EventEntityReference["type"];
   readonly action: EventAction;
   readonly description: string;
 };
@@ -58,6 +63,15 @@ export type CoreEventType = (typeof CORE_EVENT_DEFINITIONS)[number]["type"];
 /** Returns whether a runtime string is one of DCRM's supported core event types. */
 export function isCoreEventType(value: string): value is CoreEventType {
   return CORE_EVENT_DEFINITIONS.some((definition) => definition.type === value);
+}
+
+/** Returns whether a runtime string is supported as a persisted event entity reference type. */
+export function isEventEntityReferenceType(value: string): value is EventEntityReference["type"] {
+  return isCrmEntityType(value) || SYNTHETIC_EVENT_ENTITY_TYPES.some((type) => type === value);
+}
+
+function isCrmEntityType(value: string): value is CrmEntityType {
+  return CRM_ENTITY_TYPES.some((type) => type === value);
 }
 
 /** Normalized DCRM event persisted by the event engine. */

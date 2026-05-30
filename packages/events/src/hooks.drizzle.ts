@@ -2,19 +2,17 @@ import { createDb } from "@DCRM/db";
 import { hookExecutions, hooks } from "@DCRM/db/schema/automation-integrations";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
-import { isCoreEventType } from "./index.js";
+import { persistedHookRowToSubscription } from "./hook-drizzle-mapping.js";
 
-import type { CoreEventType, JsonObject } from "./index.js";
+import type { JsonObject } from "./index.js";
 import type {
   CreateHookExecutionInput,
   HookExecutionRecord,
   HookExecutionRepository,
   HookRepository,
-  HookSubscription,
 } from "./hooks.js";
 
 type HookDatabase = ReturnType<typeof createDb>;
-type HookRow = typeof hooks.$inferSelect;
 type HookExecutionRow = typeof hookExecutions.$inferSelect;
 
 /** Creates the production hook subscription resolver backed by the Drizzle hooks table. */
@@ -26,12 +24,12 @@ export function createDrizzleHookRepository(database: HookDatabase = createDb())
         .from(hooks)
         .where(and(eq(hooks.userId, input.userId), eq(hooks.eventType, input.eventType), eq(hooks.enabled, true), isNull(hooks.deletedAt)))
         .orderBy(desc(hooks.createdAt));
-      return rows.map(rowToHookSubscription);
+      return rows.map(persistedHookRowToSubscription);
     },
     async getById(hookId) {
       const rows = await database.select().from(hooks).where(and(eq(hooks.id, hookId), isNull(hooks.deletedAt))).limit(1);
       const row = rows[0];
-      return row ? rowToHookSubscription(row) : undefined;
+      return row ? persistedHookRowToSubscription(row) : undefined;
     },
   };
 }
@@ -101,18 +99,6 @@ export function createDrizzleHookExecutionRepository(database: HookDatabase = cr
   };
 }
 
-function rowToHookSubscription(row: HookRow): HookSubscription {
-  return {
-    id: row.id,
-    userId: row.userId,
-    name: row.name,
-    eventType: parseCoreEventType(row.eventType),
-    type: row.type,
-    enabled: row.enabled,
-    config: row.config,
-  };
-}
-
 function rowToHookExecution(row: HookExecutionRow): HookExecutionRecord {
   return {
     id: row.id,
@@ -140,13 +126,6 @@ function requireHookExecutionRow(row: HookExecutionRow | undefined, executionId:
     throw new Error(`Hook execution could not be persisted: ${executionId}`);
   }
   return rowToHookExecution(row);
-}
-
-function parseCoreEventType(value: string): CoreEventType {
-  if (isCoreEventType(value)) {
-    return value;
-  }
-  throw new Error(`Unknown hook event type: ${value}`);
 }
 
 function eventInputToJsonObject(input: CreateHookExecutionInput): JsonObject {

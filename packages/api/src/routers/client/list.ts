@@ -1,6 +1,6 @@
 import { db } from "@DCRM/db";
 import { clients, entityTags } from "@DCRM/db/schema/crm";
-import { eq, and, isNull, lt, desc, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, isNull, lt, desc, gte, lte, inArray, or } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { listClientsSchema } from "./schemas";
@@ -15,7 +15,15 @@ export const listClients = protectedProcedure
     }
 
     if (input.cursor) {
-      conditions.push(lt(clients.createdAt, new Date(input.cursor)));
+      const separatorIdx = input.cursor.lastIndexOf(":");
+      const cursorDate = input.cursor.substring(0, separatorIdx);
+      const cursorId = input.cursor.substring(separatorIdx + 1);
+      conditions.push(
+        or(
+          lt(clients.createdAt, new Date(cursorDate)),
+          and(eq(clients.createdAt, new Date(cursorDate)), lt(clients.id, cursorId)),
+        )!,
+      );
     }
 
     if (input.dateFrom) {
@@ -47,13 +55,14 @@ export const listClients = protectedProcedure
       .select()
       .from(clients)
       .where(and(...conditions))
-      .orderBy(desc(clients.createdAt))
+      .orderBy(desc(clients.createdAt), desc(clients.id))
       .limit(input.limit + 1);
 
     const hasMore = rows.length > input.limit;
     const items = hasMore ? rows.slice(0, input.limit) : rows;
-    const nextCursor = hasMore
-      ? items[items.length - 1]?.createdAt?.toISOString() ?? undefined
+    const lastItem = items[items.length - 1];
+    const nextCursor = hasMore && lastItem
+      ? `${lastItem.createdAt.toISOString()}:${lastItem.id}`
       : undefined;
 
     return { items, nextCursor };

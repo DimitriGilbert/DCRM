@@ -1,7 +1,7 @@
 import { db } from "@DCRM/db";
 import { clients } from "@DCRM/db/schema/crm";
 import { emitEvent, EVENT_TYPE } from "@DCRM/events";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { updateClientSchema } from "./schemas";
@@ -18,6 +18,7 @@ export const updateClient = protectedProcedure
         and(
           eq(clients.id, id),
           eq(clients.userId, ctx.user.id),
+          isNull(clients.deletedAt),
         ),
       )
       .limit(1);

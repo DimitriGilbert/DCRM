@@ -1,10 +1,11 @@
+import { TRPCError } from "@trpc/server";
 import { db } from "@DCRM/db";
 import { aiProviders } from "@DCRM/db/schema/automation";
 import { createCrypto } from "@DCRM/crypto";
 import { env } from "@DCRM/env/server";
 import { ProviderManager, sendMessage } from "@DCRM/ai";
 import type { ChatDeps } from "@DCRM/ai";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { sendMessageSchema } from "./schemas";
@@ -15,19 +16,30 @@ export const sendAIMessage = protectedProcedure
   .mutation(async ({ ctx, input }) => {
     const userId = ctx.user.id;
 
-    // 1. Resolve provider
+    // encryptedApiKey is selected for internal decryption only — it must NEVER
+    // be included in the tRPC response. It is consumed by ProviderManager below
+    // and not leaked through the return value.
     const providerRows = await db
-      .select()
+      .select({
+        id: aiProviders.id,
+        userId: aiProviders.userId,
+        provider: aiProviders.provider,
+        name: aiProviders.name,
+        encryptedApiKey: aiProviders.encryptedApiKey,
+        baseUrl: aiProviders.baseUrl,
+        config: aiProviders.config,
+        enabled: aiProviders.enabled,
+      })
       .from(aiProviders)
-      .where(eq(aiProviders.id, input.providerId))
+      .where(and(eq(aiProviders.id, input.providerId), eq(aiProviders.userId, userId)))
       .limit(1);
 
     const providerRecord = providerRows[0];
-    if (!providerRecord || providerRecord.userId !== userId) {
-      throw new Error("AI provider not found or access denied");
+    if (!providerRecord) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "AI provider not found or access denied" });
     }
     if (!providerRecord.enabled) {
-      throw new Error("AI provider is disabled");
+      throw new TRPCError({ code: "BAD_REQUEST", message: "AI provider is disabled" });
     }
 
     // 2. Build adapter

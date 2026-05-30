@@ -1,5 +1,6 @@
 import { db } from "@DCRM/db";
 import { projects } from "@DCRM/db/schema/crm";
+import { PROJECT_STATUSES } from "@DCRM/domain";
 import { eq, and, isNull, isNotNull, gte, asc, inArray } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
@@ -20,7 +21,7 @@ export const upcomingProjectDeadlines = protectedProcedure
         and(
           eq(projects.userId, ctx.user.id),
           isNull(projects.deletedAt),
-          inArray(projects.status, ["planning", "active", "on_hold"]),
+          inArray(projects.status, [PROJECT_STATUSES.PLANNING, PROJECT_STATUSES.ACTIVE, PROJECT_STATUSES.ON_HOLD]),
           isNotNull(projects.endDate),
           gte(projects.endDate, now),
         ),

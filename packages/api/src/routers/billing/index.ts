@@ -31,6 +31,10 @@ export const createCheckout = protectedProcedure
 
 export const getSubscriptionStatus = protectedProcedure.query(
   async ({ ctx }) => {
+    if (!env.BILLING_ENABLED) {
+      throw new Error("Billing is not enabled in this environment");
+    }
+
     const { createSubscriptionService } = await import("@DCRM/billing");
     const subscriptionService = createSubscriptionService();
 

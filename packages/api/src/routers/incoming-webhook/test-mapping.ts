@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { mapPayload, validateMappingConfig, type MappingConfig } from "@DCRM/webhooks";
 
 import { db } from "@DCRM/db";
@@ -24,7 +25,7 @@ export const testMapping = protectedProcedure
       );
 
     if (!row) {
-      throw new Error("Incoming webhook not found");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Incoming webhook not found" });
     }
 
     if (!row.mappingConfig) {

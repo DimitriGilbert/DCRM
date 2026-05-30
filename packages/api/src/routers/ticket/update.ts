@@ -1,5 +1,5 @@
 import { db } from "@DCRM/db";
-import { tickets } from "@DCRM/db/schema/crm";
+import { projects, tickets } from "@DCRM/db/schema/crm";
 import { emitEvent, EVENT_TYPE } from "@DCRM/events";
 import { eq, and } from "drizzle-orm";
 
@@ -24,6 +24,23 @@ export const updateTicket = protectedProcedure
 
     if (!existing) {
       return null;
+    }
+
+    if (fields.projectId !== undefined && fields.projectId !== existing.projectId) {
+      const [project] = await db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.id, fields.projectId),
+            eq(projects.userId, ctx.user.id),
+          ),
+        )
+        .limit(1);
+
+      if (!project) {
+        return null;
+      }
     }
 
     const updates: Record<string, unknown> = {};

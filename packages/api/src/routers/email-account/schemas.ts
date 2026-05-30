@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createEmailAccountSchema = z.object({
-  email: z.string().min(1),
+  email: z.email(),
   imapHost: z.string().min(1),
   imapPort: z.number().int().min(1).max(65535),
   imapUser: z.string().min(1),
@@ -18,7 +18,7 @@ export type CreateEmailAccountInput = z.infer<typeof createEmailAccountSchema>;
 
 export const updateEmailAccountSchema = z.object({
   id: z.string().min(1),
-  email: z.string().min(1).optional(),
+  email: z.email().optional(),
   imapHost: z.string().min(1).optional(),
   imapPort: z.number().int().min(1).max(65535).optional(),
   imapUser: z.string().min(1).optional(),

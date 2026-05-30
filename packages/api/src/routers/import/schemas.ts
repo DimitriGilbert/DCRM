@@ -13,7 +13,7 @@ export const columnMappingSchema = z.object({
 export type ColumnMapping = z.infer<typeof columnMappingSchema>;
 
 export const importClientsSchema = z.object({
-  csvData: z.string().min(1),
+  csvData: z.string().min(1).max(5_000_000),
   columnMappings: z.array(columnMappingSchema).min(1),
   hasHeader: z.boolean().default(true),
 });

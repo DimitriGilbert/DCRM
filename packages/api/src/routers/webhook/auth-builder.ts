@@ -1,4 +1,5 @@
 import { createCrypto } from "@DCRM/crypto";
+import { env } from "@DCRM/env/server";
 
 import {
   encryptBearerToken,
@@ -21,11 +22,7 @@ type RawAuthInput =
  * Requires ENCRYPTION_KEY env var.
  */
 export function buildEncryptedAuth(raw: RawAuthInput): OutgoingWebhookAuthConfig | NoneAuthConfig {
-  const key = process.env["ENCRYPTION_KEY"];
-  if (!key || key.length < 32) {
-    throw new Error("ENCRYPTION_KEY environment variable must be at least 32 characters");
-  }
-  const crypto = createCrypto(key);
+  const crypto = createCrypto(env.ENCRYPTION_KEY);
 
   switch (raw.mode) {
     case "none":

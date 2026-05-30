@@ -40,8 +40,8 @@ export const listClientsSchema = z.object({
   cursor: z.string().optional(),
   includeDeleted: z.boolean().default(false),
   tagIds: z.array(z.string().min(1)).optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
 });
 
 export type ListClientsInput = z.infer<typeof listClientsSchema>;

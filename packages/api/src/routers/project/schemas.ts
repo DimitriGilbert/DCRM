@@ -12,8 +12,8 @@ export const createProjectSchema = z.object({
   estimatedHours: z.number().optional(),
   actualHours: z.number().optional(),
   customFields: z.record(z.string(), z.unknown()).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
@@ -29,8 +29,8 @@ export const updateProjectSchema = z.object({
   estimatedHours: z.number().nullable().optional(),
   actualHours: z.number().nullable().optional(),
   customFields: z.record(z.string(), z.unknown()).nullable().optional(),
-  startDate: z.string().nullable().optional(),
-  endDate: z.string().nullable().optional(),
+  startDate: z.string().datetime().nullable().optional(),
+  endDate: z.string().datetime().nullable().optional(),
 });
 
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
@@ -48,8 +48,8 @@ export const listProjectsSchema = z.object({
   clientId: z.string().optional(),
   status: projectStatusSchema.optional(),
   tagIds: z.array(z.string().min(1)).optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
 });
 
 export type ListProjectsInput = z.infer<typeof listProjectsSchema>;

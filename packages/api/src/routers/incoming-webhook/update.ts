@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { db } from "@DCRM/db";
 import { incomingWebhooks } from "@DCRM/db/schema/automation";
 import { eq, and } from "drizzle-orm";
@@ -10,7 +11,6 @@ export const updateIncomingWebhook = protectedProcedure
   .mutation(async ({ ctx, input }) => {
     const { id, ...updates } = input;
 
-    // Verify ownership
     const [existing] = await db
       .select({ id: incomingWebhooks.id })
       .from(incomingWebhooks)
@@ -22,7 +22,7 @@ export const updateIncomingWebhook = protectedProcedure
       );
 
     if (!existing) {
-      throw new Error("Incoming webhook not found");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Incoming webhook not found" });
     }
 
     const setValues: Record<string, unknown> = {

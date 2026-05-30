@@ -1,5 +1,7 @@
+import { TRPCError } from "@trpc/server";
 import { db } from "@DCRM/db";
 import { hooks } from "@DCRM/db/schema/automation";
+import { HOOK_TYPES } from "@DCRM/domain";
 import { eq, and } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
@@ -11,7 +13,6 @@ export const updateOutgoingWebhook = protectedProcedure
   .mutation(async ({ ctx, input }) => {
     const { id, ...updates } = input;
 
-    // Fetch existing config to merge
     const [existing] = await db
       .select({ config: hooks.config })
       .from(hooks)
@@ -19,11 +20,12 @@ export const updateOutgoingWebhook = protectedProcedure
         and(
           eq(hooks.id, id),
           eq(hooks.userId, ctx.user.id),
+          eq(hooks.type, HOOK_TYPES.OUTGOING_WEBHOOK),
         ),
       );
 
     if (!existing) {
-      throw new Error("Webhook not found");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Webhook not found" });
     }
 
     const existingConfig = existing.config as Record<string, unknown>;
@@ -60,6 +62,7 @@ export const updateOutgoingWebhook = protectedProcedure
         and(
           eq(hooks.id, id),
           eq(hooks.userId, ctx.user.id),
+          eq(hooks.type, HOOK_TYPES.OUTGOING_WEBHOOK),
         ),
       );
 

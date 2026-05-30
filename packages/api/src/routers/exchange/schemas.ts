@@ -29,8 +29,8 @@ export const listExchangesSchema = z.object({
   projectId: z.string().optional(),
   ticketId: z.string().optional(),
   type: exchangeTypeSchema.optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
 });
 
 export type ListExchangesInput = z.infer<typeof listExchangesSchema>;

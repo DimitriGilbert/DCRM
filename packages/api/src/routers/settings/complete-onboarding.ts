@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { db } from "@DCRM/db";
 import { userSettings } from "@DCRM/db/schema/crm";
 import { eq } from "drizzle-orm";
@@ -9,25 +10,19 @@ export const completeOnboarding = protectedProcedure
   .input(completeOnboardingSchema)
   .mutation(async ({ ctx, input }) => {
     const [existing] = await db
-      .select({ userId: userSettings.userId })
+      .select({ onboardingCompleted: userSettings.onboardingCompleted })
       .from(userSettings)
       .where(eq(userSettings.userId, ctx.user.id))
       .limit(1);
 
-    if (existing) {
-      const [updated] = await db
-        .update(userSettings)
-        .set({
-          onboardingCompleted: true,
-          ...(input.locale ? { locale: input.locale } : {}),
-          ...(input.theme ? { theme: input.theme } : {}),
-        })
-        .where(eq(userSettings.userId, ctx.user.id))
-        .returning();
-      return updated;
+    if (existing?.onboardingCompleted) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "Onboarding already completed",
+      });
     }
 
-    const [created] = await db
+    const [result] = await db
       .insert(userSettings)
       .values({
         userId: ctx.user.id,
@@ -35,6 +30,14 @@ export const completeOnboarding = protectedProcedure
         locale: input.locale ?? "en",
         theme: input.theme ?? "system",
       })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          onboardingCompleted: true,
+          ...(input.locale ? { locale: input.locale } : {}),
+          ...(input.theme ? { theme: input.theme } : {}),
+        },
+      })
       .returning();
-    return created;
+    return result;
   });

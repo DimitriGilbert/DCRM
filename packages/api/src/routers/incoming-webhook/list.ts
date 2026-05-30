@@ -10,6 +10,7 @@ export const listIncomingWebhooks = protectedProcedure.query(async ({ ctx }) => 
       id: incomingWebhooks.id,
       name: incomingWebhooks.name,
       urlToken: incomingWebhooks.urlToken,
+      secret: incomingWebhooks.secret,
       mode: incomingWebhooks.mode,
       enabled: incomingWebhooks.enabled,
       mappingConfig: incomingWebhooks.mappingConfig,
@@ -20,9 +21,8 @@ export const listIncomingWebhooks = protectedProcedure.query(async ({ ctx }) => 
     .from(incomingWebhooks)
     .where(eq(incomingWebhooks.userId, ctx.user.id));
 
-  // Never expose the secret in list responses
-  return rows.map((row) => ({
+  return rows.map(({ secret, ...row }) => ({
     ...row,
-    hasSecret: false, // Placeholder — secrets are not returned
+    hasSecret: !!secret,
   }));
 });

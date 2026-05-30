@@ -22,7 +22,7 @@ export const updateAIProvider = protectedProcedure
       return null;
     }
 
-    const updates: Record<string, unknown> = {
+    const updates: Partial<typeof aiProviders.$inferInsert> = {
       updatedAt: new Date(),
     };
 
@@ -42,9 +42,15 @@ export const updateAIProvider = protectedProcedure
         newConfig.defaultModel = rest.defaultModel;
       }
       if (rest.config !== undefined) {
-        Object.assign(newConfig, rest.config);
+        if (rest.config === null) {
+          updates.config = {};
+        } else {
+          Object.assign(newConfig, rest.config);
+          updates.config = newConfig;
+        }
+      } else {
+        updates.config = newConfig;
       }
-      updates.config = newConfig;
     }
 
     if (apiKey) {
@@ -53,9 +59,10 @@ export const updateAIProvider = protectedProcedure
       updates.encryptedApiKey = JSON.stringify(encryptedApiKey);
     }
 
+    const setPayload = { ...updates } as Record<string, unknown>;
     await db
       .update(aiProviders)
-      .set(updates)
+      .set(setPayload)
       .where(and(eq(aiProviders.id, id), eq(aiProviders.userId, ctx.user.id)));
 
     return { id };

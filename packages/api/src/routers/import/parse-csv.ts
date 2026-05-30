@@ -6,6 +6,8 @@
  * @param skipHeader - Whether to skip the first row as a header
  * @returns Array of rows, each row an array of cell strings
  */
+const MAX_ROWS = 10_000;
+
 export function parseCsv(csvData: string, skipHeader: boolean): string[][] {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -84,5 +86,5 @@ export function parseCsv(csvData: string, skipHeader: boolean): string[][] {
     rows.shift();
   }
 
-  return rows;
+  return rows.slice(0, MAX_ROWS);
 }

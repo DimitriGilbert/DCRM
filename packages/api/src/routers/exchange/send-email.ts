@@ -11,7 +11,7 @@ import {
 } from "@DCRM/email";
 import { env } from "@DCRM/env/server";
 import { emitEvent, EVENT_TYPE } from "@DCRM/events";
-import { and, eq } from "drizzle-orm";
+import { and, eq, desc, isNotNull } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { sendExchangeEmailSchema } from "./schemas";
@@ -140,7 +140,14 @@ export const sendExchangeEmail = protectedProcedure
           createdAt: exchanges.createdAt,
         })
         .from(exchanges)
-        .where(eq(exchanges.ticketId, exchange.ticketId));
+        .where(
+          and(
+            eq(exchanges.ticketId, exchange.ticketId),
+            isNotNull(exchanges.metadata),
+          ),
+        )
+        .orderBy(desc(exchanges.createdAt))
+        .limit(50);
 
       const threading = buildThreadingHeaders(previousExchanges);
       inReplyTo = threading.inReplyTo ?? undefined;

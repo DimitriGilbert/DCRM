@@ -7,7 +7,7 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 export const uploadAttachmentSchema = z.object({
   entityType: attachmentEntityTypeSchema,
   entityId: z.string().min(1),
-  fileName: z.string().min(1),
+  fileName: z.string().min(1).regex(/^[^/\\:*?"<>|\0]+$/),
   fileSize: z.number().int().min(1).max(MAX_FILE_SIZE),
   mimeType: z.string().min(1),
 });

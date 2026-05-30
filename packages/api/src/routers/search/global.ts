@@ -20,6 +20,7 @@ import {
 } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
+import { escapeLikeWildcards } from "../../utils/escape-like";
 import {
   globalSearchSchema,
   SEARCH_ENTITY_TYPES,
@@ -292,7 +293,7 @@ export const globalSearch = protectedProcedure
   .input(globalSearchSchema)
   .query(async ({ ctx, input }) => {
     const userId = ctx.user.id;
-    const pattern = `%${input.query}%`;
+    const pattern = `%${escapeLikeWildcards(input.query)}%`;
     const { limit, entityTypes, tagIds, dateFrom, dateTo } = input;
 
     const types = entityTypes ?? SEARCH_ENTITY_TYPES;

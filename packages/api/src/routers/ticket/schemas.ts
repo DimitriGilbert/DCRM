@@ -13,7 +13,7 @@ export const createTicketSchema = z.object({
   type: ticketTypeSchema.optional(),
   status: ticketStatusSchema.optional(),
   priority: ticketPrioritySchema.optional(),
-  dueDate: z.string().optional(),
+  dueDate: z.string().datetime().optional(),
 });
 
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
@@ -26,7 +26,7 @@ export const updateTicketSchema = z.object({
   type: ticketTypeSchema.optional(),
   status: ticketStatusSchema.optional(),
   priority: ticketPrioritySchema.optional(),
-  dueDate: z.string().nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
 });
 
 export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
@@ -46,8 +46,8 @@ export const listTicketsSchema = z.object({
   type: ticketTypeSchema.optional(),
   priority: ticketPrioritySchema.optional(),
   tagIds: z.array(z.string().min(1)).optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
 });
 
 export type ListTicketsInput = z.infer<typeof listTicketsSchema>;

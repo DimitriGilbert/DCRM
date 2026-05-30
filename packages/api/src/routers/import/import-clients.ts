@@ -12,9 +12,6 @@ import { parseCsv } from "./parse-csv";
 
 import type { ImportClientsResponse, ColumnMapping } from "./schemas";
 
-/**
- * Maps CSV row values to a client insert shape using the provided column mappings.
- */
 function mapRowToClient(
   row: string[],
   mappings: ColumnMapping[],
@@ -43,7 +40,6 @@ export const importClients = protectedProcedure
       errors: [],
     };
 
-    // Validate column mappings reference importable fields
     const validFields = new Set<string>(IMPORTABLE_CLIENT_FIELDS);
     for (const mapping of input.columnMappings) {
       if (!validFields.has(mapping.field)) {
@@ -55,59 +51,58 @@ export const importClients = protectedProcedure
       }
     }
 
-    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-      const row = rows[rowIdx];
-      if (!row) continue;
+    await db.transaction(async (tx) => {
+      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+        const row = rows[rowIdx];
+        if (!row) continue;
 
-      const mapped = mapRowToClient(row, input.columnMappings);
+        const mapped = mapRowToClient(row, input.columnMappings);
 
-      // Name is required
-      if (!mapped.name || mapped.name.trim().length === 0) {
-        response.skipped++;
-        response.errors.push({
-          row: rowIdx,
-          message: `Row ${rowIdx + 1}: missing required field "name"`,
-        });
-        continue;
-      }
+        if (!mapped.name || mapped.name.trim().length === 0) {
+          response.skipped++;
+          response.errors.push({
+            row: rowIdx,
+            message: `Row ${rowIdx + 1}: missing required field "name"`,
+          });
+          continue;
+        }
 
-      const id = nanoid();
-      const now = new Date();
+        const id = nanoid();
+        const now = new Date();
 
-      const clientRow = {
-        id,
-        userId: ctx.user.id,
-        name: mapped.name.trim(),
-        email: mapped.email?.trim() ?? null,
-        phone: mapped.phone?.trim() ?? null,
-        company: mapped.company?.trim() ?? null,
-        website: mapped.website?.trim() ?? null,
-        notes: mapped.notes?.trim() ?? null,
-        socialLinks: null,
-        address: null,
-        customFields: null,
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-      };
-
-      await db.insert(clients).values(clientRow);
-      response.created++;
-
-      // Emit per-client event
-      await emitEvent(
-        { insert: async () => {} },
-        {
-          type: EVENT_TYPE.CLIENT_CREATED,
+        const clientRow = {
+          id,
           userId: ctx.user.id,
-          source: "app",
-          entity: { type: "client", id },
-          payload: { name: clientRow.name, email: clientRow.email, source: "import" },
-        },
-      );
-    }
+          name: mapped.name.trim(),
+          email: mapped.email?.trim() ?? null,
+          phone: mapped.phone?.trim() ?? null,
+          company: mapped.company?.trim() ?? null,
+          website: mapped.website?.trim() ?? null,
+          notes: mapped.notes?.trim() ?? null,
+          socialLinks: null,
+          address: null,
+          customFields: null,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        };
 
-    // Emit import.completed event
+        await tx.insert(clients).values(clientRow);
+        response.created++;
+
+        await emitEvent(
+          { insert: async () => {} },
+          {
+            type: EVENT_TYPE.CLIENT_CREATED,
+            userId: ctx.user.id,
+            source: "app",
+            entity: { type: "client", id },
+            payload: { name: clientRow.name, email: clientRow.email, source: "import" },
+          },
+        );
+      }
+    });
+
     await emitEvent(
       { insert: async () => {} },
       {

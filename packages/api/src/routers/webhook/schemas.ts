@@ -5,7 +5,10 @@ export const createOutgoingWebhookSchema = z.object({
   name: z.string().min(1).max(200),
   eventType: z.string().min(1),
   enabled: z.boolean().optional().default(true),
-  url: z.string().min(1).max(2048),
+  url: z.string().min(1).max(2048).url().refine(
+    (val) => val.startsWith("https://") || val.startsWith("http://"),
+    { message: "URL must use http or https scheme" },
+  ),
   method: z.enum(["POST", "PUT", "PATCH"]).optional().default("POST"),
   authMode: outgoingWebhookAuthModeSchema.optional().default("custom_headers"),
   /** Raw (unencrypted) auth values — encrypted server-side before storage. */
@@ -46,7 +49,10 @@ export const updateOutgoingWebhookSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   eventType: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
-  url: z.string().min(1).max(2048).optional(),
+  url: z.string().min(1).max(2048).url().refine(
+    (val) => val.startsWith("https://") || val.startsWith("http://"),
+    { message: "URL must use http or https scheme" },
+  ).optional(),
   method: z.enum(["POST", "PUT", "PATCH"]).optional(),
   authMode: outgoingWebhookAuthModeSchema.optional(),
   authConfig: z.union([

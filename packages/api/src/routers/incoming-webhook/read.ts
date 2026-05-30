@@ -13,6 +13,7 @@ export const getIncomingWebhook = protectedProcedure
         id: incomingWebhooks.id,
         name: incomingWebhooks.name,
         urlToken: incomingWebhooks.urlToken,
+        secret: incomingWebhooks.secret,
         mode: incomingWebhooks.mode,
         enabled: incomingWebhooks.enabled,
         mappingConfig: incomingWebhooks.mappingConfig,
@@ -30,9 +31,9 @@ export const getIncomingWebhook = protectedProcedure
 
     if (!row) return null;
 
-    // Never expose the secret; only indicate whether one is set
+    const { secret, ...rest } = row;
     return {
-      ...row,
-      hasSecret: false,
+      ...rest,
+      hasSecret: !!secret,
     };
   });

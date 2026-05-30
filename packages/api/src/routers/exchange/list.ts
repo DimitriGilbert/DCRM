@@ -1,6 +1,6 @@
 import { db } from "@DCRM/db";
 import { exchanges } from "@DCRM/db/schema/crm";
-import { eq, and, lt, desc, gte, lte } from "drizzle-orm";
+import { eq, and, lt, desc, gte, lte, or } from "drizzle-orm";
 
 import { protectedProcedure } from "../../index";
 import { listExchangesSchema } from "./schemas";
@@ -27,7 +27,15 @@ export const listExchanges = protectedProcedure
     }
 
     if (input.cursor) {
-      conditions.push(lt(exchanges.createdAt, new Date(input.cursor)));
+      const separatorIdx = input.cursor.lastIndexOf(":");
+      const cursorDate = input.cursor.substring(0, separatorIdx);
+      const cursorId = input.cursor.substring(separatorIdx + 1);
+      conditions.push(
+        or(
+          lt(exchanges.createdAt, new Date(cursorDate)),
+          and(eq(exchanges.createdAt, new Date(cursorDate)), lt(exchanges.id, cursorId)),
+        )!,
+      );
     }
 
     if (input.dateFrom) {
@@ -42,13 +50,14 @@ export const listExchanges = protectedProcedure
       .select()
       .from(exchanges)
       .where(and(...conditions))
-      .orderBy(desc(exchanges.createdAt))
+      .orderBy(desc(exchanges.createdAt), desc(exchanges.id))
       .limit(input.limit + 1);
 
     const hasMore = rows.length > input.limit;
     const items = hasMore ? rows.slice(0, input.limit) : rows;
-    const nextCursor = hasMore
-      ? items[items.length - 1]?.createdAt?.toISOString() ?? undefined
+    const lastItem = items[items.length - 1];
+    const nextCursor = hasMore && lastItem
+      ? `${lastItem.createdAt.toISOString()}:${lastItem.id}`
       : undefined;
 
     return { items, nextCursor };

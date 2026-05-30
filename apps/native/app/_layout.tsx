@@ -9,17 +9,8 @@ import { AppThemeProvider } from "@/contexts/app-theme-context";
 import { queryClient } from "@/utils/trpc";
 
 export const unstable_settings = {
-  initialRouteName: "(drawer)",
+  initialRouteName: "(tabs)",
 };
-
-function StackLayout() {
-  return (
-    <Stack screenOptions={{}}>
-      <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ title: "Modal", presentation: "modal" }} />
-    </Stack>
-  );
-}
 
 export default function Layout() {
   return (
@@ -28,7 +19,45 @@ export default function Layout() {
         <KeyboardProvider>
           <AppThemeProvider>
             <HeroUINativeProvider>
-              <StackLayout />
+              <Stack>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen
+                  name="client/[id]"
+                  options={{ title: "Client Details" }}
+                />
+                <Stack.Screen
+                  name="project/[id]"
+                  options={{ title: "Project Details" }}
+                />
+                <Stack.Screen
+                  name="ticket/[id]"
+                  options={{ title: "Ticket Details" }}
+                />
+                <Stack.Screen
+                  name="exchange/[id]"
+                  options={{ title: "Exchange" }}
+                />
+                <Stack.Screen
+                  name="create-client"
+                  options={{ presentation: "modal", title: "New Client" }}
+                />
+                <Stack.Screen
+                  name="create-project"
+                  options={{ presentation: "modal", title: "New Project" }}
+                />
+                <Stack.Screen
+                  name="create-ticket"
+                  options={{ presentation: "modal", title: "New Ticket" }}
+                />
+                <Stack.Screen
+                  name="create-exchange"
+                  options={{ presentation: "modal", title: "New Exchange" }}
+                />
+                <Stack.Screen
+                  name="modal"
+                  options={{ title: "Modal", presentation: "modal" }}
+                />
+              </Stack>
             </HeroUINativeProvider>
           </AppThemeProvider>
         </KeyboardProvider>

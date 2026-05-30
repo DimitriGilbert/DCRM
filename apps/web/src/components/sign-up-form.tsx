@@ -10,7 +10,7 @@ import { authClient } from "@/lib/auth-client";
 
 import Loader from "./loader";
 
-export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () => void }) {
+export default function SignUpForm({ canCreateOwner, onSwitchToSignIn }: { canCreateOwner: boolean; onSwitchToSignIn: () => void }) {
   const navigate = useNavigate({
     from: "/",
   });
@@ -23,6 +23,11 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
       name: "",
     },
     onSubmit: async ({ value }) => {
+      if (!canCreateOwner) {
+        toast.error("Account creation is closed for this DCRM instance.");
+        return;
+      }
+
       await authClient.signUp.email(
         {
           email: value.email,
@@ -53,6 +58,20 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
 
   if (isPending) {
     return <Loader />;
+  }
+
+  if (!canCreateOwner) {
+    return (
+      <div className="mx-auto mt-10 w-full max-w-md p-6 text-center">
+        <h1 className="mb-3 text-3xl font-bold">Account creation is closed</h1>
+        <p className="text-muted-foreground">
+          This DCRM instance already has an owner account. Sign in with that account to continue.
+        </p>
+        <Button variant="link" onClick={onSwitchToSignIn} className="mt-4 text-indigo-600 hover:text-indigo-800">
+          Sign In
+        </Button>
+      </div>
+    );
   }
 
   return (

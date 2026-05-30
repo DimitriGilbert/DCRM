@@ -125,6 +125,7 @@ export const EVENT_ACTIONS = [
   "exchange_received",
   "file_attached",
   "import_completed",
+  "import_failed",
   "webhook_received",
 ] as const;
 

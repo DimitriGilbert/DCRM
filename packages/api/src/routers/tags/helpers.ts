@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 
+import { DuplicateTagNameError } from "../../crm/repository.js";
 import type { RequestAuth } from "../../context.js";
 import type { CrmRepository } from "../../crm/repository.js";
 import type { EntityTagInput } from "../../crm/types.js";
@@ -11,6 +12,17 @@ type AuthenticatedCrmContext = {
 
 export function tagNotFound(): TRPCError {
   return new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
+}
+
+export function tagNameConflict(): TRPCError {
+  return new TRPCError({ code: "CONFLICT", message: "Tag name is already reserved." });
+}
+
+export function translateTagError(error: unknown): never {
+  if (error instanceof DuplicateTagNameError) {
+    throw tagNameConflict();
+  }
+  throw error;
 }
 
 export async function assertEntityCanBeTagged(ctx: AuthenticatedCrmContext, input: Omit<EntityTagInput, "userId">) {

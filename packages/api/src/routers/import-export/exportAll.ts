@@ -12,7 +12,7 @@ export const exportAll = protectedProcedure.query(async ({ ctx }) => {
       tickets: await ctx.crmRepository.tickets.list({ userId, includeDeleted: true }),
       exchanges: await ctx.crmRepository.exchanges.list({ userId, includeDeleted: true }),
       tags: await ctx.crmRepository.tags.list({ userId, includeDeleted: true }),
-      notifications: await ctx.crmRepository.notifications.list({ userId, limit: 1_000 }),
+      notifications: await ctx.crmRepository.notifications.listAll({ userId }),
       events: await ctx.eventService.listForUser(userId),
     },
   };

@@ -104,6 +104,7 @@ export type CrmRepository = {
   readonly notifications: {
     readonly create: (input: { readonly id: string; readonly userId: string; readonly fields: NotificationMutationFields; readonly now: Date }) => Promise<NotificationRecord>;
     readonly list: (input: { readonly userId: string; readonly unreadOnly?: boolean; readonly limit?: number }) => Promise<readonly NotificationRecord[]>;
+    readonly listAll: (input: { readonly userId: string; readonly unreadOnly?: boolean }) => Promise<readonly NotificationRecord[]>;
     readonly markRead: (input: { readonly userId: string; readonly id: string; readonly now: Date }) => Promise<NotificationRecord | undefined>;
   };
   readonly userSettings: {
@@ -113,6 +114,13 @@ export type CrmRepository = {
 };
 
 export type ActiveEmailAccountLookup = (input: { readonly userId: string; readonly emailAccountId: string }) => boolean | Promise<boolean>;
+
+export class DuplicateTagNameError extends Error {
+  constructor(readonly tagName: string) {
+    super(`Tag name is already reserved: ${tagName}`);
+    this.name = "DuplicateTagNameError";
+  }
+}
 
 export function createInMemoryCrmRepository(options: { readonly isActiveEmailAccount?: ActiveEmailAccountLookup } = {}): CrmRepository {
   const clients: ClientRecord[] = [];
@@ -610,6 +618,7 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
     },
     tags: {
       async create(input) {
+        assertTagNameAvailable(tags, input.userId, input.fields.name);
         const record: TagRecord = {
           id: input.id,
           userId: input.userId,
@@ -627,6 +636,9 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         return tags.filter((tag) => tag.userId === input.userId && (input.includeDeleted || !tag.deletedAt));
       },
       async update(input) {
+        if (input.fields.name !== undefined) {
+          assertTagNameAvailable(tags, input.userId, input.fields.name, input.id);
+        }
         return updateById(tags, input.userId, input.id, (tag) => ({
           ...tag,
           ...input.fields,
@@ -748,6 +760,9 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
           .toSorted((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
           .slice(0, limit);
       },
+      async listAll(input) {
+        return notifications.filter((notification) => notification.userId === input.userId && (!input.unreadOnly || !notification.readAt)).toSorted((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      },
       async markRead(input) {
         return updateById(notifications, input.userId, input.id, (notification) => ({ ...notification, readAt: input.now, updatedAt: input.now }));
       },
@@ -803,6 +818,13 @@ function updateById<TRecord extends { readonly id: string; readonly userId: stri
 
 function matchesEntityTag(record: EntityTagRecord, input: EntityTagInput): boolean {
   return record.userId === input.userId && record.tagId === input.tagId && record.entityType === input.entityType && record.entityId === input.entityId;
+}
+
+function assertTagNameAvailable(records: readonly TagRecord[], userId: string, name: string, exceptId?: string): void {
+  const duplicate = records.find((tag) => tag.userId === userId && tag.name === name && tag.id !== exceptId);
+  if (duplicate) {
+    throw new DuplicateTagNameError(name);
+  }
 }
 
 function requireActiveClient(records: readonly ClientRecord[], userId: string, clientId: string): ClientRecord {

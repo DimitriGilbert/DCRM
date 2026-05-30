@@ -3,8 +3,9 @@ import { emailAccounts } from "@DCRM/db/schema/automation-integrations";
 import { attachments, clientAuthorizedEmails, clients, entityTags, exchanges, leads, notifications, projects, tags, tickets, userSettings } from "@DCRM/db/schema/core-crm";
 import { resolveLocale } from "@DCRM/i18n";
 import type { AttachmentTargetType } from "@DCRM/domain";
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql, sum } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql, sum } from "drizzle-orm";
 
+import { DuplicateTagNameError } from "./repository.js";
 import type { CrmRepository } from "./repository.js";
 import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
 
@@ -366,8 +367,13 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
     },
     tags: {
       async create(input) {
-        const rows = await database.insert(tags).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
-        return requireTag(rows[0], input.id);
+        await assertTagNameAvailable(database, input.userId, input.fields.name);
+        try {
+          const rows = await database.insert(tags).values({ id: input.id, userId: input.userId, ...input.fields, createdAt: input.now, updatedAt: input.now }).returning();
+          return requireTag(rows[0], input.id);
+        } catch (error) {
+          throw translateTagNameUniqueError(error, input.fields.name);
+        }
       },
       async list(input) {
         const rows = await database
@@ -377,12 +383,22 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         return rows.map(rowToTag);
       },
       async update(input) {
-        const rows = await database
-          .update(tags)
-          .set({ ...input.fields, updatedAt: input.now })
-          .where(and(eq(tags.userId, input.userId), eq(tags.id, input.id)))
-          .returning();
-        return rows[0] ? rowToTag(rows[0]) : undefined;
+        if (input.fields.name !== undefined) {
+          await assertTagNameAvailable(database, input.userId, input.fields.name, input.id);
+        }
+        try {
+          const rows = await database
+            .update(tags)
+            .set({ ...input.fields, updatedAt: input.now })
+            .where(and(eq(tags.userId, input.userId), eq(tags.id, input.id)))
+            .returning();
+          return rows[0] ? rowToTag(rows[0]) : undefined;
+        } catch (error) {
+          if (input.fields.name !== undefined) {
+            throw translateTagNameUniqueError(error, input.fields.name);
+          }
+          throw error;
+        }
       },
       async setDeletedAt(input) {
         const rows = await database
@@ -468,6 +484,14 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           .where(input.unreadOnly ? and(eq(notifications.userId, input.userId), isNull(notifications.readAt)) : eq(notifications.userId, input.userId))
           .orderBy(desc(notifications.createdAt))
           .limit(input.limit ?? 50);
+        return rows.map(rowToNotification);
+      },
+      async listAll(input) {
+        const rows = await database
+          .select()
+          .from(notifications)
+          .where(input.unreadOnly ? and(eq(notifications.userId, input.userId), isNull(notifications.readAt)) : eq(notifications.userId, input.userId))
+          .orderBy(desc(notifications.createdAt));
         return rows.map(rowToNotification);
       },
       async markRead(input) {
@@ -651,6 +675,32 @@ async function requireActiveEmailAccount(database: CrmDatabase, userId: string, 
   if (!rows[0]) {
     throw new Error("Email account not found.");
   }
+}
+
+async function assertTagNameAvailable(database: CrmDatabase, userId: string, name: string, exceptId?: string): Promise<void> {
+  const predicates = [eq(tags.userId, userId), eq(tags.name, name)];
+  if (exceptId !== undefined) {
+    predicates.push(ne(tags.id, exceptId));
+  }
+  const rows = await database.select({ id: tags.id }).from(tags).where(and(...predicates)).limit(1);
+  if (rows[0]) {
+    throw new DuplicateTagNameError(name);
+  }
+}
+
+function translateTagNameUniqueError(error: unknown, name: string): Error {
+  if (isTagNameUniqueViolation(error)) {
+    return new DuplicateTagNameError(name);
+  }
+  return error instanceof Error ? error : new Error("Tag persistence failed.");
+}
+
+function isTagNameUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const maybeError = error as { readonly code?: unknown; readonly constraint?: unknown };
+  return maybeError.code === "23505" && maybeError.constraint === "tags_user_id_name_idx";
 }
 
 async function validateActiveExchangeParents(database: CrmDatabase, userId: string, clientId: string | null | undefined, projectId: string | null | undefined, ticketId: string | null | undefined): Promise<void> {

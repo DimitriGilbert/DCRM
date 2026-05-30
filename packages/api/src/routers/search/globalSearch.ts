@@ -18,10 +18,10 @@ export const globalSearch = protectedProcedure.input(globalSearchSchema).query(a
     shouldSearchLeads ? ctx.crmRepository.leads.list({ userId, search: input.search, stage: leadStage, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo, includeConverted: true }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "lead", entityId: record.id, title: record.name, description: record.company ?? record.source ?? record.email, href: `/leads/${record.id}`, status: record.stage, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
     shouldSearchProjects ? ctx.crmRepository.projects.list({ userId, search: input.search, status: projectStatus, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "project", entityId: record.id, title: record.name, description: record.description, href: `/projects/${record.id}`, status: record.status, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
     shouldSearchTickets ? ctx.crmRepository.tickets.list({ userId, search: input.search, status: ticketStatus, tagIds: input.tagIds, createdFrom: input.dateFrom, createdTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "ticket", entityId: record.id, title: record.title, description: record.description, href: `/tickets/${record.id}`, status: record.status, matchedAt: record.createdAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
-    activeEntityTypes.has("exchange") && !input.status ? ctx.crmRepository.exchanges.list({ userId, search: input.search, type: input.exchangeType, tagIds: input.tagIds, occurredFrom: input.dateFrom, occurredTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "exchange", entityId: record.id, title: record.subject ?? exchangeTitle(record.body), description: record.body, href: `/search?exchangeId=${encodeURIComponent(record.id)}`, status: record.type, matchedAt: record.occurredAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
+    activeEntityTypes.has("exchange") && !input.status ? ctx.crmRepository.exchanges.list({ userId, search: input.search, type: input.exchangeType, tagIds: input.tagIds, occurredFrom: input.dateFrom, occurredTo: input.dateTo }).then((records) => records.map((record): GlobalSearchResult => ({ entityType: "exchange", entityId: record.id, title: record.subject ?? exchangeTitle(record.body), description: exchangeDescription(record.body), href: `/search?exchangeId=${encodeURIComponent(record.id)}`, status: record.type, matchedAt: record.occurredAt }))) : Promise.resolve<readonly GlobalSearchResult[]>([]),
   ]);
 
-  return searches.flat().sort(compareSearchResults);
+  return searches.flat().sort(compareSearchResults).slice(0, input.limit);
 });
 
 function leadStageFromStatus(status: GlobalSearchInput["status"]): LeadStage | undefined {
@@ -62,8 +62,16 @@ function ticketStatusFromStatus(status: GlobalSearchInput["status"]): TicketStat
 }
 
 function exchangeTitle(body: string): string {
-  const trimmed = body.trim();
-  return trimmed.length > 48 ? `${trimmed.slice(0, 48)}…` : trimmed;
+  return truncateSnippet(body, 48);
+}
+
+function exchangeDescription(body: string): string {
+  return truncateSnippet(body, 160);
+}
+
+function truncateSnippet(value: string, maxLength: number): string {
+  const normalized = value.trim().replaceAll(/\s+/gu, " ");
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
 }
 
 function compareSearchResults(left: GlobalSearchResult, right: GlobalSearchResult): number {

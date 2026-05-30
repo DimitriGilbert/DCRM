@@ -76,6 +76,27 @@ describe("global search tRPC API", () => {
 
     assert.deepEqual(result.map((item) => item.entityId), [client.id]);
   });
+
+  it("rejects unbounded empty global search requests", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    await caller.clients.create({ name: "Ada Lovelace" });
+
+    await assert.rejects(caller.search.global({}), /Global search requires/u);
+  });
+
+  it("returns bounded exchange snippets instead of full bodies", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const privateBody = `Needle ${"private ".repeat(40)}secret tail`;
+    await caller.exchanges.create({ clientId: client.id, type: "note", body: privateBody });
+
+    const result = await caller.search.global({ search: "Needle", entityTypes: ["exchange"] });
+
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.title.includes("secret tail"), false);
+    assert.equal(result[0]?.description?.includes("secret tail"), false);
+    assert.ok((result[0]?.description?.length ?? 0) <= 161);
+  });
 });
 
 function createTestContext(userId: string, crmRepository: CrmRepository, eventService: EventService): Context {

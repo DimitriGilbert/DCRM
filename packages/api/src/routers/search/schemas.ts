@@ -15,6 +15,13 @@ export const globalSearchSchema = z.object({
   exchangeType: z.enum(EXCHANGE_TYPES).optional(),
   dateFrom: z.coerce.date().optional(),
   dateTo: dateToSchema.optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+}).superRefine((input, context) => {
+  const hasSearch = input.search !== undefined && input.search.length > 0;
+  const hasBoundedFilter = (input.tagIds?.length ?? 0) > 0 || input.status !== undefined || input.exchangeType !== undefined || input.dateFrom !== undefined || input.dateTo !== undefined;
+  if (!hasSearch && !hasBoundedFilter) {
+    context.addIssue({ code: "custom", message: "Global search requires a non-empty search term or a bounded filter." });
+  }
 });
 
 export type GlobalSearchInput = z.infer<typeof globalSearchSchema>;

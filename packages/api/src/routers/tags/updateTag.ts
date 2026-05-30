@@ -1,10 +1,10 @@
 import { protectedProcedure } from "../../index.js";
-import { tagNotFound } from "./helpers.js";
+import { tagNotFound, translateTagError } from "./helpers.js";
 import { tagUpdateSchema } from "./schemas.js";
 
 export const updateTag = protectedProcedure.input(tagUpdateSchema).mutation(async ({ ctx, input }) => {
   const { id, ...fields } = input;
-  const tag = await ctx.crmRepository.tags.update({ userId: ctx.auth.user.id, id, fields, now: new Date() });
+  const tag = await ctx.crmRepository.tags.update({ userId: ctx.auth.user.id, id, fields, now: new Date() }).catch(translateTagError);
   if (!tag) {
     throw tagNotFound();
   }

@@ -34,6 +34,22 @@ describe("dashboard tRPC API", () => {
     assert.deepEqual(summary.recentActivity.map((activity) => [activity.kind, activity.title]), [["note", "Kickoff notes"]]);
     assert.equal(summary.leadPipeline[0]?.leadIds[0], lead.id);
   });
+
+  it("uses exact cents arithmetic and truncates subject-less exchange activity titles", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    await caller.leads.create({ name: "Decimal one", stage: "qualified", estimatedValueAmount: "0.10", estimatedValueCurrency: "USD" });
+    await caller.leads.create({ name: "Decimal two", stage: "qualified", estimatedValueAmount: "0.20", estimatedValueCurrency: "USD" });
+    await caller.exchanges.create({ clientId: client.id, type: "note", body: `Private ${"body ".repeat(20)}secret tail`, occurredAt: new Date("2027-01-01T12:00:00.000Z") });
+
+    const summary = await caller.dashboard.summary();
+
+    assert.deepEqual(summary.leadPipeline.map((stage) => [stage.stage, stage.estimatedValue]), [["qualified", "0.30 USD"]]);
+    assert.equal(summary.recentActivity[0]?.title.includes("secret tail"), false);
+    assert.ok((summary.recentActivity[0]?.title.length ?? 0) <= 49);
+  });
 });
 
 function createTestContext(userId: string, crmRepository: CrmRepository, eventService: EventService): Context {

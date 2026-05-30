@@ -180,6 +180,33 @@ describe("clients tRPC API", () => {
     assert.equal(updated.id, tag.id);
     assert.equal(updated.name, "priority");
   });
+
+  it("emits project.updated when detaching a project tag", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const client = await caller.clients.create({ name: "Ada Lovelace" });
+    const project = await caller.projects.create({ clientId: client.id, name: "Portal" });
+    const tag = await caller.tags.create({ name: "vip" });
+
+    await caller.tags.attach({ tagId: tag.id, entityType: "project", entityId: project.id });
+    await caller.tags.detach({ tagId: tag.id, entityType: "project", entityId: project.id });
+
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["client.created", "project.created", "tag.created", "project.updated", "project.updated"],
+    );
+  });
+
+  it("returns stable conflicts for duplicate tag names including soft-deleted tags", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", createInMemoryCrmRepository(), createTestEventService()));
+    const reserved = await caller.tags.create({ name: "vip" });
+    const other = await caller.tags.create({ name: "priority" });
+    await caller.tags.delete({ id: reserved.id });
+
+    await assert.rejects(caller.tags.create({ name: "vip" }), /CONFLICT|Tag name is already reserved/u);
+    await assert.rejects(caller.tags.update({ id: other.id, name: "vip" }), /CONFLICT|Tag name is already reserved/u);
+  });
 });
 
 function createTestContext(userId: string, crmRepository: CrmRepository, eventService: EventService): Context {

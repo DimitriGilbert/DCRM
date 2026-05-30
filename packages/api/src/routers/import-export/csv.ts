@@ -1,12 +1,23 @@
 type CsvRecord = Record<string, string>;
 
-export function parseCsv(input: string): readonly CsvRecord[] {
+export class CsvRowLimitError extends Error {
+  constructor(readonly maxRows: number) {
+    super(`CSV import exceeds the maximum row count of ${maxRows}.`);
+    this.name = "CsvRowLimitError";
+  }
+}
+
+export function parseCsv(input: string, options: { readonly maxRows?: number } = {}): readonly CsvRecord[] {
   const rows = parseCsvRows(input);
   const header = rows[0]?.map((cell) => cell.trim()) ?? [];
   if (header.length === 0 || header.every((cell) => cell.length === 0)) {
     return [];
   }
-  return rows.slice(1).filter((row) => row.some((cell) => cell.trim().length > 0)).map((row) => rowToRecord(header, row));
+  const records = rows.slice(1).filter((row) => row.some((cell) => cell.trim().length > 0)).map((row) => rowToRecord(header, row));
+  if (options.maxRows !== undefined && records.length > options.maxRows) {
+    throw new CsvRowLimitError(options.maxRows);
+  }
+  return records;
 }
 
 export function stringifyCsv(records: readonly Record<string, unknown>[]): string {

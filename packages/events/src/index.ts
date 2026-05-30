@@ -49,6 +49,7 @@ export const CORE_EVENT_DEFINITIONS = [
   { type: "exchange.exchange_received", entityType: "exchange", action: "exchange_received", description: "An exchange was received." },
   { type: "attachment.file_attached", entityType: "attachment", action: "file_attached", description: "A file was attached." },
   { type: "import.import_completed", entityType: "import", action: "import_completed", description: "An import completed." },
+  { type: "import.import_failed", entityType: "import", action: "import_failed", description: "An import failed after partially or fully processing rows." },
   { type: "webhook.webhook_received", entityType: "webhook", action: "webhook_received", description: "An incoming webhook was received." },
 ] as const satisfies readonly EventDefinition[];
 

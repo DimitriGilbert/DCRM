@@ -71,6 +71,7 @@ describe("domain constants", () => {
       "exchange_received",
       "file_attached",
       "import_completed",
+      "import_failed",
       "webhook_received",
     ]);
     assert.deepEqual(HOOK_TYPES, ["ai", "outgoing_webhook", "built_in"]);

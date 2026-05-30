@@ -15,7 +15,9 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@DCRM/ai": "workspace:*",
     "@DCRM/auth": "workspace:*",
+    "@DCRM/crypto": "workspace:*",
     "@DCRM/db": "workspace:*",
     "@DCRM/domain": "workspace:*",
     "@DCRM/env": "workspace:*",

@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAiChatRouteImport } from './routes/_authenticated/ai-chat'
 import { Route as AuthenticatedTicketsIndexRouteImport } from './routes/_authenticated/tickets/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
 import { Route as AuthenticatedOnboardingIndexRouteImport } from './routes/_authenticated/onboarding/index'
@@ -58,6 +59,11 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedAiChatRoute = AuthenticatedAiChatRouteImport.update({
+  id: '/ai-chat',
+  path: '/ai-chat',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedTicketsIndexRoute =
@@ -187,6 +193,7 @@ const AuthenticatedProjectsProjectIdTicketsTicketIdEditRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/ai-chat': typeof AuthenticatedAiChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/clients/$clientId': typeof AuthenticatedClientsClientIdRouteWithChildren
@@ -214,6 +221,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/ai-chat': typeof AuthenticatedAiChatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/clients/$clientId': typeof AuthenticatedClientsClientIdRouteWithChildren
@@ -243,6 +251,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/ai-chat': typeof AuthenticatedAiChatRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/clients/$clientId': typeof AuthenticatedClientsClientIdRouteWithChildren
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/ai-chat'
     | '/dashboard'
     | '/settings'
     | '/clients/$clientId'
@@ -299,6 +309,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/ai-chat'
     | '/dashboard'
     | '/settings'
     | '/clients/$clientId'
@@ -327,6 +338,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/ai-chat'
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
     | '/_authenticated/clients/$clientId'
@@ -395,6 +407,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/ai-chat': {
+      id: '/_authenticated/ai-chat'
+      path: '/ai-chat'
+      fullPath: '/ai-chat'
+      preLoaderRoute: typeof AuthenticatedAiChatRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/tickets/': {
@@ -618,6 +637,7 @@ const AuthenticatedProjectsProjectIdRouteWithChildren =
   )
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedAiChatRoute: typeof AuthenticatedAiChatRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedClientsClientIdRoute: typeof AuthenticatedClientsClientIdRouteWithChildren
@@ -634,6 +654,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedAiChatRoute: AuthenticatedAiChatRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedClientsClientIdRoute:

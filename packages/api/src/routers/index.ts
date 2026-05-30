@@ -1,10 +1,13 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
 
+import { aiChatRouter } from "./ai-chat";
+import { aiProviderRouter } from "./ai-provider";
 import { attachmentRouter } from "./attachment";
 import { clientRouter } from "./client";
 import { entityTagRouter } from "./entity-tag";
 import { exchangeRouter } from "./exchange";
 import { exportRouter } from "./export";
+import { hookRouter } from "./hook";
 import { importRouter } from "./import";
 import { leadRouter } from "./lead";
 import { notificationRouter } from "./notification";
@@ -24,8 +27,11 @@ export const appRouter = router({
       user: ctx.user,
     };
   }),
+  aiProvider: aiProviderRouter,
+  aiChat: aiChatRouter,
   attachment: attachmentRouter,
   client: clientRouter,
+  hook: hookRouter,
   lead: leadRouter,
   project: projectRouter,
   tag: tagRouter,

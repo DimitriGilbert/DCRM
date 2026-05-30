@@ -1,0 +1,31 @@
+{
+  "name": "@DCRM/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@DCRM/crypto": "workspace:*",
+    "@DCRM/domain": "workspace:*",
+    "@tanstack/ai": "^0.23.0",
+    "@tanstack/ai-anthropic": "^0.11.1",
+    "@tanstack/ai-gemini": "^0.12.1",
+    "@tanstack/ai-openai": "^0.10.4",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@DCRM/config": "workspace:*",
+    "@types/node": "^22.13.14",
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  }
+}

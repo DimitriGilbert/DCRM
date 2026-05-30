@@ -22,6 +22,24 @@ describe("settings tRPC API", () => {
     assert.equal((await userOne.settings.get()).locale, "en");
     assert.equal((await userTwo.settings.get()).locale, "en");
   });
+
+  it("persists appearance and onboarding state in the current user's personal settings", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const userOne = appRouter.createCaller(createTestContext("user_1", crmRepository));
+    const userTwo = appRouter.createCaller(createTestContext("user_2", crmRepository));
+
+    await userOne.settings.updatePreferences({ locale: "en", theme: "dark" });
+    await userOne.settings.completeOnboarding();
+
+    const userOneSettings = await userOne.settings.get();
+    const userTwoSettings = await userTwo.settings.get();
+
+    assert.equal(userOneSettings.locale, "en");
+    assert.equal(userOneSettings.theme, "dark");
+    assert.equal(userOneSettings.onboardingCompleted, true);
+    assert.equal(userTwoSettings.theme, "system");
+    assert.equal(userTwoSettings.onboardingCompleted, false);
+  });
 });
 
 function createTestContext(userId: string, crmRepository: CrmRepository): Context {

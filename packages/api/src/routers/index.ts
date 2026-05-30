@@ -3,6 +3,7 @@ import { protectedProcedure, publicProcedure, router } from "../index.js";
 import { aiRouter } from "./ai/index.js";
 import { automationRouter } from "./automation/index.js";
 import { attachmentsRouter } from "./attachments/index.js";
+import { billingRouter } from "./billing/index.js";
 import { clientsRouter } from "./clients/index.js";
 import { dashboardRouter } from "./dashboard/index.js";
 import { emailRouter } from "./email/index.js";
@@ -35,6 +36,7 @@ export const appRouter = router({
   tickets: ticketsRouter,
   exchanges: exchangesRouter,
   attachments: attachmentsRouter,
+  billing: billingRouter,
   dashboard: dashboardRouter,
   email: emailRouter,
   search: searchRouter,

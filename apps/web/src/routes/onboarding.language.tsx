@@ -17,6 +17,7 @@ export const Route = createFileRoute("/onboarding/language")({
     if (!context.session) {
       throw redirect({ to: "/login" });
     }
+    throw redirect({ to: "/onboarding" });
   },
 });
 

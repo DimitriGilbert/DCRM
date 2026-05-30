@@ -10,8 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TicketsRouteImport } from './routes/tickets'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as DataRouteImport } from './routes/data'
@@ -22,6 +24,7 @@ import { Route as TicketsNewRouteImport } from './routes/tickets.new'
 import { Route as TicketsKanbanRouteImport } from './routes/tickets.kanban'
 import { Route as TicketsTicketIdRouteImport } from './routes/tickets.$ticketId'
 import { Route as SettingsEmailRouteImport } from './routes/settings.email'
+import { Route as SettingsBillingRouteImport } from './routes/settings.billing'
 import { Route as SettingsAiRouteImport } from './routes/settings.ai'
 import { Route as ProjectsNewRouteImport } from './routes/projects.new'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
@@ -38,12 +41,18 @@ import { Route as LeadsLeadIdEditRouteImport } from './routes/leads.$leadId.edit
 import { Route as LeadsLeadIdConvertRouteImport } from './routes/leads.$leadId.convert'
 import { Route as ClientsClientIdEditRouteImport } from './routes/clients.$clientId.edit'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
+import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe.webhook'
 import { Route as ApiIncomingWebhooksSlugRouteImport } from './routes/api/incoming-webhooks.$slug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const TicketsRoute = TicketsRouteImport.update({
   id: '/tickets',
   path: '/tickets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SearchRoute = SearchRouteImport.update({
@@ -54,6 +63,11 @@ const SearchRoute = SearchRouteImport.update({
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -102,14 +116,19 @@ const TicketsTicketIdRoute = TicketsTicketIdRouteImport.update({
   getParentRoute: () => TicketsRoute,
 } as any)
 const SettingsEmailRoute = SettingsEmailRouteImport.update({
-  id: '/settings/email',
-  path: '/settings/email',
-  getParentRoute: () => rootRouteImport,
+  id: '/email',
+  path: '/email',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsBillingRoute = SettingsBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsAiRoute = SettingsAiRouteImport.update({
-  id: '/settings/ai',
-  path: '/settings/ai',
-  getParentRoute: () => rootRouteImport,
+  id: '/ai',
+  path: '/ai',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const ProjectsNewRoute = ProjectsNewRouteImport.update({
   id: '/new',
@@ -122,9 +141,9 @@ const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
   getParentRoute: () => ProjectsRoute,
 } as any)
 const OnboardingLanguageRoute = OnboardingLanguageRouteImport.update({
-  id: '/onboarding/language',
-  path: '/onboarding/language',
-  getParentRoute: () => rootRouteImport,
+  id: '/language',
+  path: '/language',
+  getParentRoute: () => OnboardingRoute,
 } as any)
 const LeadsNewRoute = LeadsNewRouteImport.update({
   id: '/new',
@@ -186,6 +205,11 @@ const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   path: '/api/trpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
+  id: '/api/stripe/webhook',
+  path: '/api/stripe/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiIncomingWebhooksSlugRoute = ApiIncomingWebhooksSlugRouteImport.update({
   id: '/api/incoming-webhooks/$slug',
   path: '/api/incoming-webhooks/$slug',
@@ -204,8 +228,10 @@ export interface FileRoutesByFullPath {
   '/data': typeof DataRoute
   '/leads': typeof LeadsRouteWithChildren
   '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/tickets': typeof TicketsRouteWithChildren
   '/ai/chat': typeof AiChatRoute
   '/clients/$clientId': typeof ClientsClientIdRouteWithChildren
@@ -217,12 +243,14 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/billing': typeof SettingsBillingRoute
   '/settings/email': typeof SettingsEmailRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/incoming-webhooks/$slug': typeof ApiIncomingWebhooksSlugRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/clients/$clientId/edit': typeof ClientsClientIdEditRoute
   '/leads/$leadId/convert': typeof LeadsLeadIdConvertRoute
@@ -237,8 +265,10 @@ export interface FileRoutesByTo {
   '/data': typeof DataRoute
   '/leads': typeof LeadsRouteWithChildren
   '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/tickets': typeof TicketsRouteWithChildren
   '/ai/chat': typeof AiChatRoute
   '/clients/$clientId': typeof ClientsClientIdRouteWithChildren
@@ -250,12 +280,14 @@ export interface FileRoutesByTo {
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/billing': typeof SettingsBillingRoute
   '/settings/email': typeof SettingsEmailRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/incoming-webhooks/$slug': typeof ApiIncomingWebhooksSlugRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/clients/$clientId/edit': typeof ClientsClientIdEditRoute
   '/leads/$leadId/convert': typeof LeadsLeadIdConvertRoute
@@ -271,8 +303,10 @@ export interface FileRoutesById {
   '/data': typeof DataRoute
   '/leads': typeof LeadsRouteWithChildren
   '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/tickets': typeof TicketsRouteWithChildren
   '/ai/chat': typeof AiChatRoute
   '/clients/$clientId': typeof ClientsClientIdRouteWithChildren
@@ -284,12 +318,14 @@ export interface FileRoutesById {
   '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/billing': typeof SettingsBillingRoute
   '/settings/email': typeof SettingsEmailRoute
   '/tickets/$ticketId': typeof TicketsTicketIdRouteWithChildren
   '/tickets/kanban': typeof TicketsKanbanRoute
   '/tickets/new': typeof TicketsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/incoming-webhooks/$slug': typeof ApiIncomingWebhooksSlugRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/clients/$clientId/edit': typeof ClientsClientIdEditRoute
   '/leads/$leadId/convert': typeof LeadsLeadIdConvertRoute
@@ -306,8 +342,10 @@ export interface FileRouteTypes {
     | '/data'
     | '/leads'
     | '/login'
+    | '/onboarding'
     | '/projects'
     | '/search'
+    | '/settings'
     | '/tickets'
     | '/ai/chat'
     | '/clients/$clientId'
@@ -319,12 +357,14 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/settings/ai'
+    | '/settings/billing'
     | '/settings/email'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
     | '/api/auth/$'
     | '/api/incoming-webhooks/$slug'
+    | '/api/stripe/webhook'
     | '/api/trpc/$'
     | '/clients/$clientId/edit'
     | '/leads/$leadId/convert'
@@ -339,8 +379,10 @@ export interface FileRouteTypes {
     | '/data'
     | '/leads'
     | '/login'
+    | '/onboarding'
     | '/projects'
     | '/search'
+    | '/settings'
     | '/tickets'
     | '/ai/chat'
     | '/clients/$clientId'
@@ -352,12 +394,14 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/settings/ai'
+    | '/settings/billing'
     | '/settings/email'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
     | '/api/auth/$'
     | '/api/incoming-webhooks/$slug'
+    | '/api/stripe/webhook'
     | '/api/trpc/$'
     | '/clients/$clientId/edit'
     | '/leads/$leadId/convert'
@@ -372,8 +416,10 @@ export interface FileRouteTypes {
     | '/data'
     | '/leads'
     | '/login'
+    | '/onboarding'
     | '/projects'
     | '/search'
+    | '/settings'
     | '/tickets'
     | '/ai/chat'
     | '/clients/$clientId'
@@ -385,12 +431,14 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/projects/new'
     | '/settings/ai'
+    | '/settings/billing'
     | '/settings/email'
     | '/tickets/$ticketId'
     | '/tickets/kanban'
     | '/tickets/new'
     | '/api/auth/$'
     | '/api/incoming-webhooks/$slug'
+    | '/api/stripe/webhook'
     | '/api/trpc/$'
     | '/clients/$clientId/edit'
     | '/leads/$leadId/convert'
@@ -406,15 +454,15 @@ export interface RootRouteChildren {
   DataRoute: typeof DataRoute
   LeadsRoute: typeof LeadsRouteWithChildren
   LoginRoute: typeof LoginRoute
+  OnboardingRoute: typeof OnboardingRouteWithChildren
   ProjectsRoute: typeof ProjectsRouteWithChildren
   SearchRoute: typeof SearchRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
   TicketsRoute: typeof TicketsRouteWithChildren
   AiChatRoute: typeof AiChatRoute
-  OnboardingLanguageRoute: typeof OnboardingLanguageRoute
-  SettingsAiRoute: typeof SettingsAiRoute
-  SettingsEmailRoute: typeof SettingsEmailRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiIncomingWebhooksSlugRoute: typeof ApiIncomingWebhooksSlugRoute
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
@@ -425,6 +473,13 @@ declare module '@tanstack/react-router' {
       path: '/tickets'
       fullPath: '/tickets'
       preLoaderRoute: typeof TicketsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/search': {
@@ -439,6 +494,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -506,17 +568,24 @@ declare module '@tanstack/react-router' {
     }
     '/settings/email': {
       id: '/settings/email'
-      path: '/settings/email'
+      path: '/email'
       fullPath: '/settings/email'
       preLoaderRoute: typeof SettingsEmailRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/billing': {
+      id: '/settings/billing'
+      path: '/billing'
+      fullPath: '/settings/billing'
+      preLoaderRoute: typeof SettingsBillingRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/settings/ai': {
       id: '/settings/ai'
-      path: '/settings/ai'
+      path: '/ai'
       fullPath: '/settings/ai'
       preLoaderRoute: typeof SettingsAiRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/projects/new': {
       id: '/projects/new'
@@ -534,10 +603,10 @@ declare module '@tanstack/react-router' {
     }
     '/onboarding/language': {
       id: '/onboarding/language'
-      path: '/onboarding/language'
+      path: '/language'
       fullPath: '/onboarding/language'
       preLoaderRoute: typeof OnboardingLanguageRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof OnboardingRoute
     }
     '/leads/new': {
       id: '/leads/new'
@@ -623,6 +692,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/stripe/webhook': {
+      id: '/api/stripe/webhook'
+      path: '/api/stripe/webhook'
+      fullPath: '/api/stripe/webhook'
+      preLoaderRoute: typeof ApiStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/incoming-webhooks/$slug': {
       id: '/api/incoming-webhooks/$slug'
       path: '/api/incoming-webhooks/$slug'
@@ -693,6 +769,18 @@ const LeadsRouteChildren: LeadsRouteChildren = {
 
 const LeadsRouteWithChildren = LeadsRoute._addFileChildren(LeadsRouteChildren)
 
+interface OnboardingRouteChildren {
+  OnboardingLanguageRoute: typeof OnboardingLanguageRoute
+}
+
+const OnboardingRouteChildren: OnboardingRouteChildren = {
+  OnboardingLanguageRoute: OnboardingLanguageRoute,
+}
+
+const OnboardingRouteWithChildren = OnboardingRoute._addFileChildren(
+  OnboardingRouteChildren,
+)
+
 interface ProjectsProjectIdRouteChildren {
   ProjectsProjectIdEditRoute: typeof ProjectsProjectIdEditRoute
 }
@@ -716,6 +804,22 @@ const ProjectsRouteChildren: ProjectsRouteChildren = {
 
 const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
   ProjectsRouteChildren,
+)
+
+interface SettingsRouteChildren {
+  SettingsAiRoute: typeof SettingsAiRoute
+  SettingsBillingRoute: typeof SettingsBillingRoute
+  SettingsEmailRoute: typeof SettingsEmailRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAiRoute: SettingsAiRoute,
+  SettingsBillingRoute: SettingsBillingRoute,
+  SettingsEmailRoute: SettingsEmailRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
 )
 
 interface TicketsTicketIdRouteChildren {
@@ -752,15 +856,15 @@ const rootRouteChildren: RootRouteChildren = {
   DataRoute: DataRoute,
   LeadsRoute: LeadsRouteWithChildren,
   LoginRoute: LoginRoute,
+  OnboardingRoute: OnboardingRouteWithChildren,
   ProjectsRoute: ProjectsRouteWithChildren,
   SearchRoute: SearchRoute,
+  SettingsRoute: SettingsRouteWithChildren,
   TicketsRoute: TicketsRouteWithChildren,
   AiChatRoute: AiChatRoute,
-  OnboardingLanguageRoute: OnboardingLanguageRoute,
-  SettingsAiRoute: SettingsAiRoute,
-  SettingsEmailRoute: SettingsEmailRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiIncomingWebhooksSlugRoute: ApiIncomingWebhooksSlugRoute,
+  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport

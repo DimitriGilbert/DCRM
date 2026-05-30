@@ -15,11 +15,14 @@ import type { HookExecutionQueue, HookExecutionRepository } from "@DCRM/events/h
 
 import { createDrizzleAutomationRepository } from "./automation/drizzle.js";
 import { createHookAwareAiEventService, createProductionHookExecutionQueue } from "./automation/runtime.js";
+import { createDrizzleBillingRepository } from "./billing/drizzle.js";
 import { createDrizzleCrmRepository } from "./crm/drizzle.js";
 import { createNodeSmtpPlainTextClient } from "./email/smtp.js";
 import { createStorageService } from "./storage/index.js";
 
 import type { AutomationRepository } from "./automation/repository.js";
+import type { BillingRepository } from "./billing/repository.js";
+import type { BillingConfig } from "./billing/types.js";
 import type { CrmRepository } from "./crm/repository.js";
 import type { StorageService } from "./storage/index.js";
 import type { SmtpPlainTextClient } from "./email/send.js";
@@ -45,6 +48,7 @@ export type RequestAuth =
 
 type CreateContextOptions = {
   automationRepository?: AutomationRepository;
+  billing?: ContextBilling;
   aiChatRunner?: CrmChatRunner;
   apiKeyService?: ApiKeyService;
   crmRepository?: CrmRepository;
@@ -63,10 +67,16 @@ export type ContextStorage = {
   readonly userQuotaBytes: number;
 };
 
+export type ContextBilling = {
+  readonly config: BillingConfig;
+  readonly repository: BillingRepository;
+};
+
 export type Context = {
   readonly auth: RequestAuth | null;
   readonly aiChatRunner?: CrmChatRunner;
   readonly automationRepository?: AutomationRepository;
+  readonly billing?: ContextBilling;
   readonly crmRepository: CrmRepository;
   readonly eventService: EventService;
   readonly secretCrypto?: SecretCrypto;
@@ -75,10 +85,11 @@ export type Context = {
   readonly storage?: ContextStorage;
 };
 
-export async function createContext({ apiKeyService, aiChatRunner, automationRepository, crmRepository, eventService, hookExecutionQueue, hookExecutionRepository, req, secretCrypto, smtpClient, storage }: CreateContextOptions): Promise<Context> {
+export async function createContext({ apiKeyService, aiChatRunner, automationRepository, billing, crmRepository, eventService, hookExecutionQueue, hookExecutionRepository, req, secretCrypto, smtpClient, storage }: CreateContextOptions): Promise<Context> {
   const database = crmRepository || eventService || automationRepository ? undefined : createDb();
   const env = createServerEnv(process.env);
   const resolvedAutomationRepository = automationRepository ?? createDrizzleAutomationRepository(database ?? createDb());
+  const resolvedBilling = billing ?? { config: createBillingConfig(env), repository: createDrizzleBillingRepository(database ?? createDb()) };
   const resolvedCrmRepository = crmRepository ?? createDrizzleCrmRepository(database ?? createDb());
   const baseEventService = eventService ?? createEventService({ repository: createDrizzleEventRepository(database ?? createDb()) });
   const resolvedStorage = storage ?? createDefaultStorage();
@@ -103,6 +114,7 @@ export async function createContext({ apiKeyService, aiChatRunner, automationRep
       } satisfies RequestAuth,
       aiChatRunner,
       automationRepository: resolvedAutomationRepository,
+      billing: resolvedBilling,
       crmRepository: resolvedCrmRepository,
       eventService: resolvedEventService,
       secretCrypto: resolvedSecretCrypto,
@@ -126,12 +138,23 @@ export async function createContext({ apiKeyService, aiChatRunner, automationRep
       : null,
     aiChatRunner,
     automationRepository: resolvedAutomationRepository,
+    billing: resolvedBilling,
     crmRepository: resolvedCrmRepository,
     eventService: resolvedEventService,
     secretCrypto: resolvedSecretCrypto,
     smtpClient: resolvedSmtpClient,
     session,
     storage: resolvedStorage,
+  };
+}
+
+function createBillingConfig(env: ReturnType<typeof createServerEnv>): BillingConfig {
+  return {
+    enabled: env.HOSTED_BILLING_ENABLED,
+    appUrl: env.APP_URL,
+    stripeSecretKey: env.STRIPE_SECRET_KEY,
+    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
+    stripePriceId: env.STRIPE_PRICE_ID,
   };
 }
 

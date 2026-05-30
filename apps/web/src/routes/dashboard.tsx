@@ -21,6 +21,10 @@ export const Route = createFileRoute("/dashboard")({
         to: "/login",
       });
     }
+    const settings = await context.queryClient.ensureQueryData(context.trpc.settings.get.queryOptions());
+    if (!settings.onboardingCompleted) {
+      throw redirect({ to: "/onboarding" });
+    }
   },
 });
 

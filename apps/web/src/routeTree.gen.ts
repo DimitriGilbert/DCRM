@@ -49,177 +49,177 @@ const TicketsRoute = TicketsRouteImport.update({
   id: '/tickets',
   path: '/tickets',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const LeadsRoute = LeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const DataRoute = DataRouteImport.update({
   id: '/data',
   path: '/data',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const ClientsRoute = ClientsRouteImport.update({
   id: '/clients',
   path: '/clients',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const TicketsNewRoute = TicketsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => TicketsRoute,
-} as any)
+})
 const TicketsKanbanRoute = TicketsKanbanRouteImport.update({
   id: '/kanban',
   path: '/kanban',
   getParentRoute: () => TicketsRoute,
-} as any)
+})
 const TicketsTicketIdRoute = TicketsTicketIdRouteImport.update({
   id: '/$ticketId',
   path: '/$ticketId',
   getParentRoute: () => TicketsRoute,
-} as any)
+})
 const SettingsEmailRoute = SettingsEmailRouteImport.update({
   id: '/email',
   path: '/email',
   getParentRoute: () => SettingsRoute,
-} as any)
+})
 const SettingsBillingRoute = SettingsBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
   getParentRoute: () => SettingsRoute,
-} as any)
+})
 const SettingsAiRoute = SettingsAiRouteImport.update({
   id: '/ai',
   path: '/ai',
   getParentRoute: () => SettingsRoute,
-} as any)
+})
 const ProjectsNewRoute = ProjectsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => ProjectsRoute,
-} as any)
+})
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
   id: '/$projectId',
   path: '/$projectId',
   getParentRoute: () => ProjectsRoute,
-} as any)
+})
 const OnboardingLanguageRoute = OnboardingLanguageRouteImport.update({
   id: '/language',
   path: '/language',
   getParentRoute: () => OnboardingRoute,
-} as any)
+})
 const LeadsNewRoute = LeadsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => LeadsRoute,
-} as any)
+})
 const LeadsKanbanRoute = LeadsKanbanRouteImport.update({
   id: '/kanban',
   path: '/kanban',
   getParentRoute: () => LeadsRoute,
-} as any)
+})
 const LeadsLeadIdRoute = LeadsLeadIdRouteImport.update({
   id: '/$leadId',
   path: '/$leadId',
   getParentRoute: () => LeadsRoute,
-} as any)
+})
 const ClientsNewRoute = ClientsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => ClientsRoute,
-} as any)
+})
 const ClientsClientIdRoute = ClientsClientIdRouteImport.update({
   id: '/$clientId',
   path: '/$clientId',
   getParentRoute: () => ClientsRoute,
-} as any)
+})
 const AiChatRoute = AiChatRouteImport.update({
   id: '/ai/chat',
   path: '/ai/chat',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const TicketsTicketIdEditRoute = TicketsTicketIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
   getParentRoute: () => TicketsTicketIdRoute,
-} as any)
+})
 const ProjectsProjectIdEditRoute = ProjectsProjectIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
   getParentRoute: () => ProjectsProjectIdRoute,
-} as any)
+})
 const LeadsLeadIdEditRoute = LeadsLeadIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
   getParentRoute: () => LeadsLeadIdRoute,
-} as any)
+})
 const LeadsLeadIdConvertRoute = LeadsLeadIdConvertRouteImport.update({
   id: '/convert',
   path: '/convert',
   getParentRoute: () => LeadsLeadIdRoute,
-} as any)
+})
 const ClientsClientIdEditRoute = ClientsClientIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
   getParentRoute: () => ClientsClientIdRoute,
-} as any)
+})
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: '/api/trpc/$',
   path: '/api/trpc/$',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
   id: '/api/stripe/webhook',
   path: '/api/stripe/webhook',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const ApiIncomingWebhooksSlugRoute = ApiIncomingWebhooksSlugRouteImport.update({
   id: '/api/incoming-webhooks/$slug',
   path: '/api/incoming-webhooks/$slug',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
-} as any)
+})
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute

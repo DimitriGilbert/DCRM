@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { createEventService, createInMemoryEventRepository } from "@DCRM/events";
 import { createHookAwareEventService, createHookExecutionProcessor, createInMemoryHookExecutionRepository, createRecordingHookExecutionQueue } from "@DCRM/events/hooks";
+import { TRPCError } from "@trpc/server";
 
 import type { EncryptedSecretV1, SecretCrypto } from "@DCRM/crypto";
 
@@ -64,6 +65,37 @@ describe("automation tRPC API", () => {
     assert.deepEqual(notifications, []);
   });
 
+  it("fails closed when hook execution history is requested without an automation repository", async () => {
+    const caller = appRouter.createCaller(createTestContext("user_1", undefined));
+
+    await assert.rejects(
+      () => caller.automation.listFailedHookExecutions({ limit: 10 }),
+      (error: unknown) => error instanceof TRPCError && error.code === "INTERNAL_SERVER_ERROR" && error.message === "Automation repository is required for hook execution history.",
+    );
+  });
+
+  it("maps missing or cross-user incoming webhook mode updates to NOT_FOUND", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const userCaller = appRouter.createCaller(createTestContext("user_1", automationRepository));
+    const otherUserCaller = appRouter.createCaller(createTestContext("user_2", automationRepository));
+    const saved = await userCaller.automation.createIncomingWebhook({
+      name: "Intake form",
+      slug: "intake-form",
+      token: "external-secret-token",
+      targetEventType: "webhook.webhook_received",
+      mappingConfig: { mappings: [] },
+    });
+
+    await assert.rejects(
+      () => userCaller.automation.updateIncomingWebhookMode({ id: "missing", mode: "live" }),
+      (error: unknown) => error instanceof TRPCError && error.code === "NOT_FOUND" && error.message === "Incoming webhook was not found.",
+    );
+    await assert.rejects(
+      () => otherUserCaller.automation.updateIncomingWebhookMode({ id: saved.id, mode: "live" }),
+      (error: unknown) => error instanceof TRPCError && error.code === "NOT_FOUND" && error.message === "Incoming webhook was not found.",
+    );
+  });
+
   it("stores outgoing webhook auth secrets encrypted and returns only safe hook metadata", async () => {
     const automationRepository = createInMemoryAutomationRepository();
     const secretCrypto = createTaggingSecretCrypto();
@@ -90,6 +122,53 @@ describe("automation tRPC API", () => {
     assert.equal(stored?.type, "outgoing_webhook");
   });
 
+  it("rejects unsafe outgoing webhook secret configuration before persistence", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const caller = appRouter.createCaller(createTestContext("user_1", automationRepository, createTaggingSecretCrypto()));
+    const secretLikeHeaders = ["X-Auth-Key", "X-Webhook-Key"] as const;
+
+    await assert.rejects(
+      () => caller.automation.createOutgoingWebhookHook({
+        name: "Plain auth header",
+        eventType: "client.created",
+        enabled: true,
+        url: "https://example.test/hooks/dcrm",
+        auth: { type: "none" },
+        headers: { Authorization: "Bearer plain-secret" },
+        retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
+      }),
+      /encrypted custom header auth/,
+    );
+    for (const headerName of secretLikeHeaders) {
+      await assert.rejects(
+        () => caller.automation.createOutgoingWebhookHook({
+          name: `Plain ${headerName}`,
+          eventType: "client.created",
+          enabled: true,
+          url: "https://example.test/hooks/dcrm",
+          auth: { type: "none" },
+          headers: { [headerName]: "plain-secret" },
+          retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
+        }),
+        /encrypted custom header auth/,
+      );
+    }
+    await assert.rejects(
+      () => caller.automation.createOutgoingWebhookHook({
+        name: "Plain HTTP bearer",
+        eventType: "client.created",
+        enabled: true,
+        url: "http://example.test/hooks/dcrm",
+        auth: { type: "bearer", token: "plain-token" },
+        headers: {},
+        retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
+      }),
+      /secrets require an HTTPS URL/,
+    );
+
+    assert.deepEqual(await caller.automation.listOutgoingWebhookHooks(), []);
+  });
+
   it("rejects outgoing webhook URLs with embedded credentials and keeps them out of safe listings", async () => {
     const automationRepository = createInMemoryAutomationRepository();
     const caller = appRouter.createCaller(createTestContext("user_1", automationRepository, createTaggingSecretCrypto()));
@@ -111,22 +190,21 @@ describe("automation tRPC API", () => {
     assert.deepEqual(listed, []);
     assert.equal(JSON.stringify(listed).includes("password"), false);
 
-    await automationRepository.hooks.createOutgoingWebhookHook({
-      id: "hook_poisoned",
-      userId: "user_1",
-      name: "Poisoned URL",
-      eventType: "client.created",
-      enabled: true,
-      url: "https://user:password@example.test/hooks/dcrm",
-      auth: { type: "none" },
-      headers: {},
-      retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
-      now: new Date("2026-05-30T12:00:00.000Z"),
-    });
-
-    const listedAfterStoredCredentialUrl = await caller.automation.listOutgoingWebhookHooks();
-    assert.equal(listedAfterStoredCredentialUrl[0]?.url, "");
-    assert.equal(JSON.stringify(listedAfterStoredCredentialUrl).includes("password"), false);
+    await assert.rejects(
+      () => automationRepository.hooks.createOutgoingWebhookHook({
+        id: "hook_poisoned",
+        userId: "user_1",
+        name: "Poisoned URL",
+        eventType: "client.created",
+        enabled: true,
+        url: "https://user:password@example.test/hooks/dcrm",
+        auth: { type: "none" },
+        headers: {},
+        retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } },
+        now: new Date("2026-05-30T12:00:00.000Z"),
+      }),
+      /embedded credentials/,
+    );
   });
 
   it("creates incoming webhook mappings in test mode and lists only safe token metadata", async () => {
@@ -302,6 +380,33 @@ describe("automation tRPC API", () => {
     assert.deepEqual(insights.map((insight) => insight.structuredOutput), [{ summary: "Created through API event context." }]);
   });
 
+  it("does not decrypt disabled AI providers for hook model execution", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const secretCrypto = createDecryptFailingSecretCrypto();
+    const savedProvider = await automationRepository.aiProviders.upsertEncrypted({
+      userId: "user_1",
+      name: "Disabled OpenRouter",
+      type: "openrouter",
+      encryptedApiKey: createPassthroughSecretCrypto().encrypt("disabled-secret"),
+      baseUrl: null,
+      defaultModel: "openai/gpt-5.1",
+      enabled: false,
+      now: new Date("2026-05-30T12:00:00.000Z"),
+    });
+    const runner = createRepositoryAiHookModelRunner({
+      automationRepository,
+      secretCrypto,
+      async generateStructured() {
+        throw new Error("Disabled providers must not reach model generation.");
+      },
+    });
+
+    await assert.rejects(
+      () => runner.generateStructured({ userId: "user_1", providerId: savedProvider.id, model: "openai/gpt-5.1", prompt: "Summarize the event.", outputFields: [{ name: "summary", type: "string", required: true }] }),
+      /AI provider not found for hook execution/,
+    );
+  });
+
   it("direct-write AI hooks use hook write context with downstream suppression by default", async () => {
     const automationRepository = createInMemoryAutomationRepository();
     const crmRepository = createInMemoryCrmRepository();
@@ -364,10 +469,10 @@ describe("automation tRPC API", () => {
   });
 });
 
-function createTestContext(userId: string, automationRepository: AutomationRepository, secretCrypto?: SecretCrypto): Context {
+function createTestContext(userId: string, automationRepository: AutomationRepository | undefined, secretCrypto?: SecretCrypto): Context {
   return {
     auth: { kind: "session", user: { id: userId, email: `${userId}@example.com`, name: userId, image: null } },
-    automationRepository,
+    ...(automationRepository ? { automationRepository } : {}),
     crmRepository: createInMemoryCrmRepository(),
     eventService: createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1" }),
     ...(secretCrypto ? { secretCrypto } : {}),
@@ -401,6 +506,16 @@ function createTaggingSecretCrypto(): SecretCrypto {
     },
     decrypt(encrypted: EncryptedSecretV1) {
       return Buffer.from(encrypted.ciphertext, "base64").toString("utf8");
+    },
+  };
+}
+
+function createDecryptFailingSecretCrypto(): SecretCrypto {
+  const crypto = createPassthroughSecretCrypto();
+  return {
+    encrypt: crypto.encrypt,
+    decrypt() {
+      throw new Error("Disabled provider secrets must not be decrypted.");
     },
   };
 }

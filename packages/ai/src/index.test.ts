@@ -110,6 +110,53 @@ describe("structured AI hook execution", () => {
     assert.equal(insights.records.length, 0);
   });
 
+  it("rejects undeclared structured output keys before storing insights or mapping writes", async () => {
+    const insights = createRecordingInsightStore();
+    const runner = createMockRunner({ summary: "Important client context", undeclared: "blocked" });
+    const context = createAiHookContext({ writeBehavior: "propose" });
+
+    await assert.rejects(
+      executeStructuredAiHook({ context, runner, insights }),
+      /Unrecognized key/u,
+    );
+    assert.equal(insights.records.length, 0);
+  });
+
+  it("rejects field mappings that source undeclared output fields before model execution", async () => {
+    const insights = createRecordingInsightStore();
+    const runner = createCountingRunner({ summary: "Important client context", secret: "blocked" });
+    const context = createAiHookContext({
+      writeBehavior: "direct",
+      fieldMappings: [{ sourcePath: "secret", targetField: "notes" }],
+    });
+
+    await assert.rejects(
+      executeStructuredAiHook({ context, runner, insights, fieldWriter: createRecordingFieldWriter() }),
+      /not declared in outputFields/u,
+    );
+    assert.equal(runner.callCount(), 0);
+    assert.equal(insights.records.length, 0);
+  });
+
+  it("rejects hook and event user mismatches before model, insight, or field-write side effects", async () => {
+    const insights = createRecordingInsightStore();
+    const writer = createRecordingFieldWriter();
+    const runner = createCountingRunner({ summary: "Important client context" });
+    const context = createAiHookContext({ writeBehavior: "direct" });
+    const mismatchedContext: AiHookExecutionContext = {
+      ...context,
+      hook: { ...context.hook, userId: "user_2" },
+    };
+
+    await assert.rejects(
+      executeStructuredAiHook({ context: mismatchedContext, runner, insights, fieldWriter: writer }),
+      /user mismatch/u,
+    );
+    assert.equal(runner.callCount(), 0);
+    assert.equal(insights.records.length, 0);
+    assert.equal(writer.calls.length, 0);
+  });
+
   it("exposes all required built-in AI hook templates", () => {
     assert.deepEqual(Object.keys(BUILT_IN_AI_HOOK_TEMPLATES), ["summarize", "classify", "extract_contacts", "enrich_from_web"]);
     assert.deepEqual(validateStructuredOutput({ summary: "ok" }, BUILT_IN_AI_HOOK_TEMPLATES.summarize.outputFields), { summary: "ok" });
@@ -119,6 +166,17 @@ describe("structured AI hook execution", () => {
 function createMockRunner(output: unknown): AiHookModelRunner {
   return {
     async generateStructured() {
+      return output;
+    },
+  };
+}
+
+function createCountingRunner(output: unknown): AiHookModelRunner & { readonly callCount: () => number } {
+  let calls = 0;
+  return {
+    callCount: () => calls,
+    async generateStructured() {
+      calls += 1;
       return output;
     },
   };

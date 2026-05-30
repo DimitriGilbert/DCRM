@@ -4,7 +4,7 @@ import { isCoreEventType } from "@DCRM/events";
 import type { CoreEventType } from "@DCRM/events";
 import type { HookSubscription } from "@DCRM/events/hooks";
 
-import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
+import { assertNoSecretBearingOutgoingWebhookHeaders, assertOutgoingWebhookSecretsUseHttps, parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -328,7 +328,7 @@ export function createInMemoryAutomationRepository(records: readonly HookExecuti
       },
       async getDecrypted(input) {
         const record = aiProviderRecords.find((candidate) => candidate.id === input.id && candidate.userId === input.userId);
-        return record ? { ...toSafeAiProvider(record), apiKey: input.crypto.decrypt(record.encryptedApiKey) } : null;
+        return record?.enabled ? { ...toSafeAiProvider(record), apiKey: input.crypto.decrypt(record.encryptedApiKey) } : null;
       },
       async listEncrypted(input) {
         return aiProviderRecords.filter((record) => record.userId === input.userId);
@@ -511,6 +511,7 @@ function createAiHookRecord(input: CreateAiHookInput): AiHookConfigRecord {
 }
 
 function createOutgoingWebhookHookRecord(input: CreateOutgoingWebhookHookInput): HookSubscription & { readonly createdAt: Date; readonly updatedAt: Date } {
+  assertSafeOutgoingWebhookSecretConfiguration(input);
   return {
     id: input.id,
     userId: input.userId,
@@ -527,6 +528,12 @@ function createOutgoingWebhookHookRecord(input: CreateOutgoingWebhookHookInput):
     createdAt: input.now,
     updatedAt: input.now,
   };
+}
+
+function assertSafeOutgoingWebhookSecretConfiguration(input: CreateOutgoingWebhookHookInput): void {
+  const url = parseSafeOutgoingWebhookUrl(input.url);
+  assertOutgoingWebhookSecretsUseHttps({ url, auth: input.auth, headers: input.headers });
+  assertNoSecretBearingOutgoingWebhookHeaders(input.headers);
 }
 
 function toSafeOutgoingWebhookHook(record: HookSubscription): OutgoingWebhookHookSafeRecord {

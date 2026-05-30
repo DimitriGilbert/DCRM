@@ -1,12 +1,13 @@
 import { AI_HOOK_TEMPLATES } from "@DCRM/domain";
 import { isCoreEventType } from "@DCRM/events";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import type { SecretCrypto } from "@DCRM/crypto";
 
 import { protectedProcedure, router } from "../../index.js";
 import { assertSafeIncomingWebhookTargetPath, mapIncomingWebhookPayload, normalizeIncomingWebhookCreate } from "../../automation/incoming-webhook.js";
-import { parseSafeOutgoingWebhookUrl } from "../../automation/outgoing-webhook-url.js";
+import { assertNoSecretBearingOutgoingWebhookHeaders, assertOutgoingWebhookSecretsUseHttps, parseSafeOutgoingWebhookUrl } from "../../automation/outgoing-webhook-url.js";
 import { listFailedHookExecutions } from "./listFailedHookExecutions.js";
 
 import type { AutomationRepository } from "../../automation/repository.js";
@@ -76,6 +77,17 @@ const createOutgoingWebhookHookInputSchema = z.object({
   auth: outgoingWebhookAuthInputSchema,
   headers: z.record(z.string().trim().min(1).max(128), z.string().max(1_024)).default({}),
   retryPolicy: retryPolicyInputSchema.default({ maxAttempts: 3, backoff: { type: "exponential", delayMs: 1_000 } }),
+}).superRefine((value, ctx) => {
+  try {
+    const url = parseSafeOutgoingWebhookUrl(value.url);
+    assertOutgoingWebhookSecretsUseHttps({ url, auth: value.auth, headers: value.headers });
+    assertNoSecretBearingOutgoingWebhookHeaders(value.headers);
+  } catch (error) {
+    ctx.addIssue({
+      code: "custom",
+      message: error instanceof Error ? error.message : "Outgoing webhook secret configuration is invalid.",
+    });
+  }
 });
 
 const jsonObjectSchema = z.record(z.string(), z.unknown());
@@ -177,15 +189,26 @@ export const automationRouter = router({
     return { ...saved, token: normalized.rawToken };
   }),
   updateIncomingWebhookMode: protectedProcedure.input(updateIncomingWebhookModeInputSchema).mutation(async ({ ctx, input }) => {
-    return requireAutomationRepository(ctx.automationRepository).incomingWebhooks.updateMode({ userId: ctx.auth.user.id, id: input.id, mode: input.mode, now: new Date() });
+    try {
+      return await requireAutomationRepository(ctx.automationRepository).incomingWebhooks.updateMode({ userId: ctx.auth.user.id, id: input.id, mode: input.mode, now: new Date() });
+    } catch (error) {
+      if (isIncomingWebhookNotFoundError(error)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Incoming webhook was not found." });
+      }
+      throw error;
+    }
   }),
 });
 
 function requireAutomationRepository(automationRepository: AutomationRepository | undefined): AutomationRepository {
   if (!automationRepository) {
-    throw new Error("Automation repository is required for hook configuration.");
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Automation repository is required for hook configuration." });
   }
   return automationRepository;
+}
+
+function isIncomingWebhookNotFoundError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Incoming webhook was not found.";
 }
 
 function parseCoreEventType(value: string) {

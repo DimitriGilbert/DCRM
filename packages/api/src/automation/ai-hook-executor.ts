@@ -73,6 +73,9 @@ export function createStructuredAiHookExecutor({
       if (context.hook.type !== "ai") {
         return { skipped: true, reason: "unsupported_hook_type" };
       }
+      if (context.hook.userId !== context.event.userId) {
+        throw new Error("AI hook execution user mismatch.");
+      }
 
       const result = await executeStructuredAiHook({
         context: toAiHookExecutionContext(context),

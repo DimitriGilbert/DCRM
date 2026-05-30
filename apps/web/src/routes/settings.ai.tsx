@@ -3,11 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@DCRM
 import { Input } from "@DCRM/ui/components/input";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AiHookForm } from "@/features/ai/hook-form";
-import type { AiHookFormValues } from "@/features/ai/hook-form";
+import type { AiHookFormValues, AiHookProviderOption } from "@/features/ai/hook-form";
 import { AiProviderForm } from "@/features/ai/provider-form";
 import type { AiProviderFormValues } from "@/features/ai/provider-form";
 import { IncomingWebhookForm } from "@/features/ai/incoming-webhook-form";
@@ -47,6 +47,14 @@ function RouteComponent() {
   const createAiHook = useMutation(trpc.automation.createAiHook.mutationOptions());
   const createIncomingWebhook = useMutation(trpc.automation.createIncomingWebhook.mutationOptions());
   const createOutgoingWebhook = useMutation(trpc.automation.createOutgoingWebhookHook.mutationOptions());
+  const aiHookProviderOptions = useMemo<readonly AiHookProviderOption[]>(() => {
+    return (providers.data ?? [])
+      .filter((provider) => provider.enabled)
+      .map((provider) => ({
+        value: provider.id,
+        label: `${provider.name} · ${provider.type}${provider.defaultModel ? ` · ${provider.defaultModel}` : ""}`,
+      }));
+  }, [providers.data]);
 
   async function handleSubmit(values: AiProviderFormValues) {
     await upsertProvider.mutateAsync(values);
@@ -110,7 +118,7 @@ function RouteComponent() {
             {(providers.data ?? []).map((provider) => (
               <div key={provider.id} className="border p-3 text-sm">
                 <div className="font-medium">{provider.name}</div>
-                <div className="text-muted-foreground">{provider.type} · {provider.defaultModel ?? "No default model"}</div>
+                <div className="text-muted-foreground">{provider.type} · {provider.enabled ? "enabled" : "disabled"} · {provider.defaultModel ?? "No default model"}</div>
                 <div className="text-muted-foreground">API key encrypted: {provider.hasApiKey ? "yes" : "no"}</div>
               </div>
             ))}
@@ -166,7 +174,7 @@ function RouteComponent() {
             <CardDescription>Configure structured output, field mapping, and propose-first or direct-write behavior.</CardDescription>
           </CardHeader>
           <CardContent>
-            <AiHookForm submitting={createAiHook.isPending} onSubmit={handleHookSubmit} />
+            <AiHookForm providerOptions={aiHookProviderOptions} submitting={createAiHook.isPending} onSubmit={handleHookSubmit} />
           </CardContent>
         </Card>
         <Card>

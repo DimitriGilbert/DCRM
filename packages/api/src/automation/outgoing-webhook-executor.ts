@@ -10,7 +10,7 @@ import type { DcrmEvent, JsonObject } from "@DCRM/events";
 import { NonRetryableHookExecutionError } from "@DCRM/events/hooks";
 import type { HookExecutionContext, HookExecutor } from "@DCRM/events/hooks";
 
-import { type OutgoingWebhookAddressResolver, type OutgoingWebhookConnectionTarget, parseSafeOutgoingWebhookUrl, resolveOutgoingWebhookConnectionTarget } from "./outgoing-webhook-url.js";
+import { assertNoSecretBearingOutgoingWebhookHeaders, assertOutgoingWebhookSecretsUseHttps, type OutgoingWebhookAddressResolver, type OutgoingWebhookConnectionTarget, parseSafeOutgoingWebhookUrl, resolveOutgoingWebhookConnectionTarget } from "./outgoing-webhook-url.js";
 
 export type OutgoingWebhookRequestOptions = {
   readonly method: "POST";
@@ -86,6 +86,7 @@ export function createOutgoingWebhookExecutor({ secretCrypto, addressResolver, r
 
       const config = parseWebhookConfig(context.hook.config);
       const url = parseWebhookUrl(config.url);
+      validateWebhookSecretSafety({ url, auth: config.auth, headers: config.headers });
       const body = JSON.stringify(createWebhookPayload(context));
       const headers = new Headers({
         "content-type": "application/json",
@@ -121,6 +122,15 @@ function parseWebhookConfig(value: unknown): z.infer<typeof configSchema> {
 function parseWebhookUrl(value: string): URL {
   try {
     return parseSafeOutgoingWebhookUrl(value);
+  } catch (error) {
+    throw new NonRetryableHookExecutionError(errorMessage(error), error);
+  }
+}
+
+function validateWebhookSecretSafety(input: { readonly url: URL; readonly auth: z.infer<typeof authSchema>; readonly headers: Record<string, string> }): void {
+  try {
+    assertOutgoingWebhookSecretsUseHttps(input);
+    assertNoSecretBearingOutgoingWebhookHeaders(input.headers);
   } catch (error) {
     throw new NonRetryableHookExecutionError(errorMessage(error), error);
   }

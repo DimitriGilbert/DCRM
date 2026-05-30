@@ -24,6 +24,14 @@ export const outgoingWebhookFormSchema = z.object({
   maxAttempts: z.number().int().min(1).max(10),
   backoffType: z.enum(["fixed", "exponential"]),
   backoffDelayMs: z.number().int().min(0).max(86_400_000),
+}).superRefine((values, ctx) => {
+  if (values.authType === "custom_headers" && values.customHeaders.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["customHeaders"],
+      message: "Add at least one custom secret header.",
+    });
+  }
 });
 
 export type OutgoingWebhookFormValues = Record<string, unknown> & z.infer<typeof outgoingWebhookFormSchema>;
@@ -80,6 +88,7 @@ export function OutgoingWebhookForm({ submitting, onSubmit }: { readonly submitt
       arrayConfig: {
         itemType: "object",
         itemLabel: "Header",
+        minItems: 1,
         addButtonLabel: "Add header",
         defaultValue: { name: "X-Api-Key", value: "" },
         objectConfig: {
@@ -150,8 +159,16 @@ function toAuthSubmitValues(values: OutgoingWebhookFormValues): OutgoingWebhookS
     case "hmac":
       return { type: "hmac", secret: requireSecretField(values.hmacSecret, "HMAC secret"), headerName: values.hmacHeaderName };
     case "custom_headers":
-      return { type: "custom_headers", headers: values.customHeaders.map((header) => ({ name: header.name, value: header.value })) };
+      return { type: "custom_headers", headers: requireCustomHeaders(values.customHeaders) };
   }
+}
+
+function requireCustomHeaders(headers: readonly { readonly name: string; readonly value: string }[]): { name: string; value: string }[] {
+  if (headers.length === 0) {
+    throw new Error("Add at least one custom secret header.");
+  }
+
+  return headers.map((header) => ({ name: header.name, value: header.value }));
 }
 
 function requireSecretField(value: string | undefined, label: string): string {

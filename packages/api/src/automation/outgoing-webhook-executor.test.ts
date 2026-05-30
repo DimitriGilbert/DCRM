@@ -130,6 +130,75 @@ describe("outgoing webhook executor", () => {
     assert.deepEqual(requests, []);
   });
 
+  it("rejects plaintext secret delivery before decrypting webhook auth", async () => {
+    const secretCrypto = createDecryptFailingSecretCrypto();
+    const requests: CapturedRequest[] = [];
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_http_auth", clock: () => new Date("2026-01-01T00:00:00.000Z") });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Evelyn" } });
+    const hook = createHook("hook_http_auth", { url: "http://example.test/hooks/dcrm", auth: { type: "bearer", token: secretCrypto.encrypt("bearer-secret") } });
+    const hookRepository = createInMemoryHookRepository([hook]);
+    const executionRepository = createInMemoryHookExecutionRepository();
+    await executionRepository.createPending({ id: "execution_http_auth", event, hook, retryPolicy: { maxAttempts: 1, backoff: { type: "fixed", delayMs: 0 } }, queuedAt: new Date("2026-01-01T00:00:01.000Z") });
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository,
+      executionRepository,
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
+      clock: () => new Date("2026-01-01T00:00:02.000Z"),
+    });
+
+    await assert.rejects(() => processor({ executionId: "execution_http_auth" }, 1), /secrets require an HTTPS URL/);
+
+    assert.deepEqual(requests, []);
+  });
+
+  it("rejects secret-like key headers over HTTP before sending", async () => {
+    const secretCrypto = createPassthroughSecretCrypto();
+    const requests: CapturedRequest[] = [];
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_http_key_headers", clock: () => new Date("2026-01-01T00:00:00.000Z") });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Eliza" } });
+    const hooks = [
+      createHook("hook_http_auth_key", { url: "http://example.test/hooks/dcrm", headers: { "X-Auth-Key": "plain-secret" } }),
+      createHook("hook_http_webhook_key", { url: "http://example.test/hooks/dcrm", headers: { "X-Webhook-Key": "plain-secret" } }),
+    ];
+    const hookRepository = createInMemoryHookRepository(hooks);
+    const executionRepository = createInMemoryHookExecutionRepository();
+    await Promise.all(hooks.map((hook) => executionRepository.createPending({ id: `execution_${hook.id}`, event, hook, retryPolicy: { maxAttempts: 1, backoff: { type: "fixed", delayMs: 0 } }, queuedAt: new Date("2026-01-01T00:00:01.000Z") })));
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository,
+      executionRepository,
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [200, 200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
+      clock: () => new Date("2026-01-01T00:00:02.000Z"),
+    });
+
+    await Promise.all(hooks.map((hook) => assert.rejects(() => processor({ executionId: `execution_${hook.id}` }, 1), /secrets require an HTTPS URL/)));
+
+    assert.deepEqual(requests, []);
+  });
+
+  it("rejects secret-bearing top-level headers before sending", async () => {
+    const secretCrypto = createPassthroughSecretCrypto();
+    const requests: CapturedRequest[] = [];
+    const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_plain_header", clock: () => new Date("2026-01-01T00:00:00.000Z") });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Edith" } });
+    const hook = createHook("hook_plain_header", { headers: { Authorization: "Bearer plain-secret" } });
+    const hookRepository = createInMemoryHookRepository([hook]);
+    const executionRepository = createInMemoryHookExecutionRepository();
+    await executionRepository.createPending({ id: "execution_plain_header", event, hook, retryPolicy: { maxAttempts: 1, backoff: { type: "fixed", delayMs: 0 } }, queuedAt: new Date("2026-01-01T00:00:01.000Z") });
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository,
+      executionRepository,
+      executor: createOutgoingWebhookExecutor({ secretCrypto, requestFactory: createRecordingRequestFactory(requests, [200]), addressResolver: createStaticAddressResolver("203.0.113.10") }),
+      clock: () => new Date("2026-01-01T00:00:02.000Z"),
+    });
+
+    await assert.rejects(() => processor({ executionId: "execution_plain_header" }, 1), /encrypted custom header auth/);
+
+    assert.deepEqual(requests, []);
+  });
+
   it("marks invalid stored webhook configuration as non-retryable without sending a request", async () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
@@ -316,6 +385,16 @@ function createOpaqueSecretCrypto(): SecretCrypto {
     },
     decrypt(encrypted: EncryptedSecretV1) {
       return Buffer.from(encrypted.ciphertext, "base64").toString("utf8");
+    },
+  };
+}
+
+function createDecryptFailingSecretCrypto(): SecretCrypto {
+  const crypto = createOpaqueSecretCrypto();
+  return {
+    encrypt: crypto.encrypt,
+    decrypt() {
+      throw new Error("Secret should not be decrypted before HTTPS validation.");
     },
   };
 }

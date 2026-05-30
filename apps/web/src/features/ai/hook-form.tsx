@@ -1,5 +1,5 @@
 import { useFormedible } from "@DCRM/ui/components/formedible/hooks/use-formedible";
-import type { FormedibleFieldConfig } from "@DCRM/ui/components/formedible/lib/types";
+import type { FormedibleFieldConfig, FormedibleFieldOption } from "@DCRM/ui/components/formedible/lib/types";
 import { z } from "zod";
 
 const aiHookTemplates = ["summarize", "classify", "extract_contacts", "enrich_from_web"] as const;
@@ -31,6 +31,8 @@ export const aiHookFormSchema = z.object({
 
 export type AiHookFormValues = Record<string, unknown> & z.infer<typeof aiHookFormSchema>;
 
+export type AiHookProviderOption = FormedibleFieldOption;
+
 const templateOptions = [
   { value: "summarize", label: "Summarize" },
   { value: "classify", label: "Classify" },
@@ -55,12 +57,20 @@ const outputTypeOptions = [
   { value: "string_array", label: "Text list" },
 ] satisfies readonly { readonly value: AiHookFormValues["outputFields"][number]["type"]; readonly label: string }[];
 
-export function AiHookForm({ submitting, onSubmit }: { readonly submitting: boolean; readonly onSubmit: (values: AiHookFormValues) => Promise<void> }) {
+export function AiHookForm({ providerOptions, submitting, onSubmit }: { readonly providerOptions: readonly AiHookProviderOption[]; readonly submitting: boolean; readonly onSubmit: (values: AiHookFormValues) => Promise<void> }) {
   const fields = [
     { name: "name", type: "text", label: "Hook name" },
     { name: "eventType", type: "text", label: "Event type", description: "For example: client.created or exchange.exchange_received." },
     { name: "enabled", type: "switch", label: "Enabled" },
-    { name: "providerId", type: "text", label: "Provider ID", description: "Use one of the BYOK providers configured above." },
+    {
+      name: "providerId",
+      type: "select",
+      label: "Provider",
+      description: providerOptions.length > 0 ? "Choose an enabled BYOK provider configured above." : "Add and enable an AI provider before creating a hook.",
+      placeholder: "Select a provider",
+      options: providerOptions,
+      disabled: providerOptions.length === 0,
+    },
     { name: "model", type: "text", label: "Model" },
     { name: "template", type: "select", label: "Built-in template", options: templateOptions },
     { name: "prompt", type: "textarea", label: "Prompt override", textareaConfig: { rows: 4, showWordCount: true, maxLength: 4_000 } },

@@ -1,6 +1,6 @@
 import { AI_HOOK_TEMPLATES, AI_PROVIDER_TYPES } from "@DCRM/domain";
 import { chat } from "@tanstack/ai";
-import { type AnyTextAdapter } from "@tanstack/ai/adapters";
+import type { AnyTextAdapter } from "@tanstack/ai/adapters";
 import { AnthropicTextAdapter } from "@tanstack/ai-anthropic";
 import type { AnthropicChatModel } from "@tanstack/ai-anthropic";
 import { GeminiTextAdapter } from "@tanstack/ai-gemini";
@@ -242,7 +242,9 @@ export async function executeStructuredAiHook({
   clock = () => new Date(),
   idGenerator = () => crypto.randomUUID(),
 }: ExecuteStructuredAiHookOptions): Promise<AiHookExecutionResult> {
+  assertAiHookOwnsEvent(context);
   const config = aiHookConfigSchema.parse(context.hook.config);
+  assertFieldMappingsUseDeclaredOutputFields(config.fieldMappings, config.outputFields);
   const template = BUILT_IN_AI_HOOK_TEMPLATES[config.template];
   const prompt = buildAiHookPrompt({ event: context.event, templatePrompt: config.prompt ?? template.prompt });
   const rawOutput = await runner.generateStructured({ userId: context.event.userId, providerId: config.providerId, model: config.model, prompt, outputFields: config.outputFields });
@@ -303,7 +305,7 @@ export function createAiHookOutputSchema(fields: readonly AiHookOutputField[]): 
     accumulator[field.name] = field.required ? schema : schema.optional();
     return accumulator;
   }, {});
-  return z.object(shape).passthrough();
+  return z.object(shape).strict();
 }
 
 export function mapStructuredOutputToFields(output: JsonObject, mappings: readonly AiHookFieldMapping[]): JsonObject {
@@ -411,6 +413,20 @@ function outputFieldToZod(field: AiHookOutputField): z.ZodType {
       return z.array(z.string());
     default:
       return assertNever(field.type);
+  }
+}
+
+function assertAiHookOwnsEvent(context: AiHookExecutionContext): void {
+  if (context.hook.userId !== context.event.userId) {
+    throw new Error("AI hook execution user mismatch.");
+  }
+}
+
+function assertFieldMappingsUseDeclaredOutputFields(mappings: readonly AiHookFieldMapping[], fields: readonly AiHookOutputField[]): void {
+  const declaredFieldNames = new Set(fields.map((field) => field.name));
+  const undeclaredMapping = mappings.find((mapping) => !declaredFieldNames.has(mapping.sourcePath));
+  if (undeclaredMapping) {
+    throw new Error(`AI hook field mapping source is not declared in outputFields: ${undeclaredMapping.sourcePath}`);
   }
 }
 

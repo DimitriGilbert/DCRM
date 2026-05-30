@@ -8,6 +8,10 @@ export type OutgoingWebhookConnectionTarget = {
   readonly family: 4 | 6;
 };
 
+export type OutgoingWebhookAuthLike = {
+  readonly type?: unknown;
+};
+
 export function parseSafeOutgoingWebhookUrl(value: string): URL {
   const url = new URL(value);
   if (url.username.length > 0 || url.password.length > 0) {
@@ -20,6 +24,22 @@ export function parseSafeOutgoingWebhookUrl(value: string): URL {
     throw new Error("Outgoing webhook URL host is not allowed.");
   }
   return url;
+}
+
+export function assertOutgoingWebhookSecretsUseHttps(input: { readonly url: URL; readonly auth: OutgoingWebhookAuthLike; readonly headers: Readonly<Record<string, unknown>> }): void {
+  if (input.url.protocol === "https:") {
+    return;
+  }
+  if (hasSecretBearingOutgoingWebhookAuth(input.auth) || hasSecretBearingOutgoingWebhookHeaders(input.headers)) {
+    throw new Error("Outgoing webhook secrets require an HTTPS URL.");
+  }
+}
+
+export function assertNoSecretBearingOutgoingWebhookHeaders(headers: Readonly<Record<string, unknown>>): void {
+  const secretHeader = Object.keys(headers).find(isSecretBearingOutgoingWebhookHeaderName);
+  if (secretHeader) {
+    throw new Error(`Secret-bearing outgoing webhook header '${secretHeader}' must be configured as encrypted custom header auth.`);
+  }
 }
 
 export async function validateOutgoingWebhookDestination(url: URL, resolver: OutgoingWebhookAddressResolver = resolveHostnameAddresses): Promise<void> {
@@ -55,6 +75,27 @@ export async function resolveOutgoingWebhookConnectionTarget(url: URL, resolver:
 function isUnsafeHost(hostname: string): boolean {
   const lower = normalizeHostname(hostname);
   return lower === "localhost" || lower.endsWith(".localhost") || isUnsafeIpAddress(lower);
+}
+
+function hasSecretBearingOutgoingWebhookAuth(auth: OutgoingWebhookAuthLike): boolean {
+  return auth.type === "bearer" || auth.type === "basic" || auth.type === "hmac" || auth.type === "custom_headers";
+}
+
+function hasSecretBearingOutgoingWebhookHeaders(headers: Readonly<Record<string, unknown>>): boolean {
+  return Object.keys(headers).some(isSecretBearingOutgoingWebhookHeaderName);
+}
+
+function isSecretBearingOutgoingWebhookHeaderName(name: string): boolean {
+  const normalized = name.trim().toLowerCase();
+  return normalized === "authorization" || normalized === "proxy-authorization" || normalized === "api-key" || normalized === "x-api-key" || normalized === "x-auth-key" || normalized === "x-auth-token" || normalized === "x-token" || normalized === "x-secret" || normalized === "x-webhook-key" || normalized.endsWith("-api-key") || normalized.endsWith("-auth-key") || normalized.endsWith("-token") || normalized.endsWith("-secret") || normalized.endsWith("-webhook-key") || isSensitiveKeyHeaderName(normalized);
+}
+
+function isSensitiveKeyHeaderName(normalized: string): boolean {
+  if (!normalized.endsWith("-key")) {
+    return false;
+  }
+  const parts = normalized.split("-");
+  return parts.includes("access") || parts.includes("private") || parts.includes("secret") || parts.includes("signature");
 }
 
 function normalizeHostname(hostname: string): string {

@@ -116,8 +116,9 @@ describe("incoming webhook mapping", () => {
 describe("incoming webhook route handler", () => {
   it("returns a generic 400 for malformed JSON without calling the receiver", async () => {
     let receiveCalls = 0;
+    const body = "{";
     const response = await handleIncomingWebhookPost({
-      request: new Request("https://dcrm.example.test/api/incoming-webhooks/intake", { method: "POST", body: "{" }),
+      request: new Request("https://dcrm.example.test/api/incoming-webhooks/intake", { method: "POST", headers: { "content-length": String(body.length) }, body }),
       slug: "intake",
       service: createReceiver(async () => {
         receiveCalls += 1;
@@ -127,6 +128,54 @@ describe("incoming webhook route handler", () => {
 
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { error: "Incoming webhook payload must be a valid JSON object." });
+    assert.equal(receiveCalls, 0);
+  });
+
+  it("rejects missing Content-Length before parsing the request body", async () => {
+    let receiveCalls = 0;
+    const response = await handleIncomingWebhookPost({
+      request: new Request("https://dcrm.example.test/api/incoming-webhooks/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "client@example.test" }) }),
+      slug: "intake",
+      service: createReceiver(async () => {
+        receiveCalls += 1;
+        return createLiveResult();
+      }),
+    });
+
+    assert.equal(response.status, 411);
+    assert.deepEqual(await response.json(), { error: "Incoming webhook requests must include a valid Content-Length header." });
+    assert.equal(receiveCalls, 0);
+  });
+
+  it("rejects invalid Content-Length before parsing the request body", async () => {
+    let receiveCalls = 0;
+    const response = await handleIncomingWebhookPost({
+      request: new Request("https://dcrm.example.test/api/incoming-webhooks/intake", { method: "POST", headers: { "content-length": "not-a-number", "content-type": "application/json" }, body: JSON.stringify({ email: "client@example.test" }) }),
+      slug: "intake",
+      service: createReceiver(async () => {
+        receiveCalls += 1;
+        return createLiveResult();
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "Incoming webhook Content-Length header is invalid." });
+    assert.equal(receiveCalls, 0);
+  });
+
+  it("rejects oversized Content-Length before parsing the request body", async () => {
+    let receiveCalls = 0;
+    const response = await handleIncomingWebhookPost({
+      request: new Request("https://dcrm.example.test/api/incoming-webhooks/intake", { method: "POST", headers: { "content-length": "1048577", "content-type": "application/json" }, body: JSON.stringify({ email: "client@example.test" }) }),
+      slug: "intake",
+      service: createReceiver(async () => {
+        receiveCalls += 1;
+        return createLiveResult();
+      }),
+    });
+
+    assert.equal(response.status, 413);
+    assert.deepEqual(await response.json(), { error: "Incoming webhook payload exceeds the maximum allowed size." });
     assert.equal(receiveCalls, 0);
   });
 
@@ -199,5 +248,6 @@ function createLiveResult(): IncomingWebhookReceiveResult {
 }
 
 function jsonRequest(url: string, body: Record<string, unknown>): Request {
-  return new Request(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const serializedBody = JSON.stringify(body);
+  return new Request(url, { method: "POST", headers: { "content-length": String(serializedBody.length), "content-type": "application/json" }, body: serializedBody });
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { IncomingWebhookReceiveInput, IncomingWebhookReceiveResult } from "./incoming-webhook.js";
 import { IncomingWebhookAuthenticationError, IncomingWebhookNotFoundError, IncomingWebhookPayloadMappingError } from "./incoming-webhook.js";
 
+const MAX_INCOMING_WEBHOOK_BODY_BYTES = 1_048_576;
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 
 export type IncomingWebhookReceiver = {
@@ -10,6 +11,11 @@ export type IncomingWebhookReceiver = {
 };
 
 export async function handleIncomingWebhookPost(input: { readonly request: Request; readonly slug: string; readonly service: IncomingWebhookReceiver }): Promise<Response> {
+  const sizeGuardResponse = validateIncomingWebhookRequestSize(input.request);
+  if (sizeGuardResponse) {
+    return sizeGuardResponse;
+  }
+
   let body: unknown;
   try {
     body = await input.request.json();
@@ -28,6 +34,28 @@ export async function handleIncomingWebhookPost(input: { readonly request: Reque
   } catch (error) {
     return incomingWebhookErrorResponse(error);
   }
+}
+
+function validateIncomingWebhookRequestSize(request: Request): Response | null {
+  const contentLengthHeader = request.headers.get("content-length")?.trim();
+  if (!contentLengthHeader) {
+    return jsonResponse({ error: "Incoming webhook requests must include a valid Content-Length header." }, 411);
+  }
+
+  if (!/^\d+$/.test(contentLengthHeader)) {
+    return jsonResponse({ error: "Incoming webhook Content-Length header is invalid." }, 400);
+  }
+
+  const contentLength = Number(contentLengthHeader);
+  if (!Number.isSafeInteger(contentLength)) {
+    return jsonResponse({ error: "Incoming webhook Content-Length header is invalid." }, 400);
+  }
+
+  if (contentLength > MAX_INCOMING_WEBHOOK_BODY_BYTES) {
+    return jsonResponse({ error: "Incoming webhook payload exceeds the maximum allowed size." }, 413);
+  }
+
+  return null;
 }
 
 function extractIncomingWebhookToken(request: Request): string | null {

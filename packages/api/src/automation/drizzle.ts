@@ -4,7 +4,7 @@ import { isCoreEventType } from "@DCRM/events";
 import { persistedHookRowToSubscription } from "@DCRM/events/hook-drizzle-mapping";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
-import { parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
+import { assertNoSecretBearingOutgoingWebhookHeaders, assertOutgoingWebhookSecretsUseHttps, parseSafeOutgoingWebhookUrl } from "./outgoing-webhook-url.js";
 
 import type { AiHookConfigRecord, AiInsightRecord, AiMessageRecord, AiProviderEncryptedRecord, AiProviderSafeRecord, AutomationRepository, EmailAccountEncryptedRecord, EmailAccountSafeRecord, HookExecutionStatusRecord, IncomingWebhookSafeRecord, IncomingWebhookStoredRecord, OutgoingWebhookHookSafeRecord } from "./repository.js";
 
@@ -113,7 +113,7 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
             updatedAt: aiProviders.updatedAt,
           })
           .from(aiProviders)
-          .where(and(eq(aiProviders.id, input.id), eq(aiProviders.userId, input.userId), isNull(aiProviders.deletedAt)))
+          .where(and(eq(aiProviders.id, input.id), eq(aiProviders.userId, input.userId), eq(aiProviders.enabled, true), isNull(aiProviders.deletedAt)))
           .limit(1);
         const row = rows[0];
         return row ? { ...row, hasApiKey: true, apiKey: input.crypto.decrypt(row.encryptedApiKey) } : null;
@@ -235,6 +235,7 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
         } satisfies AiHookConfigRecord;
       },
       async createOutgoingWebhookHook(input) {
+        assertSafeOutgoingWebhookSecretConfiguration(input);
         const config = {
           url: input.url,
           auth: input.auth,
@@ -536,6 +537,12 @@ export function createDrizzleAutomationRepository(database: AutomationDatabase =
       },
     },
   };
+}
+
+function assertSafeOutgoingWebhookSecretConfiguration(input: { readonly url: string; readonly auth: Record<string, unknown>; readonly headers: Record<string, unknown> }): void {
+  const url = parseSafeOutgoingWebhookUrl(input.url);
+  assertOutgoingWebhookSecretsUseHttps({ url, auth: input.auth, headers: input.headers });
+  assertNoSecretBearingOutgoingWebhookHeaders(input.headers);
 }
 
 function requireCoreEventType(value: string) {

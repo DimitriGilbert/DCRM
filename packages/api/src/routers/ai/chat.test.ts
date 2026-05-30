@@ -30,13 +30,13 @@ describe("AI chat assistant", () => {
     const provider = await caller.ai.upsertProvider({ name: "OpenAI", type: "openai", apiKey: "secret", baseUrl: "", defaultModel: "gpt-4o-mini", enabled: true });
     await caller.clients.create({ name: "Ada Lovelace", company: "Analytical Engines" });
 
-    const first = await caller.ai.sendChatMessage({ providerId: provider.id, message: "Find Ada and summarize my work." });
+    const first = await caller.ai.sendChatMessage({ providerId: provider.id, message: "Find client Ada and summarize my work." });
     const second = await caller.ai.sendChatMessage({ conversationId: first.conversationId, providerId: provider.id, message: "What should I do next?" });
 
-    assert.equal(first.history.map((message) => message.role).join(","), "user,tool,tool,tool,tool,tool,assistant");
+    assert.equal(first.history.map((message) => message.role).join(","), "user,tool,assistant");
     assert.equal(second.conversationId, first.conversationId);
     assert.equal(second.history.filter((message) => message.role === "user").length, 2);
-    assert.deepEqual(calls[0]?.toolResults.map((result) => result.name), ["searchClients", "summarizeProject", "listOpenTickets", "pipelineSummary", "recentExchanges"]);
+    assert.deepEqual(calls[0]?.toolResults.map((result) => result.name), ["searchClients"]);
     assert.equal(calls[0]?.toolResults[0]?.output.clients instanceof Array, true);
     assert.equal(JSON.stringify(calls[0]?.toolResults).includes("Ada Lovelace"), true);
     assert.equal(second.toolMessages.every((message) => message.metadata.auditable === true), true);
@@ -92,11 +92,126 @@ describe("AI chat assistant", () => {
       idGenerator: generatedIds,
     });
 
-    assert.deepEqual(first.history.map((message) => message.role), ["user", "tool", "tool", "tool", "tool", "tool", "assistant"]);
-    assert.deepEqual(calls[1]?.messages.map((message) => message.role), ["user", "tool", "tool", "tool", "tool", "tool", "assistant", "user", "tool", "tool", "tool", "tool", "tool"]);
-    assert.deepEqual(second.history.map((message) => message.role), ["user", "tool", "tool", "tool", "tool", "tool", "assistant", "user", "tool", "tool", "tool", "tool", "tool", "assistant"]);
+    assert.deepEqual(first.history.map((message) => message.role), ["user", "assistant"]);
+    assert.deepEqual(calls[1]?.messages.map((message) => message.role), ["user", "assistant", "user"]);
+    assert.deepEqual(second.history.map((message) => message.role), ["user", "assistant", "user", "assistant"]);
     assert.equal(hasStrictlyIncreasingCreationTimes(first.history), true);
     assert.equal(hasStrictlyIncreasingCreationTimes(second.history), true);
+  });
+
+  it("does not send unrelated CRM PII to the provider for generic find or search prompts", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const crmRepository = createInMemoryCrmRepository();
+    const secretCrypto = createSecretCrypto({ ENCRYPTION_KEY: testEncryptionKey });
+    const calls: Parameters<CrmChatRunner["generate"]>[0][] = [];
+    const runner: CrmChatRunner = {
+      async generate(input) {
+        calls.push(input);
+        return { content: "Generic answer" };
+      },
+    };
+    const provider = await automationRepository.aiProviders.upsertEncrypted({
+      userId: "user_private",
+      name: "OpenAI",
+      type: "openai",
+      encryptedApiKey: secretCrypto.encrypt("secret"),
+      baseUrl: null,
+      defaultModel: "gpt-4o-mini",
+      enabled: true,
+      now: new Date("2026-01-01T10:00:00.000Z"),
+    });
+    await crmRepository.clients.create({
+      id: "client_private",
+      userId: "user_private",
+      fields: { name: "Private Client", email: "private@example.test", company: "Sensitive Co" },
+      now: new Date("2026-01-01T10:00:00.000Z"),
+    });
+
+    await sendAiChatMessage({
+      userId: "user_private",
+      message: "Find time to exercise this week.",
+      providerId: provider.id,
+      crmRepository,
+      automationRepository,
+      secretCrypto,
+      runner,
+      now: new Date("2026-01-01T10:01:00.000Z"),
+      idGenerator: createSequentialIdGenerator("chat_private"),
+    });
+    await sendAiChatMessage({
+      userId: "user_private",
+      message: "Search for ideas for a better morning routine.",
+      providerId: provider.id,
+      crmRepository,
+      automationRepository,
+      secretCrypto,
+      runner,
+      now: new Date("2026-01-01T10:02:00.000Z"),
+      idGenerator: createSequentialIdGenerator("chat_search_private"),
+    });
+
+    assert.deepEqual(calls[0]?.toolResults, []);
+    assert.deepEqual(calls[1]?.toolResults, []);
+    assert.equal(JSON.stringify(calls).includes("private@example.test"), false);
+    assert.equal(JSON.stringify(calls).includes("Sensitive Co"), false);
+  });
+
+  it("does not summarize the first project result when project scope is ambiguous", async () => {
+    const automationRepository = createInMemoryAutomationRepository();
+    const crmRepository = createInMemoryCrmRepository();
+    const secretCrypto = createSecretCrypto({ ENCRYPTION_KEY: testEncryptionKey });
+    const calls: Parameters<CrmChatRunner["generate"]>[0][] = [];
+    const runner: CrmChatRunner = {
+      async generate(input) {
+        calls.push(input);
+        return { content: "Ambiguous project scope" };
+      },
+    };
+    const provider = await automationRepository.aiProviders.upsertEncrypted({
+      userId: "user_projects",
+      name: "OpenAI",
+      type: "openai",
+      encryptedApiKey: secretCrypto.encrypt("secret"),
+      baseUrl: null,
+      defaultModel: "gpt-4o-mini",
+      enabled: true,
+      now: new Date("2026-01-01T10:00:00.000Z"),
+    });
+    const client = await crmRepository.clients.create({
+      id: "client_projects",
+      userId: "user_projects",
+      fields: { name: "Project Client" },
+      now: new Date("2026-01-01T10:00:00.000Z"),
+    });
+    await crmRepository.projects.create({
+      id: "project_portal_a",
+      userId: "user_projects",
+      fields: { clientId: client.id, name: "Portal Alpha", budgetAmount: "1000.00", budgetCurrency: "USD" },
+      now: new Date("2026-01-01T10:00:00.000Z"),
+    });
+    await crmRepository.projects.create({
+      id: "project_portal_b",
+      userId: "user_projects",
+      fields: { clientId: client.id, name: "Portal Beta", budgetAmount: "2000.00", budgetCurrency: "USD" },
+      now: new Date("2026-01-01T10:00:00.000Z"),
+    });
+
+    await sendAiChatMessage({
+      userId: "user_projects",
+      message: "Summarize project Portal budget.",
+      providerId: provider.id,
+      crmRepository,
+      automationRepository,
+      secretCrypto,
+      runner,
+      now: new Date("2026-01-01T10:01:00.000Z"),
+      idGenerator: createSequentialIdGenerator("chat_projects"),
+    });
+
+    assert.deepEqual(calls[0]?.toolResults.map((result) => result.name), ["summarizeProject"]);
+    assert.deepEqual(calls[0]?.toolResults[0]?.output, { project: null });
+    assert.equal(JSON.stringify(calls[0]).includes("Portal Alpha"), false);
+    assert.equal(JSON.stringify(calls[0]).includes("Portal Beta"), false);
   });
 });
 

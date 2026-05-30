@@ -25,7 +25,7 @@ export function createRepositoryAiHookModelRunner({
         crypto: secretCrypto,
       });
 
-      if (!provider) {
+      if (!provider || !provider.enabled) {
         throw new Error(`AI provider not found for hook execution: ${request.providerId}`);
       }
 

@@ -1,5 +1,6 @@
 import { db } from "@DCRM/db";
 import { attachments } from "@DCRM/db/schema/crm";
+import { env } from "@DCRM/env/server";
 import { createStorage } from "@DCRM/storage";
 import { eq, and } from "drizzle-orm";
 
@@ -31,13 +32,13 @@ export const downloadAttachment = protectedProcedure
     }
 
     const backend = createStorage({
-      STORAGE_TYPE: (process.env.STORAGE_TYPE as "local" | "s3") ?? "local",
-      LOCAL_BASE_DIR: process.env.LOCAL_UPLOAD_DIR,
-      S3_BUCKET: process.env.S3_BUCKET,
-      S3_ENDPOINT: process.env.S3_ENDPOINT,
-      S3_REGION: process.env.S3_REGION,
-      S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID,
-      S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY,
+      STORAGE_TYPE: env.STORAGE_TYPE,
+      LOCAL_BASE_DIR: env.LOCAL_UPLOAD_DIR,
+      S3_BUCKET: env.S3_BUCKET,
+      S3_ENDPOINT: env.S3_ENDPOINT,
+      S3_REGION: env.S3_REGION,
+      S3_ACCESS_KEY_ID: env.S3_ACCESS_KEY_ID,
+      S3_SECRET_ACCESS_KEY: env.S3_SECRET_ACCESS_KEY,
     });
 
     const data = await backend.get(ctx.user.id, row.filePath);

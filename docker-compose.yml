@@ -17,7 +17,7 @@ services:
     volumes:
       - dcrm_uploads:/app/uploads
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3001/robots.txt || exit 1"]
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/robots.txt').then(r => { process.exit(r.ok ? 0 : 1) }).catch(() => process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -30,7 +30,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-dcrm}
       POSTGRES_USER: ${POSTGRES_USER:-dcrm}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dcrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dcrm_dev_postgres_2024}
     volumes:
       - dcrm_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -40,13 +40,13 @@ services:
       retries: 5
     # Do not expose to the host in production; remove "ports" or set to null
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   redis:
     image: redis:7-alpine
     container_name: dcrm-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dcrm_dev_redis_2024}
     volumes:
       - dcrm_redis_data:/data
     healthcheck:
@@ -56,7 +56,7 @@ services:
       retries: 5
     # Do not expose to the host in production
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
 volumes:
   dcrm_postgres_data:

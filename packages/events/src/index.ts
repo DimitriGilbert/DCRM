@@ -60,6 +60,10 @@ export const CORE_EVENT_DEFINITIONS = [
 
 export type CoreEventType = (typeof CORE_EVENT_DEFINITIONS)[number]["type"];
 
+const CORE_EVENT_DEFINITION_BY_TYPE = new Map<CoreEventType, EventDefinition>(
+  CORE_EVENT_DEFINITIONS.map((definition) => [definition.type, definition]),
+);
+
 /** Returns whether a runtime string is one of DCRM's supported core event types. */
 export function isCoreEventType(value: string): value is CoreEventType {
   return CORE_EVENT_DEFINITIONS.some((definition) => definition.type === value);
@@ -172,6 +176,25 @@ export function createInMemoryEventRepository(): EventRepository {
 function normalizeEventInput(input: EmitEventInput, id: string, createdAt: Date): DcrmEvent {
   if (input.userId.trim().length === 0) {
     throw new Error("userId is required for event emission.");
+  }
+
+  const definition = CORE_EVENT_DEFINITION_BY_TYPE.get(input.type);
+  if (!definition) {
+    throw new Error(`Unsupported event type: ${input.type}`);
+  }
+
+  if (definition.entityType) {
+    if (!input.entity) {
+      throw new Error(`Event ${input.type} requires a ${definition.entityType} entity reference.`);
+    }
+    if (input.entity.type !== definition.entityType) {
+      throw new Error(`Event ${input.type} requires entity type ${definition.entityType}; received ${input.entity.type}.`);
+    }
+    if (input.entity.id.trim().length === 0) {
+      throw new Error(`Event ${input.type} requires a non-blank entity id.`);
+    }
+  } else if (input.entity && input.entity.id.trim().length === 0) {
+    throw new Error(`Event ${input.type} requires a non-blank entity id.`);
   }
 
   return {

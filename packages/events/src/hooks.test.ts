@@ -11,6 +11,8 @@ import {
   createInMemoryHookRepository,
   createRecordingHookExecutionQueue,
   composePersistedHookRuntimeConfig,
+  createHookExecutionJobId,
+  recoverHookExecutionDispatch,
 } from "./hooks.js";
 
 import type { DcrmEvent } from "./index.js";
@@ -41,7 +43,7 @@ describe("hook subscriptions", () => {
       idGenerator: createSequentialIdGenerator("execution"),
     });
 
-    const event = await service.emitApp({ type: "client.created", userId: "user_1" });
+    const event = await service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_1" } });
 
     const records = await executions.listForEvent(event.id);
     assert.deepEqual(
@@ -91,7 +93,7 @@ describe("hook subscriptions", () => {
       clock: createStepClock("2026-05-30T12:02:00.000Z"),
     });
 
-    const event = await service.emitApp({ type: "client.created", userId: "user_1" });
+    const event = await service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_1" } });
     const firstJob = queue.jobs[0];
     const secondJob = queue.jobs[1];
     assert.ok(firstJob);
@@ -143,7 +145,7 @@ describe("hook subscriptions", () => {
       idGenerator: createSequentialIdGenerator("execution"),
     });
 
-    await service.emitApp({ type: "client.created", userId: "user_1" });
+    await service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_1" } });
 
     assert.deepEqual(queue.options, [
       {
@@ -156,6 +158,10 @@ describe("hook subscriptions", () => {
         },
       },
     ]);
+  });
+
+  it("derives stable BullMQ job IDs from hook execution IDs", () => {
+    assert.equal(createHookExecutionJobId("execution_123"), "hook-execution:execution_123");
   });
 
   it("clears the next retry timestamp after the final failed attempt", async () => {
@@ -203,7 +209,7 @@ describe("hook subscriptions", () => {
       clock: createStepClock("2026-05-30T12:03:00.000Z"),
     });
 
-    const event = await service.emitApp({ type: "client.created", userId: "user_1" });
+    const event = await service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_1" } });
     const job = queue.jobs[0];
     assert.ok(job);
 
@@ -286,6 +292,71 @@ describe("hook subscriptions", () => {
     assert.equal(failed?.status, "failed");
     assert.deepEqual(failed?.error, { name: "NonRetryableHookExecutionError", message: "Event not found for hook execution: event_deleted" });
     assert.equal(failed?.nextRetryAt, undefined);
+  });
+
+  it("skips duplicate deliveries after an execution is already running or successful", async () => {
+    const event = createEvent("event_duplicate_delivery");
+    const eventService = createEventService({ idGenerator: () => event.id, repository: createInMemoryEventRepository() });
+    await eventService.emit({
+      type: event.type,
+      userId: event.userId,
+      source: event.source,
+      entity: event.entity,
+      payload: event.payload,
+      metadata: event.metadata,
+    });
+    const hook = createHook("hook_duplicate_delivery");
+    const executions = createInMemoryHookExecutionRepository();
+    const pending = await executions.createPending({
+      id: "execution_duplicate_delivery",
+      event,
+      hook,
+      retryPolicy: { maxAttempts: 1, backoff: { type: "fixed", delayMs: 1_000 } },
+      queuedAt: new Date("2026-05-30T12:00:00.000Z"),
+    });
+    let executionCount = 0;
+    const processor = createHookExecutionProcessor({
+      eventService,
+      hookRepository: createInMemoryHookRepository([hook]),
+      executionRepository: executions,
+      executor: {
+        async execute() {
+          executionCount += 1;
+          return { ok: true };
+        },
+      },
+      clock: createStepClock("2026-05-30T12:01:00.000Z"),
+    });
+
+    assert.deepEqual(await processor({ executionId: pending.id }, 1), { executionId: pending.id, status: "success" });
+    assert.deepEqual(await processor({ executionId: pending.id }, 1), { executionId: pending.id, status: "skipped" });
+
+    assert.equal(executionCount, 1);
+    assert.equal((await executions.getById(pending.id))?.status, "success");
+  });
+
+  it("recovers dispatchable pending execution rows left without queued jobs", async () => {
+    const event = createEvent("event_stranded_execution");
+    const hook = createHook("hook_stranded_execution");
+    const executions = createInMemoryHookExecutionRepository();
+    const pending = await executions.createPending({
+      id: "execution_stranded",
+      event,
+      hook,
+      retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 2_000 } },
+      queuedAt: new Date("2026-05-30T12:00:00.000Z"),
+    });
+    const queue = createRecordingHookExecutionQueue();
+
+    const recoveredCount = await recoverHookExecutionDispatch({
+      executionRepository: executions,
+      queue,
+      clock: () => new Date("2026-05-30T12:05:00.000Z"),
+    });
+
+    assert.equal(recoveredCount, 1);
+    assert.deepEqual(queue.jobs, [{ executionId: pending.id }]);
+    assert.deepEqual(queue.options[0], { retryPolicy: { maxAttempts: 3, backoff: { type: "exponential", delayMs: 2_000 } } });
   });
 
   it("composes persisted AI hook behavior columns into the runtime hook config", () => {

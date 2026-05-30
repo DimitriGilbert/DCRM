@@ -50,7 +50,7 @@ export type HookExecutionJobData = {
 
 export type HookExecutionJobResult = {
   readonly executionId: string;
-  readonly status: "success";
+  readonly status: "success" | "skipped";
 };
 
 export type HookRepository = {
@@ -68,7 +68,7 @@ export type CreateHookExecutionInput = {
 
 export type HookExecutionRepository = {
   readonly createPending: (input: CreateHookExecutionInput) => Promise<HookExecutionRecord>;
-  readonly markRunning: (input: { readonly executionId: string; readonly startedAt: Date; readonly attempt: number }) => Promise<HookExecutionRecord>;
+  readonly markRunning: (input: { readonly executionId: string; readonly startedAt: Date; readonly attempt: number }) => Promise<HookExecutionRecord | undefined>;
   readonly markSuccess: (input: { readonly executionId: string; readonly output: JsonObject; readonly finishedAt: Date }) => Promise<HookExecutionRecord>;
   readonly markFailed: (input: {
     readonly executionId: string;
@@ -78,10 +78,18 @@ export type HookExecutionRepository = {
   }) => Promise<HookExecutionRecord>;
   readonly getById: (executionId: string) => Promise<HookExecutionRecord | undefined>;
   readonly listForEvent: (eventId: string) => Promise<readonly HookExecutionRecord[]>;
+  readonly listDispatchable: (input: { readonly now: Date; readonly limit: number }) => Promise<readonly HookExecutionRecord[]>;
 };
 
 export type EnqueueHookExecutionOptions = {
   readonly retryPolicy: HookRetryPolicy;
+};
+
+export type RecoverHookExecutionDispatchOptions = {
+  readonly executionRepository: HookExecutionRepository;
+  readonly queue: HookExecutionQueue;
+  readonly clock?: () => Date;
+  readonly limit?: number;
 };
 
 export type HookExecutionQueue = {
@@ -282,12 +290,15 @@ export function createHookExecutionProcessor({
     let hook: HookSubscription | undefined;
 
     try {
-      hook = await requireHook(hookRepository, execution.hookId);
-      const event = await requireEvent(eventService, execution.eventId, execution.userId);
       const running = await executionRepository.markRunning({ executionId: execution.id, startedAt: clock(), attempt });
+      if (!running) {
+        return { executionId: execution.id, status: "skipped" };
+      }
+      hook = await requireHook(hookRepository, running.hookId);
+      const event = await requireEvent(eventService, running.eventId, running.userId);
       const output = await executor.execute({ event, hook, execution: running, attempt });
-      await executionRepository.markSuccess({ executionId: execution.id, output: output ?? {}, finishedAt: clock() });
-      return { executionId: execution.id, status: "success" };
+      await executionRepository.markSuccess({ executionId: running.id, output: output ?? {}, finishedAt: clock() });
+      return { executionId: running.id, status: "success" };
     } catch (error) {
       const retryPolicy = hook ? resolveRetryPolicy(hook) : executionRecordToRetryPolicy(execution);
       const retryable = isRetryableHookExecutionError(error);
@@ -316,7 +327,7 @@ export function createBullMqHookExecutionQueue({
 
   return {
     async enqueue(job, options) {
-      await queue.add("execute-hook", job, retryPolicyToJobsOptions(options.retryPolicy));
+      await queue.add("execute-hook", job, retryPolicyToJobsOptions(options.retryPolicy, job.executionId));
     },
     close() {
       return queue.close();
@@ -382,10 +393,10 @@ export function createInMemoryHookExecutionRepository(): HookExecutionRepository
         attempt: input.attempt,
         startedAt: input.startedAt,
         updatedAt: input.startedAt,
-      }));
+      }), (record) => canClaimForRunning(record, input.attempt));
     },
     async markSuccess(input) {
-      return updateRecord(records, input.executionId, (record) => ({
+      return requireUpdatedRecord(updateRecord(records, input.executionId, (record) => ({
         ...record,
         status: "success",
         output: input.output,
@@ -393,23 +404,26 @@ export function createInMemoryHookExecutionRepository(): HookExecutionRepository
         finishedAt: input.finishedAt,
         nextRetryAt: undefined,
         updatedAt: input.finishedAt,
-      }));
+      })), input.executionId);
     },
     async markFailed(input) {
-      return updateRecord(records, input.executionId, (record) => ({
+      return requireUpdatedRecord(updateRecord(records, input.executionId, (record) => ({
         ...record,
         status: "failed",
         error: input.error,
         finishedAt: input.finishedAt,
         nextRetryAt: input.nextRetryAt,
         updatedAt: input.finishedAt,
-      }));
+      })), input.executionId);
     },
     async getById(executionId) {
       return records.find((record) => record.id === executionId);
     },
     async listForEvent(eventId) {
       return records.filter((record) => record.eventId === eventId);
+    },
+    async listDispatchable(input) {
+      return records.filter((record) => isDispatchable(record, input.now)).slice(0, input.limit);
     },
   };
 }
@@ -430,6 +444,22 @@ export function createRecordingHookExecutionQueue(): HookExecutionQueue & {
       options.push(enqueueOptions);
     },
   };
+}
+
+/** Re-enqueues durable hook execution rows that were created without a surviving BullMQ job. */
+export async function recoverHookExecutionDispatch({
+  executionRepository,
+  queue,
+  clock = () => new Date(),
+  limit = 100,
+}: RecoverHookExecutionDispatchOptions): Promise<number> {
+  const dispatchableExecutions = await executionRepository.listDispatchable({ now: clock(), limit });
+  await Promise.all(
+    dispatchableExecutions.map((execution) =>
+      queue.enqueue({ executionId: execution.id }, { retryPolicy: executionRecordToRetryPolicy(execution) }),
+    ),
+  );
+  return dispatchableExecutions.length;
 }
 
 async function dispatchHookExecutions(input: {
@@ -490,15 +520,26 @@ function updateRecord(
   records: HookExecutionRecord[],
   executionId: string,
   updater: (record: HookExecutionRecord) => HookExecutionRecord,
-): HookExecutionRecord {
+  predicate?: (record: HookExecutionRecord) => boolean,
+): HookExecutionRecord | undefined {
   const index = records.findIndex((record) => record.id === executionId);
   const current = records[index];
   if (!current) {
     throw new Error(`Hook execution not found: ${executionId}`);
   }
+  if (predicate && !predicate(current)) {
+    return undefined;
+  }
   const updated = updater(current);
   records[index] = updated;
   return updated;
+}
+
+function requireUpdatedRecord(record: HookExecutionRecord | undefined, executionId: string): HookExecutionRecord {
+  if (!record) {
+    throw new Error(`Hook execution could not be updated: ${executionId}`);
+  }
+  return record;
 }
 
 function resolveRetryPolicy(hook: HookSubscription): HookRetryPolicy {
@@ -525,8 +566,9 @@ function executionRecordToRetryPolicy(execution: HookExecutionRecord): HookRetry
   };
 }
 
-function retryPolicyToJobsOptions(retryPolicy: HookRetryPolicy): JobsOptions {
+function retryPolicyToJobsOptions(retryPolicy: HookRetryPolicy, executionId: string): JobsOptions {
   return {
+    jobId: createHookExecutionJobId(executionId),
     attempts: retryPolicy.maxAttempts,
     backoff: {
       type: retryPolicy.backoff.type,
@@ -535,6 +577,22 @@ function retryPolicyToJobsOptions(retryPolicy: HookRetryPolicy): JobsOptions {
     removeOnComplete: false,
     removeOnFail: false,
   };
+}
+
+/** Derives BullMQ's stable deduplication key for one durable hook execution row. */
+export function createHookExecutionJobId(executionId: string): string {
+  return `hook-execution:${executionId}`;
+}
+
+function canClaimForRunning(execution: HookExecutionRecord, attempt: number): boolean {
+  return execution.status === "pending" || (execution.status === "failed" && Boolean(execution.nextRetryAt) && attempt <= execution.maxAttempts);
+}
+
+function isDispatchable(execution: HookExecutionRecord, now: Date): boolean {
+  if (execution.status === "pending") {
+    return true;
+  }
+  return execution.status === "failed" && execution.nextRetryAt !== undefined && execution.nextRetryAt <= now && execution.attempt < execution.maxAttempts;
 }
 
 function retryPolicyToJsonObject(retryPolicy: HookRetryPolicy): JsonObject {

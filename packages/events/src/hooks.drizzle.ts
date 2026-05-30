@@ -1,6 +1,6 @@
 import { createDb } from "@DCRM/db";
 import { hookExecutions, hooks } from "@DCRM/db/schema/automation-integrations";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
 import { persistedHookRowToSubscription } from "./hook-drizzle-mapping.js";
 
@@ -61,9 +61,17 @@ export function createDrizzleHookExecutionRepository(database: HookDatabase = cr
       const rows = await database
         .update(hookExecutions)
         .set({ status: "running", startedAt: input.startedAt, attempt: input.attempt, updatedAt: input.startedAt })
-        .where(eq(hookExecutions.id, input.executionId))
+        .where(
+          and(
+            eq(hookExecutions.id, input.executionId),
+            or(
+              eq(hookExecutions.status, "pending"),
+              and(eq(hookExecutions.status, "failed"), isNotNull(hookExecutions.nextRetryAt), gte(hookExecutions.maxAttempts, input.attempt)),
+            ),
+          ),
+        )
         .returning();
-      return requireHookExecutionRow(rows[0], input.executionId);
+      return rows[0] ? rowToHookExecution(rows[0]) : undefined;
     },
     async markSuccess(input) {
       const rows = await database
@@ -94,6 +102,25 @@ export function createDrizzleHookExecutionRepository(database: HookDatabase = cr
     },
     async listForEvent(eventId) {
       const rows = await database.select().from(hookExecutions).where(eq(hookExecutions.eventId, eventId)).orderBy(desc(hookExecutions.createdAt));
+      return rows.map(rowToHookExecution);
+    },
+    async listDispatchable(input) {
+      const rows = await database
+        .select()
+        .from(hookExecutions)
+        .where(
+          or(
+            eq(hookExecutions.status, "pending"),
+            and(
+              eq(hookExecutions.status, "failed"),
+              isNotNull(hookExecutions.nextRetryAt),
+              lte(hookExecutions.nextRetryAt, input.now),
+              lt(hookExecutions.attempt, hookExecutions.maxAttempts),
+            ),
+          ),
+        )
+        .orderBy(desc(hookExecutions.createdAt))
+        .limit(input.limit);
       return rows.map(rowToHookExecution);
     },
   };

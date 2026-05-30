@@ -72,8 +72,8 @@ describe("event emission", () => {
       repository: createInMemoryEventRepository(),
     });
 
-    const firstUserEvent = await service.emitApp({ type: "client.created", userId: "user_1" });
-    await service.emitApp({ type: "client.created", userId: "user_2" });
+    const firstUserEvent = await service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_1" } });
+    await service.emitApp({ type: "client.created", userId: "user_2", entity: { type: "client", id: "client_2" } });
 
     assert.deepEqual(await service.listForUser("user_1"), [firstUserEvent]);
   });
@@ -89,9 +89,27 @@ describe("event emission", () => {
         type: "client.updated",
         userId: "",
         source: "api",
+        entity: { type: "client", id: "client_1" },
         payload: {},
       }),
       /userId is required/u,
+    );
+  });
+
+  it("rejects event entity references that violate the core event contract", async () => {
+    const service = createEventService({ idGenerator: () => "event_3", repository: createInMemoryEventRepository() });
+
+    await assert.rejects(
+      service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "lead", id: "lead_1" } }),
+      /requires entity type client/u,
+    );
+    await assert.rejects(
+      service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: " " } }),
+      /non-blank entity id/u,
+    );
+    await assert.rejects(
+      service.emitApp({ type: "client.created", userId: "user_1" }),
+      /requires a client entity reference/u,
     );
   });
 
@@ -102,12 +120,12 @@ describe("event emission", () => {
       repository: createInMemoryEventRepository(),
     });
 
-    await service.emitApp({ type: "client.created", userId: "user_1" });
-    await service.emitApi({ type: "lead.created", userId: "user_1" });
-    await service.emitEmail({ type: "exchange.exchange_received", userId: "user_1" });
-    await service.emitWebhook({ type: "webhook.webhook_received", userId: "user_1" });
-    await service.emitHook({ type: "ticket.status_changed", userId: "user_1" });
-    await service.emitSystem({ type: "import.import_completed", userId: "user_1" });
+    await service.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_1" } });
+    await service.emitApi({ type: "lead.created", userId: "user_1", entity: { type: "lead", id: "lead_1" } });
+    await service.emitEmail({ type: "exchange.exchange_received", userId: "user_1", entity: { type: "exchange", id: "exchange_1" } });
+    await service.emitWebhook({ type: "webhook.webhook_received", userId: "user_1", entity: { type: "webhook", id: "webhook_1" } });
+    await service.emitHook({ type: "ticket.status_changed", userId: "user_1", entity: { type: "ticket", id: "ticket_1" } });
+    await service.emitSystem({ type: "import.import_completed", userId: "user_1", entity: { type: "import", id: "import_1" } });
 
     assert.deepEqual(
       (await service.listForUser("user_1")).map((event) => event.source),

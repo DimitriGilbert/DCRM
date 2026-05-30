@@ -4,8 +4,9 @@ import test from "node:test";
 
 import { TRPCError } from "@trpc/server";
 
-import { createBillingService, assertHostedBillingAccess } from "./service.js";
+import { StripeWebhookClientError, createBillingService, assertHostedBillingAccess } from "./service.js";
 import { createInMemoryBillingRepository } from "./repository.js";
+import type { BillingRepository } from "./repository.js";
 import type { BillingConfig, SubscriptionRecord } from "./types.js";
 
 const disabledConfig: BillingConfig = { enabled: false, appUrl: "https://dcrm.test" };
@@ -134,6 +135,53 @@ test("Stripe subscription webhook can create subscription from trusted metadata 
   assert.equal(created?.stripeCustomerId, "cus_out_of_order");
   assert.equal(created?.stripeSubscriptionId, "sub_out_of_order");
   assert.equal(created?.stripePriceId, "price_24_yearly");
+});
+
+test("Stripe webhook invalid signatures are classified as client errors", async () => {
+  const repository = createInMemoryBillingRepository();
+  const rawBody = JSON.stringify({ id: "evt_bad_signature", type: "checkout.session.completed", data: { object: {} } });
+
+  await assert.rejects(
+    createBillingService({ config: enabledConfig, repository }).handleWebhook({ rawBody, signature: "t=1767225600,v1=invalid", now: new Date("2026-01-01T00:00:00.000Z") }),
+    (error: unknown) => error instanceof StripeWebhookClientError,
+  );
+});
+
+test("Stripe webhook invalid payloads are classified as client errors", async () => {
+  const repository = createInMemoryBillingRepository();
+  const rawBody = "not json";
+
+  await assert.rejects(
+    createBillingService({ config: enabledConfig, repository }).handleWebhook({ rawBody, signature: signStripePayload(rawBody, enabledConfig.stripeWebhookSecret), now: new Date("2026-01-01T00:00:00.000Z") }),
+    (error: unknown) => error instanceof StripeWebhookClientError,
+  );
+});
+
+test("Stripe webhook repository failures remain retryable operational errors", async () => {
+  const baseRepository = createInMemoryBillingRepository();
+  const repository: BillingRepository = {
+    ...baseRepository,
+    async getByStripeCustomerId() {
+      throw new Error("database unavailable");
+    },
+  };
+  const rawBody = JSON.stringify({
+    id: "evt_retryable",
+    type: "customer.subscription.updated",
+    data: {
+      object: {
+        id: "sub_retryable",
+        customer: "cus_retryable",
+        status: "active",
+        items: { data: [{ price: { id: "price_24_yearly" } }] },
+      },
+    },
+  });
+
+  await assert.rejects(
+    createBillingService({ config: enabledConfig, repository }).handleWebhook({ rawBody, signature: signStripePayload(rawBody, enabledConfig.stripeWebhookSecret), now: new Date("2026-01-01T00:00:00.000Z") }),
+    (error: unknown) => error instanceof Error && !(error instanceof StripeWebhookClientError) && error.message === "database unavailable",
+  );
 });
 
 function subscriptionRecord(input: Partial<SubscriptionRecord>): SubscriptionRecord {

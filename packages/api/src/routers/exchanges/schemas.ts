@@ -1,13 +1,15 @@
-import { EXCHANGE_TYPES, EXCHANGE_VISIBILITIES } from "@DCRM/domain";
+import { EXCHANGE_VISIBILITIES } from "@DCRM/domain";
 import { z } from "zod";
 
 import { jsonObjectSchema } from "../../crm/custom-fields.js";
+
+const GENERIC_EXCHANGE_TYPES = ["email", "note", "call", "meeting"] as const;
 
 export const exchangeFieldsSchema = z.object({
   clientId: z.string().trim().min(1).nullable().optional(),
   projectId: z.string().trim().min(1).nullable().optional(),
   ticketId: z.string().trim().min(1).nullable().optional(),
-  type: z.enum(EXCHANGE_TYPES),
+  type: z.enum(GENERIC_EXCHANGE_TYPES),
   visibility: z.enum(EXCHANGE_VISIBILITIES).optional(),
   subject: z.string().nullable().optional(),
   body: z.string().trim().min(1),

@@ -615,14 +615,14 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
             if (!input.includeDeleted && exchange.deletedAt) {
               return false;
             }
-            if (input.ticketId) {
-              return exchange.ticketId === input.ticketId;
+            if (input.ticketId && exchange.ticketId !== input.ticketId) {
+              return false;
             }
-            if (input.projectId) {
-              return exchange.projectId === input.projectId;
+            if (input.projectId && exchange.projectId !== input.projectId) {
+              return false;
             }
-            if (input.clientId) {
-              return exchange.clientId === input.clientId;
+            if (input.clientId && exchange.clientId !== input.clientId) {
+              return false;
             }
             return true;
           })
@@ -687,16 +687,24 @@ export function createInMemoryCrmRepository(options: { readonly isActiveEmailAcc
         return tags.filter((tag) => tag.userId === input.userId && (input.includeDeleted || !tag.deletedAt));
       },
       async update(input) {
+        if (!hasTagUpdateFields(input.fields)) {
+          return undefined;
+        }
         if (input.fields.name !== undefined) {
           assertTagNameAvailable(tags, input.userId, input.fields.name, input.id);
         }
-        return updateById(tags, input.userId, input.id, (tag) => ({
-          ...tag,
-          ...input.fields,
-          color: input.fields.color === undefined ? tag.color : input.fields.color,
-          metadata: input.fields.metadata ?? tag.metadata,
-          updatedAt: input.now,
-        }));
+        return updateById(tags, input.userId, input.id, (tag) => {
+          if (tag.deletedAt) {
+            return undefined;
+          }
+          return {
+            ...tag,
+            ...input.fields,
+            color: input.fields.color === undefined ? tag.color : input.fields.color,
+            metadata: input.fields.metadata ?? tag.metadata,
+            updatedAt: input.now,
+          };
+        });
       },
       async setDeletedAt(input) {
         return updateById(tags, input.userId, input.id, (tag) => ({ ...tag, deletedAt: input.deletedAt, updatedAt: input.now }));
@@ -881,6 +889,10 @@ function assertTagNameAvailable(records: readonly TagRecord[], userId: string, n
   if (duplicate) {
     throw new DuplicateTagNameError(name);
   }
+}
+
+function hasTagUpdateFields(fields: Partial<TagMutationFields>): boolean {
+  return fields.name !== undefined || fields.color !== undefined || fields.metadata !== undefined;
 }
 
 function requireActiveClient(records: readonly ClientRecord[], userId: string, clientId: string): ClientRecord {

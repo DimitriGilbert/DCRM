@@ -46,6 +46,13 @@ export type SendTicketCommentEmailResult = {
 
 export type TicketCommentEmailSender = (input: SendTicketCommentEmailInput) => Promise<SendTicketCommentEmailResult>;
 
+export class TicketCommentEmailDeliveryError extends Error {
+  constructor(message: string, readonly exchange: ExchangeRecord) {
+    super(message);
+    this.name = "TicketCommentEmailDeliveryError";
+  }
+}
+
 export function createTicketCommentEmailSender(input: {
   readonly automationRepository: AutomationRepository;
   readonly crmRepository: CrmRepository;
@@ -91,7 +98,13 @@ export function createTicketCommentEmailSender(input: {
     } satisfies SmtpPlainTextMessage;
 
     const preparedExchange = await markSmtpSendPrepared(input.crmRepository, exchange, account.id, headers, generatedMessageId, sendInput.now);
-    const result = await smtpClient.sendPlainText({ account: decryptSmtpAccount(account, input.secretCrypto), message });
+    let result: Awaited<ReturnType<SmtpPlainTextClient["sendPlainText"]>>;
+    try {
+      result = await smtpClient.sendPlainText({ account: decryptSmtpAccount(account, input.secretCrypto), message });
+    } catch (error) {
+      const failedExchange = await markSmtpSendFailed(input.crmRepository, preparedExchange, error, sendInput.now);
+      throw new TicketCommentEmailDeliveryError(getErrorMessage(error), failedExchange);
+    }
     const messageId = result.messageId?.trim() || generatedMessageId;
     const updated = await input.crmRepository.exchanges.update({
       userId: sendInput.userId,
@@ -108,6 +121,19 @@ export function createTicketCommentEmailSender(input: {
     }
     return { exchange: updated, messageId, headers };
   };
+}
+
+async function markSmtpSendFailed(crmRepository: CrmRepository, exchange: ExchangeRecord, error: unknown, now: Date): Promise<ExchangeRecord> {
+  const smtp = exchange.metadata.smtp;
+  const updated = await crmRepository.exchanges.update({
+    userId: exchange.userId,
+    id: exchange.id,
+    fields: {
+      metadata: { ...exchange.metadata, smtp: { ...(isJsonObject(smtp) ? smtp : {}), failedAt: now.toISOString(), status: "failed", error: getErrorMessage(error) } } satisfies JsonObject,
+    },
+    now,
+  });
+  return updated ?? exchange;
 }
 
 function existingSentEmail(exchange: ExchangeRecord): SendTicketCommentEmailResult | null {
@@ -217,4 +243,11 @@ function unique(values: readonly string[]): readonly string[] {
 
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "Ticket comment email could not be sent.";
 }

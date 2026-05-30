@@ -25,12 +25,15 @@ type ClientInput = RouterInputs["clients"]["create"];
 type ProjectInput = RouterInputs["projects"]["create"];
 type TicketInput = RouterInputs["tickets"]["create"];
 type ExchangeInput = RouterInputs["exchanges"]["create"];
+type TicketCommentInput = RouterInputs["exchanges"]["addTicketComment"];
+type TicketCommentVisibility = NonNullable<TicketCommentInput["visibility"]>;
 
 const projectStatuses = ["planning", "active", "on_hold", "completed", "archived"] as const;
 const ticketTypes = ["task", "issue", "bug", "feature", "question"] as const;
 const ticketStatuses = ["open", "closed"] as const;
 const ticketPriorities = ["normal", "urgent"] as const;
-const exchangeTypes = ["note", "call", "meeting", "comment"] as const;
+const exchangeTypes = ["note", "call", "meeting"] as const;
+const exchangeVisibilities = ["internal", "external"] as const;
 
 function formatLabel(value: string) {
   return value.replaceAll("_", " ").replace(/^\w/u, (letter) => letter.toUpperCase());
@@ -572,17 +575,57 @@ function TicketFormContent({ ticketId }: { ticketId?: string }) {
   const [type, setType] = useState<TicketInput["type"]>("task");
   const [status, setStatus] = useState<TicketInput["status"]>("open");
   const [priority, setPriority] = useState<TicketInput["priority"]>("normal");
+  const [initializedTicketId, setInitializedTicketId] = useState<string | null>(null);
+  const [isTicketFormDirty, setIsTicketFormDirty] = useState(false);
 
   useEffect(() => {
-    if (ticket.data) {
-      setProjectId(ticket.data.projectId);
-      setTitle(ticket.data.title);
-      setDescription(ticket.data.description ?? "");
-      setType(ticket.data.type);
-      setStatus(ticket.data.status);
-      setPriority(ticket.data.priority);
+    if (!ticket.data) {
+      return;
     }
-  }, [ticket.data]);
+
+    if (initializedTicketId === ticket.data.id && isTicketFormDirty) {
+      return;
+    }
+
+    setProjectId(ticket.data.projectId);
+    setTitle(ticket.data.title);
+    setDescription(ticket.data.description ?? "");
+    setType(ticket.data.type);
+    setStatus(ticket.data.status);
+    setPriority(ticket.data.priority);
+    setInitializedTicketId(ticket.data.id);
+    setIsTicketFormDirty(false);
+  }, [initializedTicketId, isTicketFormDirty, ticket.data]);
+
+  function setDirtyProjectId(value: string) {
+    setProjectId(value);
+    setIsTicketFormDirty(true);
+  }
+
+  function setDirtyTitle(value: string) {
+    setTitle(value);
+    setIsTicketFormDirty(true);
+  }
+
+  function setDirtyDescription(value: string) {
+    setDescription(value);
+    setIsTicketFormDirty(true);
+  }
+
+  function setDirtyType(value: TicketInput["type"]) {
+    setType(value);
+    setIsTicketFormDirty(true);
+  }
+
+  function setDirtyStatus(value: TicketInput["status"]) {
+    setStatus(value);
+    setIsTicketFormDirty(true);
+  }
+
+  function setDirtyPriority(value: TicketInput["priority"]) {
+    setPriority(value);
+    setIsTicketFormDirty(true);
+  }
 
   async function submit() {
     const selectedProjectId = projectId || projects.data?.[0]?.id;
@@ -624,7 +667,7 @@ function TicketFormContent({ ticketId }: { ticketId?: string }) {
     );
   }
 
-  return <Container className="p-6"><ScreenHeader title={ticketId ? "Edit ticket" : "New ticket"} description="Simple ticket capture for mobile." />{renderTicketFormBody({ projects: projects.data, isError: projects.isError, projectId, setProjectId, title, setTitle, type, setType, status, setStatus, priority, setPriority, description, setDescription, submit, isPending: createTicket.isPending || updateTicket.isPending, isEditing: Boolean(ticketId) })}</Container>;
+  return <Container className="p-6"><ScreenHeader title={ticketId ? "Edit ticket" : "New ticket"} description="Simple ticket capture for mobile." />{renderTicketFormBody({ projects: projects.data, isError: projects.isError, projectId, setProjectId: setDirtyProjectId, title, setTitle: setDirtyTitle, type, setType: setDirtyType, status, setStatus: setDirtyStatus, priority, setPriority: setDirtyPriority, description, setDescription: setDirtyDescription, submit, isPending: createTicket.isPending || updateTicket.isPending, isEditing: Boolean(ticketId) })}</Container>;
 }
 
 function renderTicketFormBody({ projects, isError, projectId, setProjectId, title, setTitle, type, setType, status, setStatus, priority, setPriority, description, setDescription, submit, isPending, isEditing }: { projects: readonly Project[] | undefined; isError: boolean; projectId: string; setProjectId: (value: string) => void; title: string; setTitle: (value: string) => void; type: TicketInput["type"]; setType: (value: TicketInput["type"]) => void; status: TicketInput["status"]; setStatus: (value: TicketInput["status"]) => void; priority: TicketInput["priority"]; setPriority: (value: TicketInput["priority"]) => void; description: string; setDescription: (value: string) => void; submit: () => Promise<void>; isPending: boolean; isEditing: boolean }) {
@@ -651,9 +694,12 @@ function ExchangesContent() {
 function ExchangeForm({ defaultTicketId }: { defaultTicketId: string }) {
   const { toast } = useToast();
   const createExchange = useMutation(trpc.exchanges.create.mutationOptions());
+  const addTicketComment = useMutation(trpc.exchanges.addTicketComment.mutationOptions());
   const [type, setType] = useState<ExchangeInput["type"]>("note");
+  const [commentVisibility, setCommentVisibility] = useState<TicketCommentVisibility>("internal");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [commentBody, setCommentBody] = useState("");
 
   async function submit() {
     if (!body.trim()) {
@@ -676,7 +722,27 @@ function ExchangeForm({ defaultTicketId }: { defaultTicketId: string }) {
     }
   }
 
-  return <Surface variant="secondary" className="mb-5 gap-4 rounded-xl p-4"><Text className="text-lg font-semibold text-foreground">Add internal exchange</Text><SelectChips label="Type" options={exchangeTypes} value={type} onChange={setType} /><Field label="Subject" value={subject} onChangeText={setSubject} /><Field label="Body" value={body} onChangeText={setBody} multiline /><Button onPress={submit} isDisabled={createExchange.isPending}><Button.Label>Add exchange</Button.Label></Button></Surface>;
+  async function submitComment() {
+    if (!commentBody.trim()) {
+      toast.show({ variant: "danger", label: "Comment body is required" });
+      return;
+    }
+    try {
+      await addTicketComment.mutateAsync({ ticketId: defaultTicketId, body: commentBody.trim(), visibility: commentVisibility });
+      try {
+        await queryClient.invalidateQueries();
+      } catch (error) {
+        toast.show({ variant: "danger", label: "Comment saved, but refresh failed", description: getErrorMessage(error) });
+        return;
+      }
+      setCommentBody("");
+      toast.show({ variant: "success", label: "Ticket comment added" });
+    } catch (error) {
+      toast.show({ variant: "danger", label: "Comment creation failed", description: getErrorMessage(error) });
+    }
+  }
+
+  return <View className="mb-5 gap-4"><Surface variant="secondary" className="gap-4 rounded-xl p-4"><Text className="text-lg font-semibold text-foreground">Add ticket comment</Text><SelectChips label="Visibility" options={exchangeVisibilities} value={commentVisibility} onChange={setCommentVisibility} /><Field label="Comment" value={commentBody} onChangeText={setCommentBody} multiline /><Button onPress={submitComment} isDisabled={addTicketComment.isPending}><Button.Label>Add comment</Button.Label></Button></Surface><Surface variant="secondary" className="gap-4 rounded-xl p-4"><Text className="text-lg font-semibold text-foreground">Add internal exchange</Text><SelectChips label="Type" options={exchangeTypes} value={type} onChange={setType} /><Field label="Subject" value={subject} onChangeText={setSubject} /><Field label="Body" value={body} onChangeText={setBody} multiline /><Button onPress={submit} isDisabled={createExchange.isPending}><Button.Label>Add exchange</Button.Label></Button></Surface></View>;
 }
 
 function Timeline({ exchanges, isError }: { exchanges: readonly Exchange[] | undefined; isError: boolean }) {

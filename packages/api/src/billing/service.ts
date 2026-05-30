@@ -39,6 +39,17 @@ const checkoutCompletedSchema = z.object({
   metadata: z.object({ userId: z.string().min(1).optional() }).optional(),
 });
 
+type StripeWebhookEvent = z.infer<typeof stripeWebhookSchema>;
+type StripeCheckoutCompletedEventObject = z.infer<typeof checkoutCompletedSchema>;
+type StripeSubscriptionEventObject = z.infer<typeof stripeSubscriptionSchema>;
+
+export class StripeWebhookClientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StripeWebhookClientError";
+  }
+}
+
 export type BillingOverview = {
   readonly enabled: boolean;
   readonly hostedPrice: {
@@ -87,18 +98,18 @@ export function createBillingService(options: { readonly config: BillingConfig; 
       }
       const webhookSecret = requireStripeConfig(options.config).stripeWebhookSecret;
       if (!input.signature || !verifyStripeSignature({ rawBody: input.rawBody, signatureHeader: input.signature, webhookSecret, now: input.now })) {
-        throw new Error("Invalid Stripe webhook signature.");
+        throw new StripeWebhookClientError("Invalid Stripe webhook signature.");
       }
-      const parsedEvent = stripeWebhookSchema.parse(JSON.parse(input.rawBody));
+      const parsedEvent = parseStripeWebhookEvent(input.rawBody);
       if (parsedEvent.type === "checkout.session.completed") {
-        const session = checkoutCompletedSchema.parse(parsedEvent.data.object);
+        const session = parseStripeCheckoutCompletedEventObject(parsedEvent.data.object);
         const userId = session.metadata?.userId;
         if (userId) {
           await options.repository.upsertForUser({ id: crypto.randomUUID(), userId, stripeCustomerId: session.customer, stripeSubscriptionId: session.subscription ?? undefined, now: input.now });
         }
       }
       if (parsedEvent.type.startsWith("customer.subscription.")) {
-        const subscription = stripeSubscriptionSchema.parse(parsedEvent.data.object);
+        const subscription = parseStripeSubscriptionEventObject(parsedEvent.data.object);
         const existing = await options.repository.getByStripeCustomerId({ stripeCustomerId: subscription.customer });
         const userId = existing?.userId ?? subscription.metadata?.userId;
         if (userId) {
@@ -158,6 +169,30 @@ function requireStripeConfig(config: BillingConfig): Required<Pick<BillingConfig
     throw new Error("Hosted billing requires Stripe configuration.");
   }
   return { stripeSecretKey: config.stripeSecretKey, stripeWebhookSecret: config.stripeWebhookSecret, stripePriceId: config.stripePriceId };
+}
+
+function parseStripeWebhookEvent(rawBody: string): StripeWebhookEvent {
+  try {
+    return stripeWebhookSchema.parse(JSON.parse(rawBody));
+  } catch {
+    throw new StripeWebhookClientError("Invalid Stripe webhook payload.");
+  }
+}
+
+function parseStripeCheckoutCompletedEventObject(value: unknown): StripeCheckoutCompletedEventObject {
+  try {
+    return checkoutCompletedSchema.parse(value);
+  } catch {
+    throw new StripeWebhookClientError("Invalid Stripe checkout webhook payload.");
+  }
+}
+
+function parseStripeSubscriptionEventObject(value: unknown): StripeSubscriptionEventObject {
+  try {
+    return stripeSubscriptionSchema.parse(value);
+  } catch {
+    throw new StripeWebhookClientError("Invalid Stripe subscription webhook payload.");
+  }
 }
 
 function createFetchStripeCheckoutClient(): StripeCheckoutClient {

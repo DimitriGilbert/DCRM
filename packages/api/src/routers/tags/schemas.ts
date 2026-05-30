@@ -8,7 +8,10 @@ export const tagFieldsSchema = z.object({
   metadata: jsonObjectSchema.optional(),
 });
 
-export const tagUpdateSchema = tagFieldsSchema.partial().extend({ id: z.string().trim().min(1) });
+export const tagUpdateSchema = tagFieldsSchema
+  .partial()
+  .extend({ id: z.string().trim().min(1) })
+  .refine((input) => input.name !== undefined || input.color !== undefined || input.metadata !== undefined, { message: "At least one tag field must be provided." });
 export const tagIdSchema = z.object({ id: z.string().trim().min(1) });
 export const listTagsSchema = z.object({ includeDeleted: z.boolean().optional() });
 export const entityTagSchema = z.object({

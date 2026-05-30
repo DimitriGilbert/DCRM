@@ -7,6 +7,7 @@ import type { EventService } from "@DCRM/events";
 
 import { createInMemoryAutomationRepository } from "../../automation/repository.js";
 import { createInMemoryCrmRepository } from "../../crm/repository.js";
+import { exchangeFieldsSchema } from "../exchanges/schemas.js";
 import { appRouter } from "../index.js";
 
 import type { AutomationRepository } from "../../automation/repository.js";
@@ -228,6 +229,7 @@ describe("tickets and exchanges tRPC API", () => {
     assert.deepEqual((await caller.exchanges.timeline({ clientId: client.id })).map((exchange) => exchange.id), [comment.id]);
     assert.deepEqual((await caller.exchanges.timeline({ projectId: project.id })).map((exchange) => exchange.id), [comment.id]);
     assert.deepEqual((await caller.exchanges.timeline({ ticketId: ticket.id })).map((exchange) => exchange.id), [comment.id]);
+    assert.deepEqual((await caller.exchanges.timeline({ clientId: client.id, projectId: project.id, ticketId: ticket.id })).map((exchange) => exchange.id), [comment.id]);
     assert.deepEqual(
       (await eventService.listForUser("user_1")).map((event) => event.type),
       ["client.created", "project.created", "ticket.created", "exchange.created", "ticket.updated"],
@@ -252,8 +254,11 @@ describe("tickets and exchanges tRPC API", () => {
     await assert.rejects(userOne.exchanges.create({ clientId: foreignClient.id, type: "note", body: "Foreign client" }), /Client not found/u);
     await assert.rejects(userOne.exchanges.create({ projectId: deletedProject.id, type: "note", body: "Deleted project" }), /Project not found/u);
     await assert.rejects(userOne.exchanges.create({ projectId: foreignProject.id, type: "note", body: "Foreign project" }), /Project not found/u);
+    await assert.rejects(Promise.resolve().then(() => exchangeFieldsSchema.parse({ ticketId: ticket.id, type: "comment", body: "Bypassed comment" })), /Invalid option/u);
     await assert.rejects(userOne.exchanges.create({ clientId: otherClient.id, projectId: project.id, type: "note", body: "Mismatched client" }), /Exchange client does not match project client/u);
     await assert.rejects(userOne.exchanges.update({ id: (await userOne.exchanges.create({ clientId: client.id, type: "note", body: "Owned exchange" })).id, projectId: otherProject.id, ticketId: ticket.id }), /Exchange project does not match ticket project/u);
+    await assert.rejects(userOne.exchanges.timeline({ clientId: otherClient.id, projectId: project.id }), /Exchange client does not match project client/u);
+    await assert.rejects(userOne.exchanges.timeline({ projectId: otherProject.id, ticketId: ticket.id }), /Exchange project does not match ticket project/u);
   });
 
   it("keeps internal notes from being externally sendable", async () => {
@@ -315,7 +320,7 @@ describe("tickets and exchanges tRPC API", () => {
     assert.equal(comment.externalMessageId, "<sent@example.test>");
   });
 
-  it("emits ticket comment events even when optional email sending fails", async () => {
+  it("returns durable ticket comment success with failed email state when optional email sending fails", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const automationRepository = createInMemoryAutomationRepository();
     const eventService = createTestEventService();
@@ -326,10 +331,14 @@ describe("tickets and exchanges tRPC API", () => {
     const project = await caller.projects.create({ clientId: client.id, name: "Website rebuild" });
     const ticket = await caller.tickets.create({ projectId: project.id, title: "Fix contact form" });
 
-    await assert.rejects(caller.exchanges.addTicketComment({ ticketId: ticket.id, body: "Please try the form again.", visibility: "external", emailToClient: true }), /SMTP unavailable/u);
+    const comment = await caller.exchanges.addTicketComment({ ticketId: ticket.id, body: "Please try the form again.", visibility: "external", emailToClient: true });
     const exchanges = await crmRepository.exchanges.list({ userId: "user_1", type: "comment" });
+    const smtp = getSmtpMetadata(comment.metadata);
 
     assert.equal(exchanges.length, 1);
+    assert.equal(comment.id, exchanges[0]?.id);
+    assert.equal(smtp.status, "failed");
+    assert.equal(smtp.error, "SMTP unavailable");
     assert.deepEqual(
       (await eventService.listForUser("user_1")).map((event) => event.type),
       ["client.created", "project.created", "ticket.created", "exchange.created", "ticket.updated"],
@@ -411,4 +420,10 @@ function createTaggingSecretCrypto(): SecretCrypto {
     encrypt: (plaintext) => ({ version: "dcrm.secret.v1", algorithm: "aes-256-gcm", encoding: "base64", ciphertext: Buffer.from(plaintext, "utf8").toString("base64"), iv: "test-iv", authTag: "test-tag" }) satisfies EncryptedSecretV1,
     decrypt: (encrypted) => Buffer.from(encrypted.ciphertext, "base64").toString("utf8"),
   };
+}
+
+function getSmtpMetadata(metadata: Record<string, unknown>): { readonly status?: unknown; readonly error?: unknown } {
+  const smtp = metadata.smtp;
+  assert.ok(typeof smtp === "object" && smtp !== null && !Array.isArray(smtp));
+  return smtp;
 }

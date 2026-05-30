@@ -8,7 +8,7 @@ import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql, sum 
 import { AttachmentTargetNotFoundError, DuplicateTagNameError, TicketProjectMoveBlockedError } from "./repository.js";
 import { authorizedEmailPatternsOverlap, normalizeAuthorizedEmailPattern } from "../email/matching.js";
 import type { CrmRepository } from "./repository.js";
-import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
+import type { AttachmentRecord, ClientAuthorizedEmailRecord, ClientRecord, EntityTagRecord, ExchangeRecord, LeadRecord, NotificationRecord, ProjectRecord, TagMutationFields, TagRecord, TicketRecord, UserSettingsRecord } from "./types.js";
 
 type CrmDatabase = ReturnType<typeof createDb>;
 type CrmTransaction = Parameters<Parameters<CrmDatabase["transaction"]>[0]>[0];
@@ -386,9 +386,11 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         }
         if (input.ticketId) {
           predicates.push(eq(exchanges.ticketId, input.ticketId));
-        } else if (input.projectId) {
+        }
+        if (input.projectId) {
           predicates.push(eq(exchanges.projectId, input.projectId));
-        } else if (input.clientId) {
+        }
+        if (input.clientId) {
           predicates.push(eq(exchanges.clientId, input.clientId));
         }
         const rows = await database.select().from(exchanges).where(and(...predicates)).orderBy(asc(exchanges.occurredAt));
@@ -446,6 +448,9 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
         return rows.map(rowToTag);
       },
       async update(input) {
+        if (!hasTagUpdateFields(input.fields)) {
+          return undefined;
+        }
         if (input.fields.name !== undefined) {
           await assertTagNameAvailable(database, input.userId, input.fields.name, input.id);
         }
@@ -453,7 +458,7 @@ export function createDrizzleCrmRepository(database: CrmDatabase = createDb()): 
           const rows = await database
             .update(tags)
             .set({ ...input.fields, updatedAt: input.now })
-            .where(and(eq(tags.userId, input.userId), eq(tags.id, input.id)))
+            .where(and(eq(tags.userId, input.userId), eq(tags.id, input.id), isNull(tags.deletedAt)))
             .returning();
           return rows[0] ? rowToTag(rows[0]) : undefined;
         } catch (error) {
@@ -840,6 +845,10 @@ function isTagNameUniqueViolation(error: unknown): boolean {
   }
   const maybeError = error as { readonly code?: unknown; readonly constraint?: unknown };
   return maybeError.code === "23505" && maybeError.constraint === "tags_user_id_name_idx";
+}
+
+function hasTagUpdateFields(fields: Partial<TagMutationFields>): boolean {
+  return fields.name !== undefined || fields.color !== undefined || fields.metadata !== undefined;
 }
 
 async function validateActiveExchangeParents(database: CrmExecutor, userId: string, clientId: string | null | undefined, projectId: string | null | undefined, ticketId: string | null | undefined): Promise<void> {

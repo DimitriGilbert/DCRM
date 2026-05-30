@@ -17,7 +17,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_1", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Ada" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_ada" }, payload: { name: "Ada" } });
     const hooks = [
       createHook("hook_bearer", { auth: { type: "bearer", token: secretCrypto.encrypt("bearer-secret") } }),
       createHook("hook_basic", { auth: { type: "basic", username: "alice", password: secretCrypto.encrypt("password-secret") } }),
@@ -52,7 +52,7 @@ describe("outgoing webhook executor", () => {
   it("retries transient webhook failures and does not block sibling hook execution", async () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_2", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Grace" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_grace" }, payload: { name: "Grace" } });
     const failingHook = createHook("hook_retry", { retryPolicy: { maxAttempts: 2, backoff: { type: "fixed", delayMs: 10 } } });
     const siblingHook = createHook("hook_sibling");
     const hookRepository = createInMemoryHookRepository([failingHook, siblingHook]);
@@ -82,7 +82,7 @@ describe("outgoing webhook executor", () => {
   it("marks permanent webhook failures without scheduling retries while transient failures remain retryable", async () => {
     const secretCrypto = createOpaqueSecretCrypto();
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_3", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Katherine" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_katherine" }, payload: { name: "Katherine" } });
     const permanentHook = createHook("hook_permanent", { retryPolicy: { maxAttempts: 3, backoff: { type: "fixed", delayMs: 1_000 } } });
     const transientHook = createHook("hook_transient", { retryPolicy: { maxAttempts: 3, backoff: { type: "fixed", delayMs: 1_000 } } });
     const hookRepository = createInMemoryHookRepository([permanentHook, transientHook]);
@@ -112,7 +112,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_4", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Mary" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_mary" }, payload: { name: "Mary" } });
     const hook = createHook("hook_credentials", { url: "https://user:password@example.test/hooks/dcrm" });
     const hookRepository = createInMemoryHookRepository([hook]);
     const executionRepository = createInMemoryHookExecutionRepository();
@@ -134,7 +134,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createDecryptFailingSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_http_auth", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Evelyn" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_evelyn" }, payload: { name: "Evelyn" } });
     const hook = createHook("hook_http_auth", { url: "http://example.test/hooks/dcrm", auth: { type: "bearer", token: secretCrypto.encrypt("bearer-secret") } });
     const hookRepository = createInMemoryHookRepository([hook]);
     const executionRepository = createInMemoryHookExecutionRepository();
@@ -156,7 +156,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_http_key_headers", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Eliza" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_eliza" }, payload: { name: "Eliza" } });
     const hooks = [
       createHook("hook_http_auth_key", { url: "http://example.test/hooks/dcrm", headers: { "X-Auth-Key": "plain-secret" } }),
       createHook("hook_http_webhook_key", { url: "http://example.test/hooks/dcrm", headers: { "X-Webhook-Key": "plain-secret" } }),
@@ -181,7 +181,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_plain_header", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Edith" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_edith" }, payload: { name: "Edith" } });
     const hook = createHook("hook_plain_header", { headers: { Authorization: "Bearer plain-secret" } });
     const hookRepository = createInMemoryHookRepository([hook]);
     const executionRepository = createInMemoryHookExecutionRepository();
@@ -203,7 +203,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_5", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Dorothy" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_dorothy" }, payload: { name: "Dorothy" } });
     const hook = createHook("hook_invalid_config", { headers: { Host: "example.test" }, retryPolicy: { maxAttempts: 3, backoff: { type: "fixed", delayMs: 1_000 } } });
     const hookRepository = createInMemoryHookRepository([hook]);
     const executionRepository = createInMemoryHookExecutionRepository();
@@ -257,7 +257,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_connection_bound", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Mildred" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_mildred" }, payload: { name: "Mildred" } });
     const hook = createHook("hook_connection_bound", { url: "https://safe.example.test/hooks/dcrm" });
     const hookRepository = createInMemoryHookRepository([hook]);
     const executionRepository = createInMemoryHookExecutionRepository();
@@ -284,7 +284,7 @@ describe("outgoing webhook executor", () => {
     const secretCrypto = createPassthroughSecretCrypto();
     const requests: CapturedRequest[] = [];
     const eventService = createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => "event_6", clock: () => new Date("2026-01-01T00:00:00.000Z") });
-    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", payload: { name: "Hedy" } });
+    const event = await eventService.emitApp({ type: "client.created", userId: "user_1", entity: { type: "client", id: "client_hedy" }, payload: { name: "Hedy" } });
     const hook = createHook("hook_idempotent", {
       auth: {
         type: "custom_headers",

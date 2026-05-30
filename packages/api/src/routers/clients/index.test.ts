@@ -192,6 +192,41 @@ describe("clients tRPC API", () => {
     assert.equal(updated.name, "priority");
   });
 
+  it("rejects empty tag updates without touching updatedAt or emitting an update event", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const tag = await caller.tags.create({ name: "vip" });
+
+    await assert.rejects(caller.tags.update({ id: tag.id }), /At least one tag field must be provided/u);
+
+    const persisted = await crmRepository.tags.getById({ userId: "user_1", id: tag.id });
+    assert.equal(persisted?.updatedAt, tag.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["tag.created"],
+    );
+  });
+
+  it("rejects updates to deleted tags without emitting an update event", async () => {
+    const crmRepository = createInMemoryCrmRepository();
+    const eventService = createTestEventService();
+    const caller = appRouter.createCaller(createTestContext("user_1", crmRepository, eventService));
+    const tag = await caller.tags.create({ name: "vip" });
+    await caller.tags.delete({ id: tag.id });
+    const deleted = await crmRepository.tags.getById({ userId: "user_1", id: tag.id });
+
+    await assert.rejects(caller.tags.update({ id: tag.id, name: "priority" }), /NOT_FOUND|Tag not found/u);
+
+    const persisted = await crmRepository.tags.getById({ userId: "user_1", id: tag.id });
+    assert.equal(persisted?.name, "vip");
+    assert.equal(persisted?.updatedAt, deleted?.updatedAt);
+    assert.deepEqual(
+      (await eventService.listForUser("user_1")).map((event) => event.type),
+      ["tag.created", "tag.deleted"],
+    );
+  });
+
   it("emits project.updated when detaching a project tag", async () => {
     const crmRepository = createInMemoryCrmRepository();
     const eventService = createTestEventService();

@@ -21,6 +21,7 @@ type TicketCommentScope = {
 };
 
 export function normalizeCreateExchangeFields(input: CreateExchangeInput, scope: ExchangeParentScope): ExchangeMutationFields {
+  assertGenericExchangeType(input.type);
   assertInternalNoteSafety(input.type, input.visibility);
   return {
     clientId: scope.client?.id ?? null,
@@ -82,5 +83,11 @@ function assertInternalNoteSafety(type: string, visibility: string | undefined, 
       return;
     }
     throw badRequest("Internal notes cannot be externally sendable.");
+  }
+}
+
+function assertGenericExchangeType(type: string): void {
+  if (type === "comment") {
+    throw badRequest("Ticket comments must be created through the ticket comment API.");
   }
 }

@@ -4,9 +4,14 @@ const DEV_SERVER_PORT = 3001;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 const BUNDLED_MAIN_VIEW_URL = "views://mainview/index.html";
 
-const MAIN_VIEW_NAVIGATION_RULES = [
+const BUNDLED_MAIN_VIEW_NAVIGATION_RULES = [
   "^*",
   `${BUNDLED_MAIN_VIEW_URL}*`,
+];
+
+const DEV_MAIN_VIEW_NAVIGATION_RULES = [
+  ...BUNDLED_MAIN_VIEW_NAVIGATION_RULES,
+  DEV_SERVER_URL,
   `${DEV_SERVER_URL}/*`,
   `${DEV_SERVER_URL}/@*`,
   `${DEV_SERVER_URL}/src/*`,
@@ -37,12 +42,13 @@ async function getMainViewUrl(): Promise<string> {
 }
 
 const url = await getMainViewUrl();
+const navigationRules = url === DEV_SERVER_URL ? DEV_MAIN_VIEW_NAVIGATION_RULES : BUNDLED_MAIN_VIEW_NAVIGATION_RULES;
 
 new BrowserWindow({
   title: "DCRM",
   url,
   sandbox: true,
-  navigationRules: JSON.stringify(MAIN_VIEW_NAVIGATION_RULES),
+  navigationRules: JSON.stringify(navigationRules),
   frame: {
     width: 1280,
     height: 820,

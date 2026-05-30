@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@DCRM/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@DCRM/ui/components/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@DCRM/ui/components/dialog";
 import { Skeleton } from "@DCRM/ui/components/skeleton";
 
 import { useTRPC } from "@/utils/trpc";
@@ -17,6 +19,7 @@ function ClientDetailPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { clientId } = Route.useParams();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const clientQuery = useQuery(
     trpc.client.read.queryOptions({ id: clientId }),
@@ -78,13 +81,41 @@ function ClientDetailPage() {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => softDeleteMutation.mutate({ id: client.id })}
+            onClick={() => setShowDeleteDialog(true)}
             disabled={softDeleteMutation.isPending}
           >
             Delete
           </Button>
         </div>
       </div>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Client</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{client.name}&quot;? This action can be undone by restoring the client later.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={softDeleteMutation.isPending}
+              onClick={() => softDeleteMutation.mutate({ id: client.id })}
+            >
+              {softDeleteMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card size="sm">
         <CardHeader>

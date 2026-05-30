@@ -25,9 +25,14 @@ function CreateProjectPage() {
   const createMutation = useMutation(
     trpc.project.create.mutationOptions({
       onSuccess: (data) => {
-        toast.success("Project created");
         queryClient.invalidateQueries(trpc.project.list.queryFilter());
-        navigate({ to: "/projects/$projectId", params: { projectId: data?.id ?? "" } });
+        if (data?.id) {
+          toast.success("Project created");
+          navigate({ to: "/projects/$projectId", params: { projectId: data.id } });
+        } else {
+          toast.error("Project created but failed to retrieve ID");
+          navigate({ to: "/projects" });
+        }
       },
       onError: (error) => {
         toast.error("Failed to create project", {

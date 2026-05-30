@@ -20,9 +20,14 @@ function CreateLeadPage() {
   const createMutation = useMutation(
     trpc.lead.create.mutationOptions({
       onSuccess: (data) => {
-        toast.success("Lead created");
         queryClient.invalidateQueries(trpc.lead.list.queryFilter());
-        navigate({ to: "/leads/$leadId", params: { leadId: data?.id ?? "" } });
+        if (data?.id) {
+          toast.success("Lead created");
+          navigate({ to: "/leads/$leadId", params: { leadId: data.id } });
+        } else {
+          toast.error("Lead created but failed to retrieve ID");
+          navigate({ to: "/leads" });
+        }
       },
       onError: (error) => {
         toast.error("Failed to create lead", {

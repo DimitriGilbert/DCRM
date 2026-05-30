@@ -68,7 +68,7 @@ function EditTicketPage() {
     type: ticket.type as TicketFormValues["type"],
     status: ticket.status as TicketFormValues["status"],
     priority: ticket.priority as TicketFormValues["priority"],
-    dueDate: ticket.dueDate ? new Date(ticket.dueDate).toISOString().split("T")[0] : "",
+    dueDate: ticket.dueDate ? new Date(ticket.dueDate).toISOString().split("T")[0] : undefined,
   };
 
   return (
@@ -91,7 +91,11 @@ function EditTicketPage() {
       <EditTicketForm
         defaultValues={defaultValues}
         onSubmit={(values) => {
-          updateMutation.mutate({ id: ticketId, projectId, ...values });
+          const cleaned = {
+            ...values,
+            dueDate: values.dueDate || undefined,
+          };
+          updateMutation.mutate({ id: ticketId, projectId, ...cleaned });
         }}
         isPending={updateMutation.isPending}
       />

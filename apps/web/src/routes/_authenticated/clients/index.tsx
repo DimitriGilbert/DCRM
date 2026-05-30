@@ -40,6 +40,7 @@ function ClientsPage() {
       onSuccess: () => {
         toast.success("Client created");
         queryClient.invalidateQueries(trpc.client.list.queryFilter());
+        queryClient.invalidateQueries(trpc.client.search.queryFilter());
         setShowCreateDialog(false);
       },
       onError: (error) => {

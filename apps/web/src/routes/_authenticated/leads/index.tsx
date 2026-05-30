@@ -51,6 +51,7 @@ function LeadsPage() {
       onSuccess: () => {
         toast.success("Lead created");
         queryClient.invalidateQueries(trpc.lead.list.queryFilter());
+        queryClient.invalidateQueries(trpc.lead.search.queryFilter());
         setShowCreateDialog(false);
       },
       onError: (error) => {
@@ -207,45 +208,43 @@ function KanbanView({
             </div>
             <div className="space-y-2">
               {columnLeads.map((lead) => (
-                <Link
-                  key={lead.id}
-                  to="/leads/$leadId"
-                  params={{ leadId: lead.id }}
-                >
-                  <Card size="sm" className="cursor-pointer transition-colors hover:bg-muted/50">
-                    <CardContent className="space-y-1">
-                      <p className="truncate text-xs font-medium">
-                        {lead.name}
-                      </p>
-                      {lead.company && (
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {lead.company}
+                <div key={lead.id} className="space-y-1">
+                  <Link
+                    to="/leads/$leadId"
+                    params={{ leadId: lead.id }}
+                  >
+                    <Card size="sm" className="cursor-pointer transition-colors hover:bg-muted/50">
+                      <CardContent className="space-y-1">
+                        <p className="truncate text-xs font-medium">
+                          {lead.name}
                         </p>
-                      )}
-                      {lead.estimatedValue != null && (
-                        <p className="text-[11px] text-muted-foreground">
-                          {lead.currency ?? "USD"}{" "}
-                          {lead.estimatedValue.toLocaleString("en-US", {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 2,
-                          })}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
+                        {lead.company && (
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {lead.company}
+                          </p>
+                        )}
+                        {lead.estimatedValue != null && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {lead.currency ?? "USD"}{" "}
+                            {lead.estimatedValue.toLocaleString("en-US", {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 2,
+                            })}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  {column.key !== LEAD_STAGES.WON && column.key !== LEAD_STAGES.LOST && (
+                    <StageMoveButtons
+                      currentStage={column.key}
+                      onMove={(stage) => {
+                        onStageChange(lead.id, stage);
+                      }}
+                    />
+                  )}
+                </div>
               ))}
-              {column.key !== LEAD_STAGES.WON && column.key !== LEAD_STAGES.LOST && columnLeads.length > 0 && (
-                <StageMoveButtons
-                  currentStage={column.key}
-                  onMove={(stage) => {
-                    const firstLead = columnLeads[0];
-                    if (firstLead) {
-                      onStageChange(firstLead.id, stage);
-                    }
-                  }}
-                />
-              )}
             </div>
           </div>
         );

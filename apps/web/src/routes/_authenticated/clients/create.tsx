@@ -20,9 +20,14 @@ function CreateClientPage() {
   const createMutation = useMutation(
     trpc.client.create.mutationOptions({
       onSuccess: (data) => {
-        toast.success("Client created");
         queryClient.invalidateQueries(trpc.client.list.queryFilter());
-        navigate({ to: "/clients/$clientId", params: { clientId: data?.id ?? "" } });
+        if (data?.id) {
+          toast.success("Client created");
+          navigate({ to: "/clients/$clientId", params: { clientId: data.id } });
+        } else {
+          toast.error("Client created but failed to retrieve ID");
+          navigate({ to: "/clients" });
+        }
       },
       onError: (error) => {
         toast.error("Failed to create client", {

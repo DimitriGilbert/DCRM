@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Send, Trash2, Bot, User, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { z } from "zod";
 
 import { useTRPC } from "@/utils/trpc";
 
@@ -36,6 +38,12 @@ function AIChatPage() {
         queryClient.invalidateQueries(
           trpc.aiChat.listMessages.queryFilter(),
         );
+        setInput("");
+      },
+      onError: (error) => {
+        toast.error("Failed to send message", {
+          description: error.message,
+        });
       },
     }),
   );
@@ -50,10 +58,12 @@ function AIChatPage() {
     }),
   );
 
+  const messageRoleSchema = z.enum(["user", "assistant", "system"]);
+
   const messages: ChatMessage[] =
     messagesQuery.data?.items.map((m) => ({
       id: m.id,
-      role: m.role as "user" | "assistant" | "system",
+      role: messageRoleSchema.parse(m.role),
       content: m.content,
       createdAt: m.createdAt,
     })).reverse() ?? [];
@@ -74,7 +84,6 @@ function AIChatPage() {
       content: trimmed,
       providerId: defaultProvider.id,
     });
-    setInput("");
   }
 
   function handleClear() {

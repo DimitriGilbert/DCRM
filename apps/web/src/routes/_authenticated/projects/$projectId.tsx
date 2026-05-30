@@ -40,9 +40,13 @@ function ProjectDetailPage() {
 
   const softDeleteMutation = useMutation(
     trpc.project.softDelete.mutationOptions({
-      onSuccess: () => {
-        toast.success("Project deleted");
+      onSuccess: (data) => {
         queryClient.invalidateQueries(trpc.project.list.queryFilter());
+        if (data) {
+          toast.success("Project deleted");
+        } else {
+          toast.error("Failed to delete project — record not found");
+        }
         navigate({ to: "/projects" });
       },
       onError: (error) => {
@@ -68,6 +72,17 @@ function ProjectDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <p className="text-sm text-muted-foreground">Project not found.</p>
+        <Link to="/projects" className="mt-3">
+          <Button variant="outline" size="sm">Back to Projects</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (project.deletedAt) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <p className="text-sm text-muted-foreground">This project has been deleted.</p>
         <Link to="/projects" className="mt-3">
           <Button variant="outline" size="sm">Back to Projects</Button>
         </Link>

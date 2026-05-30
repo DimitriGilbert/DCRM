@@ -28,12 +28,13 @@ function ConvertLeadPage() {
   const convertMutation = useMutation(
     trpc.lead.convert.mutationOptions({
       onSuccess: (data) => {
-        toast.success("Lead converted to client");
         queryClient.invalidateQueries(trpc.lead.list.queryFilter());
         queryClient.invalidateQueries(trpc.client.list.queryFilter());
         if (data?.client?.id) {
+          toast.success("Lead converted to client");
           navigate({ to: "/clients/$clientId", params: { clientId: data.client.id } });
         } else {
+          toast.error("Conversion succeeded but no client was created");
           navigate({ to: "/leads" });
         }
       },

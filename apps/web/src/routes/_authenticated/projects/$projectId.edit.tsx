@@ -72,8 +72,8 @@ function EditProjectPage() {
     budgetAmount: project.budgetAmount ?? undefined,
     budgetCurrency: project.budgetCurrency ?? "USD",
     estimatedHours: project.estimatedHours ?? undefined,
-    startDate: project.startDate ? new Date(project.startDate).toISOString().split("T")[0] : "",
-    endDate: project.endDate ? new Date(project.endDate).toISOString().split("T")[0] : "",
+    startDate: project.startDate ? new Date(project.startDate).toISOString().split("T")[0] : undefined,
+    endDate: project.endDate ? new Date(project.endDate).toISOString().split("T")[0] : undefined,
   };
 
   const enrichedFields = projectFormFields.map((f) => {
@@ -105,7 +105,12 @@ function EditProjectPage() {
         defaultValues={defaultValues}
         fields={enrichedFields}
         onSubmit={(values) => {
-          updateMutation.mutate({ id: projectId, ...values });
+          const cleaned = {
+            ...values,
+            startDate: values.startDate || undefined,
+            endDate: values.endDate || undefined,
+          };
+          updateMutation.mutate({ id: projectId, ...cleaned });
         }}
         isPending={updateMutation.isPending}
       />

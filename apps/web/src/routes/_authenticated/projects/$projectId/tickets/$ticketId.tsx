@@ -26,6 +26,7 @@ type TicketData = {
   readonly dueDate: Date | null;
   readonly createdAt: Date | null;
   readonly projectId: string;
+  readonly deletedAt: Date | null;
 };
 
 function TicketDetailPage() {
@@ -47,9 +48,13 @@ function TicketDetailPage() {
 
   const softDeleteMutation = useMutation(
     trpc.ticket.softDelete.mutationOptions({
-      onSuccess: () => {
-        toast.success("Ticket deleted");
+      onSuccess: (data) => {
         queryClient.invalidateQueries(trpc.ticket.list.queryFilter());
+        if (data) {
+          toast.success("Ticket deleted");
+        } else {
+          toast.error("Failed to delete ticket — record not found");
+        }
         navigate({ to: "/projects/$projectId/tickets", params: { projectId } });
       },
       onError: (error) => {
@@ -75,6 +80,17 @@ function TicketDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <p className="text-sm text-muted-foreground">Ticket not found.</p>
+        <Link to="/projects/$projectId/tickets" params={{ projectId }} className="mt-3">
+          <Button variant="outline" size="sm">Back to Tickets</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (ticket.deletedAt) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <p className="text-sm text-muted-foreground">This ticket has been deleted.</p>
         <Link to="/projects/$projectId/tickets" params={{ projectId }} className="mt-3">
           <Button variant="outline" size="sm">Back to Tickets</Button>
         </Link>

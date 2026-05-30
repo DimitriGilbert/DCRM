@@ -26,12 +26,17 @@ function CreateTicketPage() {
   const createMutation = useMutation(
     trpc.ticket.create.mutationOptions({
       onSuccess: (data) => {
-        toast.success("Ticket created");
         queryClient.invalidateQueries(trpc.ticket.list.queryFilter());
-        navigate({
-          to: "/projects/$projectId/tickets/$ticketId",
-          params: { projectId, ticketId: data?.id ?? "" },
-        });
+        if (data?.id) {
+          toast.success("Ticket created");
+          navigate({
+            to: "/projects/$projectId/tickets/$ticketId",
+            params: { projectId, ticketId: data.id },
+          });
+        } else {
+          toast.error("Ticket created but failed to retrieve ID");
+          navigate({ to: "/projects/$projectId", params: { projectId } });
+        }
       },
       onError: (error) => {
         toast.error("Failed to create ticket", {

@@ -48,12 +48,14 @@ function ProjectsPage() {
   const createMutation = useMutation(
     trpc.project.create.mutationOptions({
       onSuccess: (data) => {
-        toast.success("Project created");
         queryClient.invalidateQueries(trpc.project.list.queryFilter());
-        setShowCreateDialog(false);
+        queryClient.invalidateQueries(trpc.project.search.queryFilter());
         if (data?.id) {
-          // Navigate handled by closing dialog; user can find in list
+          toast.success("Project created");
+        } else {
+          toast.error("Project created but failed to retrieve ID");
         }
+        setShowCreateDialog(false);
       },
       onError: (error) => {
         toast.error("Failed to create project", {

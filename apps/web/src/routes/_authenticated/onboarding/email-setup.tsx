@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Mail } from "lucide-react";
 
@@ -36,8 +36,13 @@ export default function OnboardingEmailSetupPage() {
 
   const onboardingCompleted = settingsQuery.data?.onboardingCompleted ?? false;
 
+  useEffect(() => {
+    if (onboardingCompleted) {
+      void navigate({ to: "/dashboard" });
+    }
+  }, [onboardingCompleted, navigate]);
+
   if (onboardingCompleted) {
-    void navigate({ to: "/dashboard" });
     return null;
   }
 

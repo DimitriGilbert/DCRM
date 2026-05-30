@@ -71,13 +71,13 @@ function DashboardPage() {
   const trpc = useTRPC();
 
   const clientsQuery = useQuery(
-    trpc.client.list.queryOptions({ limit: 1 }),
+    trpc.client.list.queryOptions({ limit: 100 }),
   );
   const projectsQuery = useQuery(
-    trpc.project.list.queryOptions({ limit: 1, status: "active" }),
+    trpc.project.list.queryOptions({ limit: 100, status: "active" }),
   );
   const ticketsQuery = useQuery(
-    trpc.ticket.list.queryOptions({ limit: 1, status: "open" }),
+    trpc.ticket.list.queryOptions({ limit: 100, status: "open" }),
   );
   const leadsQuery = useQuery(
     trpc.lead.list.queryOptions({ limit: 100 }),
@@ -93,8 +93,11 @@ function DashboardPage() {
   );
 
   const activeClientsCount = clientsQuery.data?.items.length ?? 0;
+  const hasMoreClients = !!clientsQuery.data?.nextCursor;
   const activeProjectsCount = projectsQuery.data?.items.length ?? 0;
+  const hasMoreProjects = !!projectsQuery.data?.nextCursor;
   const openTicketsCount = ticketsQuery.data?.items.length ?? 0;
+  const hasMoreTickets = !!ticketsQuery.data?.nextCursor;
 
   const leads = leadsQuery.data?.items ?? [];
   const leadPipelineCounts = buildLeadPipelineCounts(leads);
@@ -137,16 +140,19 @@ function DashboardPage() {
         <StatCard
           label="Active Clients"
           value={activeClientsCount}
+          hasMore={hasMoreClients}
           isLoading={isLoading}
         />
         <StatCard
           label="Active Projects"
           value={activeProjectsCount}
+          hasMore={hasMoreProjects}
           isLoading={isLoading}
         />
         <StatCard
           label="Open Tickets"
           value={openTicketsCount}
+          hasMore={hasMoreTickets}
           isLoading={isLoading}
         />
       </div>
@@ -179,17 +185,20 @@ function DashboardPage() {
 interface StatCardProps {
   label: string;
   value: number;
+  hasMore: boolean;
   isLoading: boolean;
 }
 
-function StatCard({ label, value, isLoading }: StatCardProps) {
+function StatCard({ label, value, hasMore, isLoading }: StatCardProps) {
   return (
     <div className="rounded-sm border bg-card p-4 ring-1 ring-foreground/10">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       {isLoading ? (
         <div className="mt-2 h-8 w-16 animate-pulse bg-muted" />
       ) : (
-        <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+        <p className="mt-1 text-2xl font-semibold tabular-nums">
+          {value}{hasMore ? "+" : ""}
+        </p>
       )}
     </div>
   );

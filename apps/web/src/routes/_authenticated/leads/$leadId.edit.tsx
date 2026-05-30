@@ -7,7 +7,7 @@ import { Skeleton } from "@DCRM/ui/components/skeleton";
 import { useFormedible } from "@DCRM/ui/components/formedible/hooks/use-formedible";
 
 import { useTRPC } from "@/utils/trpc";
-import { leadFormSchema, leadFormFields } from "@/lib/forms/lead-form-schema";
+import { leadFormSchema, leadFormFields, toLeadFormInput } from "@/lib/forms/lead-form-schema";
 import type { LeadFormValues } from "@/lib/forms/lead-form-schema";
 
 export const Route = createFileRoute("/_authenticated/leads/$leadId/edit")({
@@ -85,10 +85,14 @@ function EditLeadPage() {
         </Button>
       </div>
       <EditLeadForm
-        leadId={leadId}
         defaultValues={defaultValues}
         onSubmit={(values) => {
-          updateMutation.mutate({ id: leadId, ...values });
+          const input = toLeadFormInput(values);
+          updateMutation.mutate({
+            id: leadId,
+            ...input,
+            estimatedValue: input.estimatedValue ?? null,
+          });
         }}
         isPending={updateMutation.isPending}
       />
@@ -97,12 +101,10 @@ function EditLeadPage() {
 }
 
 function EditLeadForm({
-  leadId,
   defaultValues,
   onSubmit,
   isPending,
 }: {
-  readonly leadId: string;
   readonly defaultValues: LeadFormValues;
   readonly onSubmit: (values: LeadFormValues) => void;
   readonly isPending: boolean;
@@ -119,8 +121,6 @@ function EditLeadForm({
     submitLabel: "Save Changes",
     disabled: isPending,
   });
-
-  void leadId;
 
   return <Form className="space-y-4" />;
 }

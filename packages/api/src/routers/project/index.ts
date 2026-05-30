@@ -6,6 +6,7 @@ import { softDeleteProject } from "./soft-delete";
 import { restoreProject } from "./restore";
 import { listProjects } from "./list";
 import { searchProjects } from "./search";
+import { upcomingProjectDeadlines } from "./upcoming-deadlines";
 
 export const projectRouter = router({
   create: createProject,
@@ -15,4 +16,5 @@ export const projectRouter = router({
   restore: restoreProject,
   list: listProjects,
   search: searchProjects,
+  upcomingDeadlines: upcomingProjectDeadlines,
 });

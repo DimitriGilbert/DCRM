@@ -6,6 +6,7 @@ import { softDeleteTicket } from "./soft-delete";
 import { restoreTicket } from "./restore";
 import { listTickets } from "./list";
 import { searchTickets } from "./search";
+import { upcomingTicketDeadlines } from "./upcoming-deadlines";
 
 export const ticketRouter = router({
   create: createTicket,
@@ -15,4 +16,5 @@ export const ticketRouter = router({
   restore: restoreTicket,
   list: listTickets,
   search: searchTickets,
+  upcomingDeadlines: upcomingTicketDeadlines,
 });

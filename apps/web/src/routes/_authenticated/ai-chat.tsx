@@ -18,6 +18,8 @@ interface ChatMessage {
   createdAt: string | null;
 }
 
+const messageRoleSchema = z.enum(["user", "assistant", "system"]);
+
 function AIChatPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -58,15 +60,16 @@ function AIChatPage() {
     }),
   );
 
-  const messageRoleSchema = z.enum(["user", "assistant", "system"]);
-
   const messages: ChatMessage[] =
-    messagesQuery.data?.items.map((m) => ({
-      id: m.id,
-      role: messageRoleSchema.parse(m.role),
-      content: m.content,
-      createdAt: m.createdAt,
-    })).reverse() ?? [];
+    messagesQuery.data?.items.map((m) => {
+      const parsed = messageRoleSchema.safeParse(m.role);
+      return {
+        id: m.id,
+        role: parsed.success ? parsed.data : "system",
+        content: m.content,
+        createdAt: m.createdAt,
+      };
+    }).reverse() ?? [];
 
   const providers = providersQuery.data ?? [];
   const defaultProvider = providers.find((p: { enabled: boolean }) => p.enabled);

@@ -10,6 +10,7 @@ import {
 } from "@DCRM/ui/components/dropdown-menu";
 import { Skeleton } from "@DCRM/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 
@@ -48,6 +49,9 @@ export default function UserMenu() {
                     navigate({
                       to: "/",
                     });
+                  },
+                  onError: () => {
+                    toast.error("Failed to sign out. Please try again.");
                   },
                 },
               });

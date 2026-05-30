@@ -81,7 +81,6 @@ function EditClientPage() {
         </Button>
       </div>
       <EditClientForm
-        clientId={clientId}
         defaultValues={defaultValues}
         onSubmit={(values) => {
           updateMutation.mutate({ id: clientId, ...values });
@@ -93,12 +92,10 @@ function EditClientPage() {
 }
 
 function EditClientForm({
-  clientId,
   defaultValues,
   onSubmit,
   isPending,
 }: {
-  readonly clientId: string;
   readonly defaultValues: ClientFormValues;
   readonly onSubmit: (values: ClientFormValues) => void;
   readonly isPending: boolean;
@@ -115,8 +112,6 @@ function EditClientForm({
     submitLabel: "Save Changes",
     disabled: isPending,
   });
-
-  void clientId;
 
   return <Form className="space-y-4" />;
 }

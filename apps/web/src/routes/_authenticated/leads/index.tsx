@@ -150,6 +150,7 @@ function LeadsPage() {
         <KanbanView
           leads={leads}
           onStageChange={handleStageChange}
+          isStagePending={stageUpdateMutation.isPending}
         />
       ) : (
         <ListView leads={leads} />
@@ -188,9 +189,11 @@ interface LeadItem {
 function KanbanView({
   leads,
   onStageChange,
+  isStagePending,
 }: {
   readonly leads: readonly LeadItem[];
   readonly onStageChange: (leadId: string, stage: LeadStage) => void;
+  readonly isStagePending: boolean;
 }) {
   return (
     <div className="grid grid-cols-7 gap-3 overflow-x-auto">
@@ -241,6 +244,7 @@ function KanbanView({
                       onMove={(stage) => {
                         onStageChange(lead.id, stage);
                       }}
+                      disabled={isStagePending}
                     />
                   )}
                 </div>
@@ -256,9 +260,11 @@ function KanbanView({
 function StageMoveButtons({
   currentStage,
   onMove,
+  disabled,
 }: {
   readonly currentStage: LeadStage;
   readonly onMove: (stage: LeadStage) => void;
+  readonly disabled: boolean;
 }) {
   const currentIndex = STAGE_COLUMNS.findIndex((c) => c.key === currentStage);
   const prev = currentIndex > 0 ? STAGE_COLUMNS[currentIndex - 1] : null;
@@ -271,6 +277,7 @@ function StageMoveButtons({
           variant="ghost"
           size="sm"
           className="h-5 px-1 text-[10px]"
+          disabled={disabled}
           onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
             onMove(prev.key);
@@ -284,6 +291,7 @@ function StageMoveButtons({
           variant="ghost"
           size="sm"
           className="h-5 px-1 text-[10px]"
+          disabled={disabled}
           onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
             onMove(next.key);

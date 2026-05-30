@@ -23,10 +23,10 @@ type TicketData = {
   readonly type: string;
   readonly status: string;
   readonly priority: string;
-  readonly dueDate: Date | null;
-  readonly createdAt: Date | null;
+  readonly dueDate: string | null;
+  readonly createdAt: string | null;
   readonly projectId: string;
-  readonly deletedAt: Date | null;
+  readonly deletedAt: string | null;
 };
 
 function TicketDetailPage() {
@@ -74,7 +74,7 @@ function TicketDetailPage() {
     );
   }
 
-  const ticket = ticketQuery.data as TicketData | null;
+  const ticket = ticketQuery.data;
 
   if (!ticket) {
     return (
@@ -126,7 +126,11 @@ function TicketDetailPage() {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => softDeleteMutation.mutate({ id: ticket.id })}
+            onClick={() => {
+              if (window.confirm("Are you sure you want to delete this ticket?")) {
+                softDeleteMutation.mutate({ id: ticket.id });
+              }
+            }}
             disabled={softDeleteMutation.isPending}
           >
             Delete

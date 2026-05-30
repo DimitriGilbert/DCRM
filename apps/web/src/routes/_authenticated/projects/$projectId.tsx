@@ -119,7 +119,11 @@ function ProjectDetailPage() {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => softDeleteMutation.mutate({ id: project.id })}
+            onClick={() => {
+              if (window.confirm("Are you sure you want to delete this project?")) {
+                softDeleteMutation.mutate({ id: project.id });
+              }
+            }}
             disabled={softDeleteMutation.isPending}
           >
             Delete

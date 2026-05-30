@@ -49,6 +49,11 @@ function formatRelativeDate(date: Date | string): string {
 
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
+  if (diffDays < 0) {
+    const absDays = Math.abs(diffDays);
+    if (absDays === 1) return "1 day overdue";
+    return `${absDays} days overdue`;
+  }
   if (diffDays < 7) return `${diffDays} days`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ${diffDays % 7}d`;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });

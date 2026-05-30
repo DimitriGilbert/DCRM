@@ -85,10 +85,5 @@ function decodeMasterKey(key: string): Buffer {
     return base64Key;
   }
 
-  const utf8Key = Buffer.from(key, "utf8");
-  if (utf8Key.byteLength === KEY_BYTES) {
-    return utf8Key;
-  }
-
-  throw new Error("Encryption key must decode to 32 bytes for AES-256-GCM.");
+  throw new Error("Encryption key must be 32 bytes encoded as 64 hex characters or canonical base64.");
 }

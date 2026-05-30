@@ -10,6 +10,8 @@ import { appRouter } from "../index.js";
 
 import type { Context } from "../../context.js";
 
+const testEncryptionKey = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
 describe("AI provider settings tRPC API", () => {
   it("stores BYOK provider credentials encrypted and lists only safe fields for the current user", async () => {
     const automationRepository = createInMemoryAutomationRepository();
@@ -82,7 +84,7 @@ function createTestContext(userId: string, automationRepository: ReturnType<type
     automationRepository,
     crmRepository: createInMemoryCrmRepository(),
     eventService: createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => `event_${userId}` }),
-    secretCrypto: createSecretCrypto({ ENCRYPTION_KEY: "a".repeat(32) }),
+    secretCrypto: createSecretCrypto({ ENCRYPTION_KEY: testEncryptionKey }),
     session: null,
   };
 }

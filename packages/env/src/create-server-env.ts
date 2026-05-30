@@ -2,15 +2,17 @@ import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
 const booleanFlagSchema = z.enum(["true", "false"]).default("false").transform((value) => value === "true");
+const databaseUrlSchema = createUrlProtocolSchema(["postgres:", "postgresql:"], "Database URL must use postgres:// or postgresql://.");
+const redisUrlSchema = createUrlProtocolSchema(["redis:", "rediss:"], "Redis URL must use redis:// or rediss://.");
 
 const serverSchema = {
   APP_URL: z.url(),
-  DATABASE_URL: z.string().min(1),
-  REDIS_URL: z.string().min(1),
+  DATABASE_URL: databaseUrlSchema,
+  REDIS_URL: redisUrlSchema,
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
   CORS_ORIGIN: z.url(),
-  ENCRYPTION_KEY: z.string().refine(isValidEncryptionKey, "Encryption key must decode to 32 bytes for AES-256-GCM."),
+  ENCRYPTION_KEY: z.string().refine(isValidEncryptionKey, "Encryption key must be 32 bytes encoded as 64 hex characters or canonical base64."),
   WEBHOOK_BASE_URL: z.url(),
   STORAGE_BACKEND: z.enum(["local", "s3_compatible"]).default("local"),
   LOCAL_STORAGE_PATH: z.string().min(1).default("./data/attachments"),
@@ -78,5 +80,15 @@ function isValidEncryptionKey(key: string): boolean {
     return true;
   }
 
-  return Buffer.from(key, "utf8").byteLength === 32;
+  return false;
+}
+
+function createUrlProtocolSchema(protocols: readonly string[], message: string) {
+  return z.url().refine((value) => {
+    try {
+      return protocols.includes(new URL(value).protocol);
+    } catch {
+      return false;
+    }
+  }, message);
 }

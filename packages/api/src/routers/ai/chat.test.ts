@@ -12,6 +12,8 @@ import { appRouter } from "../index.js";
 import type { CrmChatRunner } from "@DCRM/ai";
 import type { Context } from "../../context.js";
 
+const testEncryptionKey = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
 describe("AI chat assistant", () => {
   it("persists a multi-turn conversation and gives the mocked provider audited CRM tool output", async () => {
     const automationRepository = createInMemoryAutomationRepository();
@@ -44,7 +46,7 @@ describe("AI chat assistant", () => {
   it("persists chat turns with stable message order inside each turn and across history", async () => {
     const automationRepository = createInMemoryAutomationRepository();
     const crmRepository = createInMemoryCrmRepository();
-    const secretCrypto = createSecretCrypto({ ENCRYPTION_KEY: "b".repeat(32) });
+    const secretCrypto = createSecretCrypto({ ENCRYPTION_KEY: testEncryptionKey });
     const generatedIds = createSequentialIdGenerator("chat_order");
     const calls: Parameters<CrmChatRunner["generate"]>[0][] = [];
     const runner: CrmChatRunner = {
@@ -122,7 +124,7 @@ function createTestContext(input: { readonly userId: string; readonly automation
     automationRepository: input.automationRepository,
     crmRepository: input.crmRepository,
     eventService: createEventService({ repository: createInMemoryEventRepository(), idGenerator: () => `event_${input.userId}` }),
-    secretCrypto: createSecretCrypto({ ENCRYPTION_KEY: "a".repeat(32) }),
+    secretCrypto: createSecretCrypto({ ENCRYPTION_KEY: testEncryptionKey }),
     session: null,
   };
 }
